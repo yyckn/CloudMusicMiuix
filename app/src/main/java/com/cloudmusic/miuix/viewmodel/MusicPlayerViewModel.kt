@@ -1,15 +1,22 @@
 package com.cloudmusic.miuix.viewmodel
 
-import android.media.MediaPlayer
+import android.app.Application
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cloudmusic.miuix.data.api.NeteaseApi
 import com.cloudmusic.miuix.data.model.PlaylistDetail
 import com.cloudmusic.miuix.data.model.RecommendPlaylist
 import com.cloudmusic.miuix.data.model.Track
+import com.cloudmusic.miuix.service.MediaPlaybackService
+import com.google.gson.Gson
 import kotlinx.coroutines.launch
 
 data class PlayerState(
@@ -31,7 +38,13 @@ data class PlaylistDetailState(
     val error: String? = null
 )
 
-class MusicPlayerViewModel : ViewModel() {
+data class SearchState(
+    val results: List<Track> = emptyList(),
+    val isLoading: Boolean = false,
+    val error: String? = null
+)
+
+class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
     var playerState by mutableStateOf(PlayerState())
         private set
@@ -42,12 +55,56 @@ class MusicPlayerViewModel : ViewModel() {
     var playlistDetailState by mutableStateOf(PlaylistDetailState())
         private set
 
+    var searchState by mutableStateOf(SearchState())
+        private set
+
     var currentPlaylist by mutableStateOf<List<Track>>(emptyList())
 
-    private var mediaPlayer: MediaPlayer? = null
+    private var mediaPlaybackService: MediaPlaybackService? = null
+    private var isBound = false
+    private val gson = Gson()
+    private val prefs = application.getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
+
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as MediaPlaybackService.LocalBinder
+            mediaPlaybackService = binder.getService()
+            isBound = true
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            mediaPlaybackService = null
+            isBound = false
+        }
+    }
 
     init {
+        loadLastPlayedTrack()
         loadRecommendPlaylists()
+        bindMediaService()
+    }
+
+    private fun bindMediaService() {
+        val intent = Intent(getApplication(), MediaPlaybackService::class.java)
+        getApplication<Application>().startService(intent)
+        getApplication<Application>().bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+    }
+
+    private fun loadLastPlayedTrack() {
+        val trackJson = prefs.getString("last_track", null)
+        if (trackJson != null) {
+            try {
+                val track = gson.fromJson(trackJson, Track::class.java)
+                playerState = playerState.copy(currentTrack = track, isPlaying = false)
+            } catch (e: Exception) {
+                // Ignore parse errors
+            }
+        }
+    }
+
+    private fun saveLastPlayedTrack(track: Track) {
+        val trackJson = gson.toJson(track)
+        prefs.edit().putString("last_track", trackJson).apply()
     }
 
     fun loadRecommendPlaylists() {
@@ -95,31 +152,42 @@ class MusicPlayerViewModel : ViewModel() {
         playlistDetailState = PlaylistDetailState()
     }
 
+    fun searchSongs(keyword: String) {
+        viewModelScope.launch {
+            searchState = searchState.copy(isLoading = true, error = null)
+            NeteaseApi.searchSongs(keyword).fold(
+                onSuccess = { tracks ->
+                    searchState = searchState.copy(
+                        results = tracks,
+                        isLoading = false
+                    )
+                },
+                onFailure = { e ->
+                    searchState = searchState.copy(
+                        isLoading = false,
+                        error = e.message
+                    )
+                }
+            )
+        }
+    }
+
+    fun clearSearch() {
+        searchState = SearchState()
+    }
+
     fun playTrack(track: Track) {
         viewModelScope.launch {
             playerState = playerState.copy(isLoading = true, error = null, currentTrack = track)
+            saveLastPlayedTrack(track)
 
             NeteaseApi.getSongUrl(track.id).fold(
                 onSuccess = { url ->
                     try {
-                        mediaPlayer?.release()
-                        mediaPlayer = MediaPlayer().apply {
-                            setDataSource(url)
-                            setOnPreparedListener {
-                                start()
-                                playerState = playerState.copy(isPlaying = true, isLoading = false)
-                            }
-                            setOnCompletionListener {
-                                playNext()
-                            }
-                            setOnErrorListener { _, _, _ ->
-                                playerState = playerState.copy(
-                                    isLoading = false,
-                                    error = "Playback error"
-                                )
-                                true
-                            }
-                            prepareAsync()
+                        mediaPlaybackService?.let { service ->
+                            service.setPlaylist(currentPlaylist)
+                            service.playTrackWithUrl(track, url)
+                            playerState = playerState.copy(isPlaying = true, isLoading = false)
                         }
                     } catch (e: Exception) {
                         playerState = playerState.copy(
@@ -139,14 +207,9 @@ class MusicPlayerViewModel : ViewModel() {
     }
 
     fun togglePlayPause() {
-        mediaPlayer?.let { player ->
-            if (player.isPlaying) {
-                player.pause()
-                playerState = playerState.copy(isPlaying = false)
-            } else {
-                player.start()
-                playerState = playerState.copy(isPlaying = true)
-            }
+        mediaPlaybackService?.let { service ->
+            service.togglePlayPause()
+            playerState = playerState.copy(isPlaying = !playerState.isPlaying)
         }
     }
 
@@ -168,7 +231,9 @@ class MusicPlayerViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        mediaPlayer?.release()
-        mediaPlayer = null
+        if (isBound) {
+            getApplication<Application>().unbindService(serviceConnection)
+            isBound = false
+        }
     }
 }

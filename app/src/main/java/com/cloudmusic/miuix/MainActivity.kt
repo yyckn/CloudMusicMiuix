@@ -9,12 +9,14 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowSizeClass
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -34,7 +36,14 @@ import com.cloudmusic.miuix.ui.theme.CloudMusicMiuixTheme
 import com.cloudmusic.miuix.viewmodel.MusicPlayerViewModel
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
+import top.yukonga.miuix.kmp.basic.NavigationRail
+import top.yukonga.miuix.kmp.basic.NavigationRailItem
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.rememberNavigationRailState
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Contacts
+import top.yukonga.miuix.kmp.icon.extended.Home
+import top.yukonga.miuix.kmp.icon.extended.ListView
 
 sealed class Screen {
     object Main : Screen()
@@ -43,13 +52,15 @@ sealed class Screen {
 }
 
 class MainActivity : ComponentActivity() {
+    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         NeteaseApi.init(applicationContext)
         enableEdgeToEdge()
         setContent {
             CloudMusicMiuixTheme {
-                MainScreen()
+                val windowSizeClass = calculateWindowSizeClass(this)
+                MainScreen(windowSizeClass)
             }
         }
     }
@@ -57,13 +68,16 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainScreen(
+    windowSizeClass: WindowSizeClass,
     viewModel: MusicPlayerViewModel = viewModel()
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Main) }
     var isLoggedIn by remember { mutableStateOf(NeteaseApi.isLoggedIn()) }
     val tabs = listOf("推荐", "歌单", "我的")
-    val icons = listOf(Icons.Default.Home, Icons.Default.List, Icons.Default.Person)
+    val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Contacts)
+    val railState = rememberNavigationRailState()
+    val useNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact
 
     AnimatedContent(
         targetState = currentScreen,
@@ -84,63 +98,130 @@ fun MainScreen(
     ) { screen ->
         when (screen) {
             is Screen.Main -> {
-                Scaffold(
-                    bottomBar = {
-                        Column {
-                            PlayerBar(
-                                playerState = viewModel.playerState,
-                                onTogglePlayPause = { viewModel.togglePlayPause() }
-                            )
-                            NavigationBar(
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                tabs.forEachIndexed { index, tab ->
-                                    NavigationBarItem(
-                                        selected = selectedTab == index,
-                                        onClick = { selectedTab = index },
-                                        icon = icons[index],
-                                        label = tab
+                if (useNavigationRail) {
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        NavigationRail(
+                            state = railState
+                        ) {
+                            tabs.forEachIndexed { index, tab ->
+                                NavigationRailItem(
+                                    selected = selectedTab == index,
+                                    onClick = { selectedTab = index },
+                                    icon = icons[index],
+                                    label = tab
+                                )
+                            }
+                        }
+                        Scaffold(
+                            bottomBar = {
+                                Column {
+                                    PlayerBar(
+                                        playerState = viewModel.playerState,
+                                        onTogglePlayPause = { viewModel.togglePlayPause() }
+                                    )
+                                }
+                            }
+                        ) { padding ->
+                            AnimatedContent(
+                                targetState = selectedTab,
+                                transitionSpec = {
+                                    if (targetState > initialState) {
+                                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                                    } else {
+                                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                                    }
+                                },
+                                label = "tab_transition"
+                            ) { tab ->
+                                when (tab) {
+                                    0 -> RecommendPage(
+                                        recommendState = viewModel.recommendState,
+                                        onPlaylistClick = { playlistId ->
+                                            viewModel.loadPlaylistDetail(playlistId)
+                                            currentScreen = Screen.PlaylistDetail
+                                        },
+                                        viewModel = viewModel,
+                                        modifier = Modifier.padding(padding)
+                                    )
+                                    1 -> PlaylistPage(
+                                        tracks = viewModel.currentPlaylist,
+                                        currentTrack = viewModel.playerState.currentTrack,
+                                        onTrackClick = { track ->
+                                            viewModel.playTrack(track)
+                                        },
+                                        modifier = Modifier.padding(padding)
+                                    )
+                                    2 -> MyPage(
+                                        isLoggedIn = isLoggedIn,
+                                        onLoginClick = {
+                                            currentScreen = Screen.Login
+                                        },
+                                        modifier = Modifier.padding(padding)
                                     )
                                 }
                             }
                         }
                     }
-                ) { padding ->
-                    AnimatedContent(
-                        targetState = selectedTab,
-                        transitionSpec = {
-                            if (targetState > initialState) {
-                                slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                            } else {
-                                slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                } else {
+                    Scaffold(
+                        bottomBar = {
+                            Column {
+                                PlayerBar(
+                                    playerState = viewModel.playerState,
+                                    onTogglePlayPause = { viewModel.togglePlayPause() }
+                                )
+                                NavigationBar(
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    tabs.forEachIndexed { index, tab ->
+                                        NavigationBarItem(
+                                            selected = selectedTab == index,
+                                            onClick = { selectedTab = index },
+                                            icon = icons[index],
+                                            label = tab
+                                        )
+                                    }
+                                }
                             }
-                        },
-                        label = "tab_transition"
-                    ) { tab ->
-                        when (tab) {
-                            0 -> RecommendPage(
-                                recommendState = viewModel.recommendState,
-                                onPlaylistClick = { playlistId ->
-                                    viewModel.loadPlaylistDetail(playlistId)
-                                    currentScreen = Screen.PlaylistDetail
-                                },
-                                modifier = Modifier.padding(padding)
-                            )
-                            1 -> PlaylistPage(
-                                tracks = viewModel.currentPlaylist,
-                                currentTrack = viewModel.playerState.currentTrack,
-                                onTrackClick = { track ->
-                                    viewModel.playTrack(track)
-                                },
-                                modifier = Modifier.padding(padding)
-                            )
-                            2 -> MyPage(
-                                isLoggedIn = isLoggedIn,
-                                onLoginClick = {
-                                    currentScreen = Screen.Login
-                                },
-                                modifier = Modifier.padding(padding)
-                            )
+                        }
+                    ) { padding ->
+                        AnimatedContent(
+                            targetState = selectedTab,
+                            transitionSpec = {
+                                if (targetState > initialState) {
+                                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                                } else {
+                                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                                }
+                            },
+                            label = "tab_transition"
+                        ) { tab ->
+                            when (tab) {
+                                0 -> RecommendPage(
+                                    recommendState = viewModel.recommendState,
+                                    onPlaylistClick = { playlistId ->
+                                        viewModel.loadPlaylistDetail(playlistId)
+                                        currentScreen = Screen.PlaylistDetail
+                                    },
+                                    viewModel = viewModel,
+                                    modifier = Modifier.padding(padding)
+                                )
+                                1 -> PlaylistPage(
+                                    tracks = viewModel.currentPlaylist,
+                                    currentTrack = viewModel.playerState.currentTrack,
+                                    onTrackClick = { track ->
+                                        viewModel.playTrack(track)
+                                    },
+                                    modifier = Modifier.padding(padding)
+                                )
+                                2 -> MyPage(
+                                    isLoggedIn = isLoggedIn,
+                                    onLoginClick = {
+                                        currentScreen = Screen.Login
+                                    },
+                                    modifier = Modifier.padding(padding)
+                                )
+                            }
                         }
                     }
                 }

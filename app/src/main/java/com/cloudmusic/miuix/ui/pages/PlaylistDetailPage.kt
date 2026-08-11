@@ -1,7 +1,6 @@
 package com.cloudmusic.miuix.ui.pages
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,14 +15,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -32,15 +32,21 @@ import com.cloudmusic.miuix.data.model.Track
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Play
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 @Composable
 fun PlaylistDetailPage(
@@ -53,17 +59,22 @@ fun PlaylistDetailPage(
     onPlayAllClick: (List<Track>) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val scrollBehavior = MiuixScrollBehavior()
+    
     BackHandler {
         onBackClick()
     }
 
     Scaffold(
         topBar = {
-            SmallTopAppBar(
+            TopAppBar(
                 title = playlistDetail?.info?.title ?: "歌单详情",
+                largeTitle = "歌单列表",
+                defaultWindowInsetsPadding = false,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     Icon(
-                        imageVector = Icons.Default.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "返回",
                         modifier = Modifier
                             .padding(start = 8.dp)
@@ -73,61 +84,75 @@ fun PlaylistDetailPage(
             )
         }
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .padding(top = paddingValues.calculateTopPadding())
-                .fillMaxSize()
-        ) {
-            if (isLoading) {
-                InfiniteProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center)
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = paddingValues.calculateTopPadding()),
+                contentAlignment = Alignment.Center
+            ) {
+                InfiniteProgressIndicator()
+            }
+        } else if (error != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = paddingValues.calculateTopPadding()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "加载失败",
+                    fontSize = 16.sp,
+                    color = MiuixTheme.colorScheme.error
                 )
-            } else if (error != null) {
-                Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "加载失败",
-                        fontSize = 16.sp,
-                        color = MiuixTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = error,
-                        fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = error,
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+        } else if (playlistDetail == null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = paddingValues.calculateTopPadding()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "无数据",
+                    fontSize = 16.sp,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .overScrollVertical()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(
+                    start = 12.dp,
+                    end = 12.dp,
+                    top = paddingValues.calculateTopPadding(),
+                    bottom = 8.dp
+                )
+            ) {
+                item {
+                    PlaylistHeader(
+                        detail = playlistDetail,
+                        onPlayAllClick = { onPlayAllClick(playlistDetail.tracks) }
                     )
                 }
-            } else if (playlistDetail == null) {
-                Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "无数据",
-                        fontSize = 16.sp,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                itemsIndexed(playlistDetail.tracks) { index, track ->
+                    TrackItem(
+                        index = index + 1,
+                        track = track,
+                        isPlaying = track.id == currentTrack?.id,
+                        onClick = { onTrackClick(track) }
                     )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    item {
-                        PlaylistHeader(
-                            detail = playlistDetail,
-                            onPlayAllClick = { onPlayAllClick(playlistDetail.tracks) }
-                        )
-                    }
-                    itemsIndexed(playlistDetail.tracks) { index, track ->
-                        TrackItem(
-                            index = index + 1,
-                            track = track,
-                            isPlaying = track.id == currentTrack?.id,
-                            onClick = { onTrackClick(track) }
-                        )
-                    }
                 }
             }
         }
@@ -140,26 +165,19 @@ private fun PlaylistHeader(
     onPlayAllClick: () -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MiuixTheme.colorScheme.primaryContainer,
-                        MiuixTheme.colorScheme.surface
-                    )
-                )
-            )
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(vertical = 16.dp)
         ) {
             AsyncImage(
                 model = detail.info.coverImgUrl,
                 contentDescription = detail.info.title,
-                modifier = Modifier.size(140.dp),
+                modifier = Modifier
+                    .size(140.dp)
+                    .clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop,
                 error = painterResource(android.R.drawable.ic_menu_gallery)
             )
@@ -173,9 +191,7 @@ private fun PlaylistHeader(
                     text = detail.info.title,
                     style = MiuixTheme.textStyles.title3,
                     fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    color = MiuixTheme.colorScheme.onSurface
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -192,18 +208,17 @@ private fun PlaylistHeader(
             onClick = onPlayAllClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
+            colors = ButtonDefaults.buttonColorsPrimary()
         ) {
             Icon(
-                imageVector = Icons.Default.PlayArrow,
+                imageVector = MiuixIcons.Play,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(text = "播放全部")
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
@@ -215,38 +230,47 @@ private fun TrackItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    BasicComponent(
-        modifier = modifier.fillMaxWidth(),
-        title = track.title,
-        titleColor = if (isPlaying) {
-            BasicComponentDefaults.titleColor(color = MiuixTheme.colorScheme.primary)
-        } else {
-            BasicComponentDefaults.titleColor()
-        },
-        summary = "${track.artist} - ${track.album}",
-        summaryColor = if (isPlaying) {
-            BasicComponentDefaults.summaryColor(color = MiuixTheme.colorScheme.primary.copy(alpha = 0.7f))
-        } else {
-            BasicComponentDefaults.summaryColor()
-        },
-        startAction = {
-            Text(
-                text = index.toString(),
-                modifier = Modifier.padding(end = 16.dp),
-                fontSize = 14.sp,
-                color = if (isPlaying) MiuixTheme.colorScheme.primary
-                else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-            )
-        },
-        endActions = {
-            Text(
-                text = formatDuration(track.duration),
-                fontSize = 12.sp,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-            )
-        },
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        pressFeedbackType = PressFeedbackType.Tilt,
+        showIndication = true,
         onClick = onClick
-    )
+    ) {
+        BasicComponent(
+            modifier = Modifier.fillMaxWidth(),
+            title = track.title,
+            titleColor = if (isPlaying) {
+                BasicComponentDefaults.titleColor(color = MiuixTheme.colorScheme.primary)
+            } else {
+                BasicComponentDefaults.titleColor()
+            },
+            summary = "${track.artist} - ${track.album}",
+            summaryColor = if (isPlaying) {
+                BasicComponentDefaults.summaryColor(color = MiuixTheme.colorScheme.primary.copy(alpha = 0.7f))
+            } else {
+                BasicComponentDefaults.summaryColor()
+            },
+            startAction = {
+                Text(
+                    text = index.toString(),
+                    modifier = Modifier.padding(end = 16.dp),
+                    fontSize = 14.sp,
+                    color = if (isPlaying) MiuixTheme.colorScheme.primary
+                    else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                )
+            },
+            endActions = {
+                Text(
+                    text = formatDuration(track.duration),
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+            },
+            onClick = onClick
+        )
+    }
 }
 
 private fun formatDuration(durationMs: Long): String {

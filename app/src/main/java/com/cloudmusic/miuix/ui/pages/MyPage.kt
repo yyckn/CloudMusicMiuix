@@ -58,7 +58,7 @@ fun MyPage(
                 .fillMaxSize()
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(start = 26.dp, end = 26.dp, top = 8.dp, bottom = 8.dp)
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
         ) {
             item {
                 Card(

@@ -3,6 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:usesCleartextTraffic="true"
@@ -27,6 +30,26 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".service.MediaPlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".service.MediaPlaybackReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.cloudmusic.miuix.PLAY" />
+                <action android:name="com.cloudmusic.miuix.PAUSE" />
+                <action android:name="com.cloudmusic.miuix.NEXT" />
+                <action android:name="com.cloudmusic.miuix.PREVIOUS" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

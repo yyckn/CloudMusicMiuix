@@ -46,37 +46,38 @@ fun PlaylistPage(
             )
         }
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .padding(top = paddingValues.calculateTopPadding())
-                .fillMaxSize()
-        ) {
-            if (tracks.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "暂无歌曲",
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                        fontSize = 14.sp
+        if (tracks.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = paddingValues.calculateTopPadding()),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "暂无歌曲",
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    fontSize = 14.sp
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .overScrollVertical()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(
+                    start = 12.dp,
+                    end = 12.dp,
+                    top = paddingValues.calculateTopPadding() + 8.dp,
+                    bottom = 8.dp
+                )
+            ) {
+                items(tracks) { track ->
+                    TrackItem(
+                        track = track,
+                        isPlaying = track.id == currentTrack?.id,
+                        onClick = { onTrackClick(track) }
                     )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .overScrollVertical()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(start = 26.dp, end = 26.dp, top = 8.dp, bottom = 8.dp)
-                ) {
-                    items(tracks) { track ->
-                        TrackItem(
-                            track = track,
-                            isPlaying = track.id == currentTrack?.id,
-                            onClick = { onTrackClick(track) }
-                        )
-                    }
                 }
             }
         }

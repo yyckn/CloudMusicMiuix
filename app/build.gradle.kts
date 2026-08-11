@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.cloudmusic.miuix"
-        minSdk = 31
+        minSdk = 33
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -44,12 +44,16 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.miuix.ui)
     implementation(libs.miuix.icons)
+    implementation(libs.androidx.navigationevent)
     implementation(libs.okhttp)
     implementation(libs.gson)
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.1")
+    implementation("androidx.media:media:1.7.0")
+    implementation("androidx.media2:media2-session:1.3.0")
+    implementation("androidx.compose.material3:material3-window-size-class:1.3.1")
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

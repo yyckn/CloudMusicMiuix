@@ -1,5 +1,8 @@
 package com.cloudmusic.miuix.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,11 +42,15 @@ fun PlayerBar(
     onTogglePlayPause: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MiuixTheme.colorScheme.surfaceVariant
+    AnimatedVisibility(
+        visible = playerState.currentTrack != null,
+        enter = expandVertically(),
+        exit = shrinkVertically()
     ) {
-        if (playerState.currentTrack != null) {
+        Surface(
+            modifier = modifier.fillMaxWidth(),
+            color = MiuixTheme.colorScheme.surfaceVariant
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -51,8 +58,8 @@ fun PlayerBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AsyncImage(
-                    model = playerState.currentTrack.imgUrl,
-                    contentDescription = playerState.currentTrack.title,
+                    model = playerState.currentTrack?.imgUrl,
+                    contentDescription = playerState.currentTrack?.title,
                     modifier = Modifier
                         .size(48.dp)
                         .clip(RoundedCornerShape(8.dp)),
@@ -66,13 +73,13 @@ fun PlayerBar(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = playerState.currentTrack.title,
+                        text = playerState.currentTrack?.title ?: "",
                         style = MiuixTheme.textStyles.main,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = playerState.currentTrack.artist,
+                        text = playerState.currentTrack?.artist ?: "",
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -104,19 +111,6 @@ fun PlayerBar(
                         )
                     }
                 }
-            }
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "No track playing",
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    fontSize = 14.sp
-                )
             }
         }
     }
