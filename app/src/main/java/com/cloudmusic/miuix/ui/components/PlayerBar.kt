@@ -1,15 +1,11 @@
 package com.cloudmusic.miuix.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,75 +36,86 @@ import top.yukonga.miuix.kmp.icon.extended.Play
 fun PlayerBar(
     playerState: PlayerState,
     onTogglePlayPause: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    hasBottomBar: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    AnimatedVisibility(
-        visible = playerState.currentTrack != null,
-        enter = expandVertically(),
-        exit = shrinkVertically()
-    ) {
-        Surface(
-            modifier = modifier.fillMaxWidth(),
-            color = MiuixTheme.colorScheme.surfaceVariant
-        ) {
-            Row(
-                modifier = Modifier
+    if (playerState.currentTrack != null) {
+        with(sharedTransitionScope) {
+            Surface(
+                modifier = modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .sharedElement(
+                        sharedContentState = rememberSharedContentState(key = "player_bar"),
+                        animatedVisibilityScope = animatedVisibilityScope
+                    ),
+                color = MiuixTheme.colorScheme.surfaceVariant
             ) {
-                AsyncImage(
-                    model = playerState.currentTrack?.imgUrl,
-                    contentDescription = playerState.currentTrack?.title,
+                Row(
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop,
-                    error = painterResource(android.R.drawable.ic_menu_gallery)
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(
-                    modifier = Modifier.weight(1f)
+                        .fillMaxWidth()
+                        .padding(
+                            start = 12.dp,
+                            end = 12.dp,
+                            top = 8.dp,
+                            bottom = if (hasBottomBar) 8.dp else 32.dp
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = playerState.currentTrack?.title ?: "",
-                        style = MiuixTheme.textStyles.main,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = playerState.currentTrack?.artist ?: "",
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                if (playerState.isLoading) {
-                    InfiniteProgressIndicator(
-                        modifier = Modifier.size(36.dp)
-                    )
-                } else {
-                    IconButton(
-                        onClick = onTogglePlayPause,
+                    AsyncImage(
+                        model = playerState.currentTrack?.imgUrl,
+                        contentDescription = playerState.currentTrack?.title,
                         modifier = Modifier
-                            .size(40.dp)
-                            .background(
-                                MiuixTheme.colorScheme.primary,
-                                CircleShape
-                            )
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(android.R.drawable.ic_menu_gallery)
+                    )
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    androidx.compose.foundation.layout.Column(
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Icon(
-                            imageVector = if (playerState.isPlaying) MiuixIcons.Medium.Pause else MiuixIcons.Medium.Play,
-                            contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                            tint = MiuixTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(24.dp)
+                        Text(
+                            text = playerState.currentTrack?.title ?: "",
+                            style = MiuixTheme.textStyles.main,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
+                        Text(
+                            text = playerState.currentTrack?.artist ?: "",
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    if (playerState.isLoading) {
+                        InfiniteProgressIndicator(
+                            modifier = Modifier.size(36.dp)
+                        )
+                    } else {
+                        IconButton(
+                            onClick = onTogglePlayPause,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(
+                                    MiuixTheme.colorScheme.primary,
+                                    CircleShape
+                                )
+                        ) {
+                            Icon(
+                                imageVector = if (playerState.isPlaying) MiuixIcons.Medium.Pause else MiuixIcons.Medium.Play,
+                                contentDescription = if (playerState.isPlaying) "Pause" else "Play",
+                                tint = MiuixTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
             }
