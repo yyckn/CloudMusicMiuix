@@ -69,7 +69,7 @@ fun RecommendPage(
                 defaultWindowInsetsPadding = false,
                 bottomContent = {
                     SearchBar(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(vertical = 8.dp),
                         inputField = {
                             InputField(
                                 query = searchText,
