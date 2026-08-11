@@ -61,7 +61,10 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 
 sealed class Screen {
     object Main : Screen()
-    object PlaylistDetail : Screen()
+    data class PlaylistDetail(
+        val coverUrl: String = "",
+        val title: String = ""
+    ) : Screen()
     object Login : Screen()
     object QrLogin : Screen()
     object ThemeSettings : Screen()
@@ -169,11 +172,13 @@ fun MainScreen(
                                     when (tab) {
                                         0 -> RecommendPage(
                                             recommendState = viewModel.recommendState,
-                                            onPlaylistClick = { playlistId ->
+                                            onPlaylistClick = { playlistId, coverUrl, title ->
                                                 viewModel.loadPlaylistDetail(playlistId)
-                                                currentScreen = Screen.PlaylistDetail
+                                                currentScreen = Screen.PlaylistDetail(coverUrl, title)
                                             },
                                             viewModel = viewModel,
+                                            sharedTransitionScope = this@SharedTransitionLayout,
+                                            animatedVisibilityScope = this@AnimatedContent,
                                             modifier = Modifier.padding(padding)
                                         )
                                         1 -> PlaylistPage(
@@ -264,16 +269,18 @@ fun MainScreen(
                                 },
                                 label = "tab_transition"
                             ) { tab ->
-                                when (tab) {
-                                    0 -> RecommendPage(
-                                        recommendState = viewModel.recommendState,
-                                        onPlaylistClick = { playlistId ->
-                                            viewModel.loadPlaylistDetail(playlistId)
-                                            currentScreen = Screen.PlaylistDetail
-                                        },
-                                        viewModel = viewModel,
-                                        modifier = Modifier.padding(padding)
-                                    )
+                            when (tab) {
+                                0 -> RecommendPage(
+                                    recommendState = viewModel.recommendState,
+                                    onPlaylistClick = { playlistId, coverUrl, title ->
+                                        viewModel.loadPlaylistDetail(playlistId)
+                                        currentScreen = Screen.PlaylistDetail(coverUrl, title)
+                                    },
+                                    viewModel = viewModel,
+                                    sharedTransitionScope = this@SharedTransitionLayout,
+                                    animatedVisibilityScope = this@AnimatedContent,
+                                    modifier = Modifier.padding(padding)
+                                )
                                     1 -> PlaylistPage(
                                         tracks = viewModel.currentPlaylist,
                                         currentTrack = viewModel.playerState.currentTrack,
@@ -317,6 +324,8 @@ fun MainScreen(
                             isLoading = viewModel.playlistDetailState.isLoading,
                             error = viewModel.playlistDetailState.error,
                             currentTrack = viewModel.playerState.currentTrack,
+                            initialCoverUrl = screen.coverUrl,
+                            initialTitle = screen.title,
                             onBackClick = {
                                 viewModel.clearPlaylistDetail()
                                 currentScreen = Screen.Main
@@ -330,6 +339,8 @@ fun MainScreen(
                                     viewModel.playTrack(tracks.first())
                                 }
                             },
+                            sharedTransitionScope = this@SharedTransitionLayout,
+                            animatedVisibilityScope = this@AnimatedContent,
                             modifier = Modifier.padding(padding)
                         )
                     }

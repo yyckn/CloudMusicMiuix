@@ -1,22 +1,29 @@
 package com.cloudmusic.miuix.ui.pages
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,10 +47,12 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SearchBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
@@ -51,14 +60,26 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 @Composable
 fun RecommendPage(
     recommendState: RecommendState,
-    onPlaylistClick: (String) -> Unit,
+    onPlaylistClick: (String, String, String) -> Unit,
     viewModel: MusicPlayerViewModel,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     var searchText by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullToRefreshState = rememberPullToRefreshState()
     val searchState = viewModel.searchState
+
+    // 下拉刷新回调
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) {
+            viewModel.loadRecommendPlaylists()
+            isRefreshing = false
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -159,15 +180,26 @@ fun RecommendPage(
             )
         }
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .padding(top = paddingValues.calculateTopPadding())
-                .fillMaxSize()
+        PullToRefresh(
+            isRefreshing = isRefreshing,
+            onRefresh = { isRefreshing = true },
+            pullToRefreshState = pullToRefreshState,
+            topAppBarScrollBehavior = scrollBehavior,
+            refreshTexts = listOf(
+                "继续下拉以刷新",
+                "松手后刷新",
+                "正在刷新...",
+                "刷新成功"
+            ),
+            modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
         ) {
-            if (recommendState.isLoading) {
-                InfiniteProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center)
-                )
+            if (recommendState.isLoading && !isRefreshing) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    InfiniteProgressIndicator()
+                }
             } else if (recommendState.error != null) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -193,7 +225,9 @@ fun RecommendPage(
                     items(recommendState.playlists) { playlist ->
                         RecommendPlaylistCard(
                             playlist = playlist,
-                            onClick = { onPlaylistClick(playlist.id) }
+                            onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) },
+                            sharedTransitionScope = sharedTransitionScope,
+                            animatedVisibilityScope = animatedVisibilityScope
                         )
                     }
                 }
@@ -211,7 +245,7 @@ private fun TrackItem(
 ) {
     BasicComponent(
         modifier = modifier.fillMaxWidth(),
-        title = if (track.isVip) "${track.title} VIP" else track.title,
+        title = track.title,
         titleColor = if (isPlaying) {
             BasicComponentDefaults.titleColor(color = MiuixTheme.colorScheme.primary)
         } else {
@@ -223,47 +257,84 @@ private fun TrackItem(
         } else {
             BasicComponentDefaults.summaryColor()
         },
+        endActions = {
+            if (track.isVip) {
+                Text(
+                    text = "VIP",
+                    fontSize = MiuixTheme.textStyles.footnote2.fontSize,
+                    color = MiuixTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .background(
+                            color = MiuixTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(
+                text = formatDuration(track.duration),
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+        },
         onClick = onClick
     )
+}
+
+private fun formatDuration(durationMs: Long): String {
+    if (durationMs <= 0) return "--:--"
+    val totalSeconds = durationMs / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
 }
 
 @Composable
 private fun RecommendPlaylistCard(
     playlist: RecommendPlaylist,
     onClick: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        pressFeedbackType = PressFeedbackType.Tilt,
-        showIndication = true,
-        onClick = onClick
-    ) {
-        AsyncImage(
-            model = playlist.coverImgUrl,
-            contentDescription = playlist.title,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f),
-            contentScale = ContentScale.Crop,
-            error = painterResource(android.R.drawable.ic_menu_gallery)
-        )
-
-        Text(
-            text = playlist.title,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            style = MiuixTheme.textStyles.body2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        if (playlist.playCount > 0) {
-            Text(
-                text = formatPlayCount(playlist.playCount),
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
-                style = MiuixTheme.textStyles.footnote2,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+    with(sharedTransitionScope) {
+        Card(
+            modifier = modifier.fillMaxWidth(),
+            pressFeedbackType = PressFeedbackType.Tilt,
+            showIndication = true,
+            onClick = onClick
+        ) {
+            AsyncImage(
+                model = playlist.coverImgUrl,
+                contentDescription = playlist.title,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .sharedElement(
+                        sharedContentState = rememberSharedContentState(key = "playlist_cover_${playlist.id}"),
+                        animatedVisibilityScope = animatedVisibilityScope
+                    ),
+                contentScale = ContentScale.Crop,
+                error = painterResource(android.R.drawable.ic_menu_gallery)
             )
+
+            Text(
+                text = playlist.title,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                style = MiuixTheme.textStyles.body2,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            if (playlist.playCount > 0) {
+                Text(
+                    text = formatPlayCount(playlist.playCount),
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+            }
         }
     }
 }
