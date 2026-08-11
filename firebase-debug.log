@@ -1,0 +1,372 @@
+[debug] [2026-08-11T08:40:13.955Z] ----------------------------------------------------------------------
+[debug] [2026-08-11T08:40:13.957Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js emulators:start --only functions
+[debug] [2026-08-11T08:40:13.957Z] CLI Version:   15.26.0
+[debug] [2026-08-11T08:40:13.957Z] Platform:      win32
+[debug] [2026-08-11T08:40:13.957Z] Node Version:  v25.8.2
+[debug] [2026-08-11T08:40:13.957Z] Detected Agent: open_code
+[debug] [2026-08-11T08:40:13.957Z] Time:          Tue Aug 11 2026 16:40:13 GMT+0800 (中国标准时间)
+[debug] [2026-08-11T08:40:13.957Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-08-11T08:40:13.969Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-08-11T08:40:14.869Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] Failed to authenticate, have you run firebase login?
+[warn] !  emulators: You are not currently authenticated so some features may not work correctly. Please run firebase login to authenticate the CLI. 
+[info] i  emulators: Starting emulators: functions {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: functions"}}
+[debug] [2026-08-11T08:40:14.895Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-08-11T08:40:14.896Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[debug] [2026-08-11T08:40:14.898Z] Write emulator hub locator at C:\Users\Wangyao\AppData\Local\Temp\hub-your-firebase-project-id.json
+[debug] [2026-08-11T08:40:14.908Z] [functions] Functions Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-08-11T08:40:14.908Z] [eventarc] Eventarc Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-08-11T08:40:14.908Z] [tasks] Cloud Tasks Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-08-11T08:40:14.908Z] late-assigned ports for functions and eventarc emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"functions":[{"address":"127.0.0.1","family":"IPv4","port":5001}],"eventarc":[{"address":"127.0.0.1","family":"IPv4","port":9299}],"tasks":[{"address":"127.0.0.1","family":"IPv4","port":9499}]},"metadata":{"message":"late-assigned ports for functions and eventarc emulators"}}
+[warn] !  functions: The following emulators are not running, calls to these services from the Functions emulator will affect production: apphosting, auth, firestore, database, hosting, pubsub, storage, dataconnect {"metadata":{"emulator":{"name":"functions"},"message":"The following emulators are not running, calls to these services from the Functions emulator will affect production: \u001b[1mapphosting, auth, firestore, database, hosting, pubsub, storage, dataconnect\u001b[22m"}}
+[debug] [2026-08-11T08:40:14.910Z] No OAuth tokens found
+[debug] [2026-08-11T08:40:14.910Z] No OAuth tokens found
+[debug] [2026-08-11T08:40:14.910Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-11T08:40:14.910Z] Failed to get Admin SDK config for your-firebase-project-id, falling back to cache Failed to get Admin SDK for Firebase project your-firebase-project-id. Please make sure the project exists and your account has permission to access it. {"name":"FirebaseError","children":[],"exit":2,"message":"Failed to get Admin SDK for Firebase project your-firebase-project-id. Please make sure the project exists and your account has permission to access it.","original":{"name":"FirebaseError","children":[],"exit":1,"message":"Failed to authenticate, have you run \u001b[1mfirebase login\u001b[22m?","original":{},"status":500},"status":500}
+[warn] !  functions: Unable to fetch project Admin SDK configuration, Admin SDK behavior in Cloud Functions emulator may be incorrect. {"metadata":{"emulator":{"name":"functions"},"message":"Unable to fetch project Admin SDK configuration, Admin SDK behavior in Cloud Functions emulator may be incorrect."}}
+[info] i  ui: downloading ui-v1.15.0.zip... {"metadata":{"emulator":{"name":"ui"},"message":"downloading ui-v1.15.0.zip..."}}
+[debug] [2026-08-11T08:40:14.924Z] >>> [apiv2][query] GET https://storage.googleapis.com/firebase-preview-drop/emulator/ui-v1.15.0.zip 
+[debug] [2026-08-11T08:40:15.190Z] <<< [apiv2][status] GET https://storage.googleapis.com/firebase-preview-drop/emulator/ui-v1.15.0.zip 200
+[debug] [2026-08-11T08:40:15.190Z] <<< [apiv2][body] GET https://storage.googleapis.com/firebase-preview-drop/emulator/ui-v1.15.0.zip [stream]
+[debug] [2026-08-11T08:40:16.263Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-08-11T08:40:16.263Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-08-11T08:40:17.603Z] Data is 3538469
+[debug] [2026-08-11T08:40:17.603Z] [unzip] Entry: client/ (compressed_size=0 bytes, uncompressed_size=0 bytes)
+[debug] [2026-08-11T08:40:17.604Z] [unzip] Processing entry: client\
+[debug] [2026-08-11T08:40:17.604Z] [unzip] mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\
+[debug] [2026-08-11T08:40:17.606Z] [unzip] Entry: client/favicon-16x16.png (compressed_size=293 bytes, uncompressed_size=293 bytes)
+[debug] [2026-08-11T08:40:17.606Z] [unzip] Processing entry: client\favicon-16x16.png
+[debug] [2026-08-11T08:40:17.606Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client
+[debug] [2026-08-11T08:40:17.607Z] [unzip] Writing file: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\favicon-16x16.png
+[debug] [2026-08-11T08:40:17.608Z] [unzip] Entry: client/safari-pinned-tab.svg (compressed_size=1433 bytes, uncompressed_size=2611 bytes)
+[debug] [2026-08-11T08:40:17.608Z] [unzip] Processing entry: client\safari-pinned-tab.svg
+[debug] [2026-08-11T08:40:17.608Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client
+[debug] [2026-08-11T08:40:17.608Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\safari-pinned-tab.svg
+[debug] [2026-08-11T08:40:17.612Z] [unzip] Entry: client/favicon.ico (compressed_size=2933 bytes, uncompressed_size=13294 bytes)
+[debug] [2026-08-11T08:40:17.612Z] [unzip] Processing entry: client\favicon.ico
+[debug] [2026-08-11T08:40:17.612Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client
+[debug] [2026-08-11T08:40:17.612Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\favicon.ico
+[debug] [2026-08-11T08:40:17.614Z] [unzip] Entry: client/index.html (compressed_size=1364 bytes, uncompressed_size=3071 bytes)
+[debug] [2026-08-11T08:40:17.614Z] [unzip] Processing entry: client\index.html
+[debug] [2026-08-11T08:40:17.614Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client
+[debug] [2026-08-11T08:40:17.614Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\index.html
+[debug] [2026-08-11T08:40:17.615Z] [unzip] Entry: client/android-chrome-192x192.png (compressed_size=2684 bytes, uncompressed_size=2684 bytes)
+[debug] [2026-08-11T08:40:17.615Z] [unzip] Processing entry: client\android-chrome-192x192.png
+[debug] [2026-08-11T08:40:17.615Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client
+[debug] [2026-08-11T08:40:17.616Z] [unzip] Writing file: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\android-chrome-192x192.png
+[debug] [2026-08-11T08:40:17.617Z] [unzip] Entry: client/apple-touch-icon.png (compressed_size=2123 bytes, uncompressed_size=2152 bytes)
+[debug] [2026-08-11T08:40:17.617Z] [unzip] Processing entry: client\apple-touch-icon.png
+[debug] [2026-08-11T08:40:17.617Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client
+[debug] [2026-08-11T08:40:17.617Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\apple-touch-icon.png
+[debug] [2026-08-11T08:40:17.618Z] [unzip] Entry: client/android-chrome-512x512.png (compressed_size=5369 bytes, uncompressed_size=5411 bytes)
+[debug] [2026-08-11T08:40:17.619Z] [unzip] Processing entry: client\android-chrome-512x512.png
+[debug] [2026-08-11T08:40:17.619Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client
+[debug] [2026-08-11T08:40:17.619Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\android-chrome-512x512.png
+[debug] [2026-08-11T08:40:17.620Z] [unzip] Entry: client/manifest.json (compressed_size=245 bytes, uncompressed_size=551 bytes)
+[debug] [2026-08-11T08:40:17.620Z] [unzip] Processing entry: client\manifest.json
+[debug] [2026-08-11T08:40:17.620Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client
+[debug] [2026-08-11T08:40:17.620Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\manifest.json
+[debug] [2026-08-11T08:40:17.621Z] [unzip] Entry: client/robots.txt (compressed_size=26 bytes, uncompressed_size=26 bytes)
+[debug] [2026-08-11T08:40:17.621Z] [unzip] Processing entry: client\robots.txt
+[debug] [2026-08-11T08:40:17.621Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client
+[debug] [2026-08-11T08:40:17.622Z] [unzip] Writing file: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\robots.txt
+[debug] [2026-08-11T08:40:17.623Z] [unzip] Entry: client/mstile-150x150.png (compressed_size=2034 bytes, uncompressed_size=2034 bytes)
+[debug] [2026-08-11T08:40:17.623Z] [unzip] Processing entry: client\mstile-150x150.png
+[debug] [2026-08-11T08:40:17.623Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client
+[debug] [2026-08-11T08:40:17.623Z] [unzip] Writing file: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\mstile-150x150.png
+[debug] [2026-08-11T08:40:17.625Z] [unzip] Entry: client/assets/ (compressed_size=0 bytes, uncompressed_size=0 bytes)
+[debug] [2026-08-11T08:40:17.625Z] [unzip] Processing entry: client\assets\
+[debug] [2026-08-11T08:40:17.625Z] [unzip] mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\
+[debug] [2026-08-11T08:40:17.625Z] [unzip] Entry: client/assets/index-BX-A56oj.js (compressed_size=582089 bytes, uncompressed_size=2092775 bytes)
+[debug] [2026-08-11T08:40:17.625Z] [unzip] Processing entry: client\assets\index-BX-A56oj.js
+[debug] [2026-08-11T08:40:17.625Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets
+[debug] [2026-08-11T08:40:17.626Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\index-BX-A56oj.js
+[debug] [2026-08-11T08:40:17.638Z] [unzip] Entry: client/assets/index-CjB9C900.css (compressed_size=35979 bytes, uncompressed_size=298654 bytes)
+[debug] [2026-08-11T08:40:17.638Z] [unzip] Processing entry: client\assets\index-CjB9C900.css
+[debug] [2026-08-11T08:40:17.638Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets
+[debug] [2026-08-11T08:40:17.638Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\index-CjB9C900.css
+[debug] [2026-08-11T08:40:17.641Z] [unzip] Entry: client/assets/index-BX-A56oj.js.map (compressed_size=2362482 bytes, uncompressed_size=10036679 bytes)
+[debug] [2026-08-11T08:40:17.641Z] [unzip] Processing entry: client\assets\index-BX-A56oj.js.map
+[debug] [2026-08-11T08:40:17.641Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets
+[debug] [2026-08-11T08:40:17.641Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\index-BX-A56oj.js.map
+[debug] [2026-08-11T08:40:17.694Z] [unzip] Entry: client/assets/extensions/ (compressed_size=0 bytes, uncompressed_size=0 bytes)
+[debug] [2026-08-11T08:40:17.694Z] [unzip] Processing entry: client\assets\extensions\
+[debug] [2026-08-11T08:40:17.694Z] [unzip] mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\extensions\
+[debug] [2026-08-11T08:40:17.695Z] [unzip] Entry: client/assets/extensions/default-extension.png (compressed_size=1646 bytes, uncompressed_size=1657 bytes)
+[debug] [2026-08-11T08:40:17.695Z] [unzip] Processing entry: client\assets\extensions\default-extension.png
+[debug] [2026-08-11T08:40:17.695Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\extensions
+[debug] [2026-08-11T08:40:17.695Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\extensions\default-extension.png
+[debug] [2026-08-11T08:40:17.696Z] [unzip] Entry: client/assets/img/ (compressed_size=0 bytes, uncompressed_size=0 bytes)
+[debug] [2026-08-11T08:40:17.696Z] [unzip] Processing entry: client\assets\img\
+[debug] [2026-08-11T08:40:17.696Z] [unzip] mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\img\
+[debug] [2026-08-11T08:40:17.697Z] [unzip] Entry: client/assets/img/database.png (compressed_size=29449 bytes, uncompressed_size=29988 bytes)
+[debug] [2026-08-11T08:40:17.697Z] [unzip] Processing entry: client\assets\img\database.png
+[debug] [2026-08-11T08:40:17.697Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\img
+[debug] [2026-08-11T08:40:17.697Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\img\database.png
+[debug] [2026-08-11T08:40:17.700Z] [unzip] Entry: client/assets/provider-icons/ (compressed_size=0 bytes, uncompressed_size=0 bytes)
+[debug] [2026-08-11T08:40:17.700Z] [unzip] Processing entry: client\assets\provider-icons\
+[debug] [2026-08-11T08:40:17.700Z] [unzip] mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\
+[debug] [2026-08-11T08:40:17.701Z] [unzip] Entry: client/assets/provider-icons/auth_service_saml.svg (compressed_size=575 bytes, uncompressed_size=1226 bytes)
+[debug] [2026-08-11T08:40:17.701Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_saml.svg
+[debug] [2026-08-11T08:40:17.701Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.701Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_saml.svg
+[debug] [2026-08-11T08:40:17.702Z] [unzip] Entry: client/assets/provider-icons/auth_service_phone.svg (compressed_size=261 bytes, uncompressed_size=414 bytes)
+[debug] [2026-08-11T08:40:17.702Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_phone.svg
+[debug] [2026-08-11T08:40:17.702Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.702Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_phone.svg
+[debug] [2026-08-11T08:40:17.704Z] [unzip] Entry: client/assets/provider-icons/auth_service_facebook.svg (compressed_size=289 bytes, uncompressed_size=457 bytes)
+[debug] [2026-08-11T08:40:17.704Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_facebook.svg
+[debug] [2026-08-11T08:40:17.704Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.705Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_facebook.svg
+[debug] [2026-08-11T08:40:17.706Z] [unzip] Entry: client/assets/provider-icons/auth_service_game_center.svg (compressed_size=991 bytes, uncompressed_size=3921 bytes)
+[debug] [2026-08-11T08:40:17.706Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_game_center.svg
+[debug] [2026-08-11T08:40:17.706Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.706Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_game_center.svg
+[debug] [2026-08-11T08:40:17.707Z] [unzip] Entry: client/assets/provider-icons/auth_service_apple.svg (compressed_size=230 bytes, uncompressed_size=334 bytes)
+[debug] [2026-08-11T08:40:17.707Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_apple.svg
+[debug] [2026-08-11T08:40:17.707Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.707Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_apple.svg
+[debug] [2026-08-11T08:40:17.708Z] [unzip] Entry: client/assets/provider-icons/auth_service_github.svg (compressed_size=466 bytes, uncompressed_size=838 bytes)
+[debug] [2026-08-11T08:40:17.708Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_github.svg
+[debug] [2026-08-11T08:40:17.708Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.708Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_github.svg
+[debug] [2026-08-11T08:40:17.710Z] [unzip] Entry: client/assets/provider-icons/auth_service_mslive.svg (compressed_size=203 bytes, uncompressed_size=378 bytes)
+[debug] [2026-08-11T08:40:17.710Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_mslive.svg
+[debug] [2026-08-11T08:40:17.710Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.711Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_mslive.svg
+[debug] [2026-08-11T08:40:17.712Z] [unzip] Entry: client/assets/provider-icons/auth_service_yahoo.svg (compressed_size=577 bytes, uncompressed_size=1182 bytes)
+[debug] [2026-08-11T08:40:17.712Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_yahoo.svg
+[debug] [2026-08-11T08:40:17.712Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.712Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_yahoo.svg
+[debug] [2026-08-11T08:40:17.713Z] [unzip] Entry: client/assets/provider-icons/auth_service_twitter.svg (compressed_size=444 bytes, uncompressed_size=751 bytes)
+[debug] [2026-08-11T08:40:17.713Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_twitter.svg
+[debug] [2026-08-11T08:40:17.713Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.714Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_twitter.svg
+[debug] [2026-08-11T08:40:17.715Z] [unzip] Entry: client/assets/provider-icons/auth_service_play_games.svg (compressed_size=565 bytes, uncompressed_size=1173 bytes)
+[debug] [2026-08-11T08:40:17.715Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_play_games.svg
+[debug] [2026-08-11T08:40:17.715Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.715Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_play_games.svg
+[debug] [2026-08-11T08:40:17.717Z] [unzip] Entry: client/assets/provider-icons/auth_service_email.svg (compressed_size=228 bytes, uncompressed_size=326 bytes)
+[debug] [2026-08-11T08:40:17.717Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_email.svg
+[debug] [2026-08-11T08:40:17.717Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.718Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_email.svg
+[debug] [2026-08-11T08:40:17.719Z] [unzip] Entry: client/assets/provider-icons/auth_service_google.svg (compressed_size=409 bytes, uncompressed_size=720 bytes)
+[debug] [2026-08-11T08:40:17.719Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_google.svg
+[debug] [2026-08-11T08:40:17.719Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.719Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_google.svg
+[debug] [2026-08-11T08:40:17.720Z] [unzip] Entry: client/assets/provider-icons/auth_service_oidc.svg (compressed_size=414 bytes, uncompressed_size=858 bytes)
+[debug] [2026-08-11T08:40:17.720Z] [unzip] Processing entry: client\assets\provider-icons\auth_service_oidc.svg
+[debug] [2026-08-11T08:40:17.720Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons
+[debug] [2026-08-11T08:40:17.720Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\assets\provider-icons\auth_service_oidc.svg
+[debug] [2026-08-11T08:40:17.721Z] [unzip] Entry: client/browserconfig.xml (compressed_size=491 bytes, uncompressed_size=822 bytes)
+[debug] [2026-08-11T08:40:17.721Z] [unzip] Processing entry: client\browserconfig.xml
+[debug] [2026-08-11T08:40:17.721Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client
+[debug] [2026-08-11T08:40:17.721Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\browserconfig.xml
+[debug] [2026-08-11T08:40:17.722Z] [unzip] Entry: client/favicon-32x32.png (compressed_size=475 bytes, uncompressed_size=475 bytes)
+[debug] [2026-08-11T08:40:17.722Z] [unzip] Processing entry: client\favicon-32x32.png
+[debug] [2026-08-11T08:40:17.723Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client
+[debug] [2026-08-11T08:40:17.723Z] [unzip] Writing file: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\client\favicon-32x32.png
+[debug] [2026-08-11T08:40:17.724Z] [unzip] Entry: server/ (compressed_size=0 bytes, uncompressed_size=0 bytes)
+[debug] [2026-08-11T08:40:17.724Z] [unzip] Processing entry: server\
+[debug] [2026-08-11T08:40:17.724Z] [unzip] mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\server\
+[debug] [2026-08-11T08:40:17.724Z] [unzip] Entry: server/server.mjs.map (compressed_size=217845 bytes, uncompressed_size=944978 bytes)
+[debug] [2026-08-11T08:40:17.724Z] [unzip] Processing entry: server\server.mjs.map
+[debug] [2026-08-11T08:40:17.724Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\server
+[debug] [2026-08-11T08:40:17.724Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\server\server.mjs.map
+[debug] [2026-08-11T08:40:17.728Z] [unzip] Entry: server/server.mjs (compressed_size=276407 bytes, uncompressed_size=933701 bytes)
+[debug] [2026-08-11T08:40:17.728Z] [unzip] Processing entry: server\server.mjs
+[debug] [2026-08-11T08:40:17.728Z] [unzip] else mkdir: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\server
+[debug] [2026-08-11T08:40:17.729Z] [unzip] deflating: C:\Users\Wangyao\.cache\firebase\emulators\ui-v1.15.0\server\server.mjs
+[info] i  functions: Watching "E:\Code\CloudMusicMiuix\app\functions" for Cloud Functions... {"metadata":{"emulator":{"name":"functions"},"message":"Watching \"E:\\Code\\CloudMusicMiuix\\app\\functions\" for Cloud Functions..."}}
+[debug] [2026-08-11T08:40:17.738Z] Validating nodejs source
+[warn] !  functions: Couldn't find firebase-functions package in your source code. Have you run 'npm install'? 
+[debug] [2026-08-11T08:40:17.739Z] getFunctionsSDKVersion encountered error: Cannot find module 'firebase-functions'
+Require stack:
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\deploy\functions\runtimes\node\versioning.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\deploy\functions\runtimes\node\index.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\deploy\functions\runtimes\index.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\deploy\functions\prepare.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\emulator\functionsEmulatorShared.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\emulator\functionsEmulator.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\emulator\controller.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\commands\emulators-start.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\commands\index.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\index.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\cli.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js {"code":"MODULE_NOT_FOUND","requireStack":["C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\deploy\\functions\\runtimes\\node\\versioning.js","C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\deploy\\functions\\runtimes\\node\\index.js","C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\deploy\\functions\\runtimes\\index.js","C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\deploy\\functions\\prepare.js","C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\emulator\\functionsEmulatorShared.js","C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\emulator\\functionsEmulator.js","C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\emulator\\controller.js","C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\commands\\emulators-start.js","C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\commands\\index.js","C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\index.js","C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\bin\\cli.js","C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\bin\\firebase.js"]}
+[debug] [2026-08-11T08:40:17.739Z] checkFunctionsSDKVersion encountered error: Invalid Version:  {}
+[debug] [2026-08-11T08:40:17.740Z] > [functions] package.json contents: {
+  "name": "cloudmusic-miuix-functions",
+  "version": "1.0.0",
+  "description": "Cloud Functions for CloudMusic Miuix app",
+  "main": "index.js",
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "18"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.11.0",
+    "firebase-functions": "^4.5.0"
+  },
+  "devDependencies": {
+    "firebase-functions-test": "^3.1.0"
+  },
+  "private": true
+}
+[debug] [2026-08-11T08:40:17.740Z] Building nodejs source
+[debug] [2026-08-11T08:40:17.741Z] Failed to find version of module node: reached end of search path E:\Code\CloudMusicMiuix\app\functions\node_modules
+[warn] !  functions: Your requested "node" version "18" doesn't match your global version "25". Using node@25 from host. 
+[debug] [2026-08-11T08:40:17.742Z] Could not parse firebase-functions version '' into semver.
+[debug] [2026-08-11T08:40:17.743Z] Could not find functions.yaml. Must use http discovery
+[error] !!  functions: Failed to load function definition from source: Error: Cannot find module 'firebase-functions'
+Require stack:
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\deploy\functions\runtimes\node\index.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\deploy\functions\runtimes\index.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\deploy\functions\prepare.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\emulator\functionsEmulatorShared.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\emulator\functionsEmulator.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\emulator\controller.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\commands\emulators-start.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\commands\index.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\index.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\cli.js
+- C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js {"metadata":{"emulator":{"name":"functions"},"message":"Failed to load function definition from source: Error: Cannot find module 'firebase-functions'\nRequire stack:\n- C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\deploy\\functions\\runtimes\\node\\index.js\n- C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\deploy\\functions\\runtimes\\index.js\n- C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\deploy\\functions\\prepare.js\n- C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\emulator\\functionsEmulatorShared.js\n- C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\emulator\\functionsEmulator.js\n- C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\emulator\\controller.js\n- C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\commands\\emulators-start.js\n- C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\commands\\index.js\n- C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\index.js\n- C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\bin\\cli.js\n- C:\\Users\\Wangyao\\AppData\\Roaming\\npm\\node_modules\\firebase-tools\\lib\\bin\\firebase.js"}}
+[debug] [2026-08-11T08:40:17.758Z] Could not find VSCode notification endpoint: TypeError: fetch failed. If you are not running the Firebase SQL Connect VSCode extension, this is expected and not an issue.
+[info] 
+┌─────────────────────────────────────────────────────────────┐
+│ ✔  All emulators ready! It is now safe to connect your app. │
+│ i  View Emulator UI at http://127.0.0.1:4000/               │
+└─────────────────────────────────────────────────────────────┘
+
+┌───────────┬────────────────┬─────────────────────────────────┐
+│ Emulator  │ Host:Port      │ View in Emulator UI             │
+├───────────┼────────────────┼─────────────────────────────────┤
+│ Functions │ 127.0.0.1:5001 │ http://127.0.0.1:4000/functions │
+└───────────┴────────────────┴─────────────────────────────────┘
+  Emulator Hub host: 127.0.0.1 port: 4400
+  Other reserved ports: 4500
+
+Issues? Report them at https://github.com/firebase/firebase-tools/issues and attach the *-debug.log files.
+ 
+[debug] [2026-08-11T08:44:16.354Z] ----------------------------------------------------------------------
+[debug] [2026-08-11T08:44:16.356Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Wangyao\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js emulators:start --only functions
+[debug] [2026-08-11T08:44:16.356Z] CLI Version:   15.26.0
+[debug] [2026-08-11T08:44:16.356Z] Platform:      win32
+[debug] [2026-08-11T08:44:16.356Z] Node Version:  v25.8.2
+[debug] [2026-08-11T08:44:16.356Z] Detected Agent: open_code
+[debug] [2026-08-11T08:44:16.356Z] Time:          Tue Aug 11 2026 16:44:16 GMT+0800 (中国标准时间)
+[debug] [2026-08-11T08:44:16.356Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-08-11T08:44:17.169Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] Failed to authenticate, have you run firebase login?
+[warn] !  emulators: You are not currently authenticated so some features may not work correctly. Please run firebase login to authenticate the CLI. 
+[info] i  emulators: Starting emulators: functions {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: functions"}}
+[debug] [2026-08-11T08:44:17.198Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-08-11T08:44:17.198Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[debug] [2026-08-11T08:44:17.202Z] Found emulator hub locator: {"version":"15.26.0","origins":["http://127.0.0.1:4400","http://[::1]:4400"],"pid":23960}
+[debug] [2026-08-11T08:44:17.202Z] Write emulator hub locator at C:\Users\Wangyao\AppData\Local\Temp\hub-your-firebase-project-id.json
+[debug] [2026-08-11T08:44:17.213Z] [functions] Functions Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-08-11T08:44:17.213Z] [eventarc] Eventarc Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-08-11T08:44:17.213Z] [tasks] Cloud Tasks Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-08-11T08:44:17.213Z] late-assigned ports for functions and eventarc emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"functions":[{"address":"127.0.0.1","family":"IPv4","port":5001}],"eventarc":[{"address":"127.0.0.1","family":"IPv4","port":9299}],"tasks":[{"address":"127.0.0.1","family":"IPv4","port":9499}]},"metadata":{"message":"late-assigned ports for functions and eventarc emulators"}}
+[warn] !  functions: The following emulators are not running, calls to these services from the Functions emulator will affect production: apphosting, auth, firestore, database, hosting, pubsub, storage, dataconnect {"metadata":{"emulator":{"name":"functions"},"message":"The following emulators are not running, calls to these services from the Functions emulator will affect production: \u001b[1mapphosting, auth, firestore, database, hosting, pubsub, storage, dataconnect\u001b[22m"}}
+[debug] [2026-08-11T08:44:17.224Z] No OAuth tokens found
+[debug] [2026-08-11T08:44:17.224Z] No OAuth tokens found
+[debug] [2026-08-11T08:44:17.224Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-11T08:44:17.225Z] Failed to get Admin SDK config for your-firebase-project-id, falling back to cache Failed to get Admin SDK for Firebase project your-firebase-project-id. Please make sure the project exists and your account has permission to access it. {"name":"FirebaseError","children":[],"exit":2,"message":"Failed to get Admin SDK for Firebase project your-firebase-project-id. Please make sure the project exists and your account has permission to access it.","original":{"name":"FirebaseError","children":[],"exit":1,"message":"Failed to authenticate, have you run \u001b[1mfirebase login\u001b[22m?","original":{},"status":500},"status":500}
+[warn] !  functions: Unable to fetch project Admin SDK configuration, Admin SDK behavior in Cloud Functions emulator may be incorrect. {"metadata":{"emulator":{"name":"functions"},"message":"Unable to fetch project Admin SDK configuration, Admin SDK behavior in Cloud Functions emulator may be incorrect."}}
+[info] i  functions: Watching "E:\Code\CloudMusicMiuix\app\functions" for Cloud Functions... {"metadata":{"emulator":{"name":"functions"},"message":"Watching \"E:\\Code\\CloudMusicMiuix\\app\\functions\" for Cloud Functions..."}}
+[debug] [2026-08-11T08:44:17.241Z] Validating nodejs source
+[warn] !  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[warn] !  functions: Please note that there will be breaking changes when you upgrade. 
+[debug] [2026-08-11T08:44:19.514Z] > [functions] package.json contents: {
+  "name": "cloudmusic-miuix-functions",
+  "version": "1.0.0",
+  "description": "Cloud Functions for CloudMusic Miuix app",
+  "main": "index.js",
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "18"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.11.0",
+    "firebase-functions": "^4.5.0"
+  },
+  "devDependencies": {
+    "firebase-functions-test": "^3.1.0"
+  },
+  "private": true
+}
+[debug] [2026-08-11T08:44:19.515Z] Building nodejs source
+[debug] [2026-08-11T08:44:19.515Z] Failed to find version of module node: reached end of search path E:\Code\CloudMusicMiuix\app\functions\node_modules
+[warn] !  functions: Your requested "node" version "18" doesn't match your global version "25". Using node@25 from host. 
+[info] i  functions: You are using a version of firebase-functions SDK (4.9.0) that does not have support for the newest Firebase Extensions features. Please update firebase-functions SDK to >=5.1.0 to use them correctly 
+[debug] [2026-08-11T08:44:19.517Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-08-11T08:44:19.523Z] Found firebase-functions binary at 'E:\Code\CloudMusicMiuix\app\functions\node_modules\.bin\firebase-functions'
+[info] Serving at port 8438
+
+[debug] [2026-08-11T08:44:20.031Z] Got response from /__/functions.yaml {"endpoints":{"tracks-getTracks":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"tracks.getTracks"},"tracks-getTrackById":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"tracks.getTrackById"},"tracks-createTrack":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"tracks.createTrack"},"tracks-updateTrack":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"tracks.updateTrack"},"tracks-deleteTrack":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"tracks.deleteTrack"},"playlists-getPlaylists":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"playlists.getPlaylists"},"playlists-getPlaylistById":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"playlists.getPlaylistById"},"playlists-createPlaylist":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"playlists.createPlaylist"},"playlists-updatePlaylist":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"playlists.updatePlaylist"},"playlists-deletePlaylist":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"playlists.deletePlaylist"},"playlists-addTrackToPlaylist":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"playlists.addTrackToPlaylist"},"playlists-removeTrackFromPlaylist":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"playlists.removeTrackFromPlaylist"},"search-search":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"search.search"},"search-getHotSearchTerms":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"search.getHotSearchTerms"},"search-getSearchSuggestions":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"search.getSearchSuggestions"},"auth-register":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"auth.register"},"auth-loginWithEmail":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"auth.loginWithEmail"},"auth-getUserInfo":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"auth.getUserInfo"},"auth-updateProfile":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"auth.updateProfile"},"auth-deleteAccount":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"auth.deleteAccount"},"profile-getFavoritePlaylists":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"profile.getFavoritePlaylists"},"profile-toggleFavoritePlaylist":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"profile.toggleFavoritePlaylist"},"profile-getUserPlaylists":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"profile.getUserPlaylists"},"profile-getUserStats":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"profile.getUserStats"},"storage-getUploadUrl":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"storage.getUploadUrl"},"storage-getDownloadUrl":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"storage.getDownloadUrl"},"storage-deleteFile":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"storage.deleteFile"},"storage-getStorageUsage":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"storage.getStorageUsage"},"history-recordPlay":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"history.recordPlay"},"history-getPlayHistory":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"history.getPlayHistory"},"history-clearPlayHistory":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"history.clearPlayHistory"},"history-getPlayStats":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"history.getPlayStats"},"healthCheck":{"platform":"gcfv1","availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"httpsTrigger":{},"entryPoint":"healthCheck"}},"specVersion":"v1alpha1","requiredAPIs":[]}
+[info] +  functions: Loaded functions definitions from source: tracks.getTracks, tracks.getTrackById, tracks.createTrack, tracks.updateTrack, tracks.deleteTrack, playlists.getPlaylists, playlists.getPlaylistById, playlists.createPlaylist, playlists.updatePlaylist, playlists.deletePlaylist, playlists.addTrackToPlaylist, playlists.removeTrackFromPlaylist, search.search, search.getHotSearchTerms, search.getSearchSuggestions, auth.register, auth.loginWithEmail, auth.getUserInfo, auth.updateProfile, auth.deleteAccount, profile.getFavoritePlaylists, profile.toggleFavoritePlaylist, profile.getUserPlaylists, profile.getUserStats, storage.getUploadUrl, storage.getDownloadUrl, storage.deleteFile, storage.getStorageUsage, history.recordPlay, history.getPlayHistory, history.clearPlayHistory, history.getPlayStats, healthCheck. {"metadata":{"emulator":{"name":"functions"},"message":"Loaded functions definitions from source: tracks.getTracks, tracks.getTrackById, tracks.createTrack, tracks.updateTrack, tracks.deleteTrack, playlists.getPlaylists, playlists.getPlaylistById, playlists.createPlaylist, playlists.updatePlaylist, playlists.deletePlaylist, playlists.addTrackToPlaylist, playlists.removeTrackFromPlaylist, search.search, search.getHotSearchTerms, search.getSearchSuggestions, auth.register, auth.loginWithEmail, auth.getUserInfo, auth.updateProfile, auth.deleteAccount, profile.getFavoritePlaylists, profile.toggleFavoritePlaylist, profile.getUserPlaylists, profile.getUserStats, storage.getUploadUrl, storage.getDownloadUrl, storage.deleteFile, storage.getStorageUsage, history.recordPlay, history.getPlayHistory, history.clearPlayHistory, history.getPlayStats, healthCheck."}}
+[info] +  functions[us-central1-tracks-getTracks]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/tracks-getTracks). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/tracks-getTracks)."}}
+[info] +  functions[us-central1-tracks-getTrackById]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/tracks-getTrackById). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/tracks-getTrackById)."}}
+[info] +  functions[us-central1-tracks-createTrack]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/tracks-createTrack). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/tracks-createTrack)."}}
+[info] +  functions[us-central1-tracks-updateTrack]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/tracks-updateTrack). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/tracks-updateTrack)."}}
+[info] +  functions[us-central1-tracks-deleteTrack]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/tracks-deleteTrack). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/tracks-deleteTrack)."}}
+[info] +  functions[us-central1-playlists-getPlaylists]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-getPlaylists). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-getPlaylists)."}}
+[info] +  functions[us-central1-playlists-getPlaylistById]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-getPlaylistById). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-getPlaylistById)."}}
+[info] +  functions[us-central1-playlists-createPlaylist]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-createPlaylist). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-createPlaylist)."}}
+[info] +  functions[us-central1-playlists-updatePlaylist]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-updatePlaylist). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-updatePlaylist)."}}
+[info] +  functions[us-central1-playlists-deletePlaylist]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-deletePlaylist). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-deletePlaylist)."}}
+[info] +  functions[us-central1-playlists-addTrackToPlaylist]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-addTrackToPlaylist). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-addTrackToPlaylist)."}}
+[info] +  functions[us-central1-playlists-removeTrackFromPlaylist]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-removeTrackFromPlaylist). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/playlists-removeTrackFromPlaylist)."}}
+[info] +  functions[us-central1-search-search]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/search-search). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/search-search)."}}
+[info] +  functions[us-central1-search-getHotSearchTerms]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/search-getHotSearchTerms). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/search-getHotSearchTerms)."}}
+[info] +  functions[us-central1-search-getSearchSuggestions]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/search-getSearchSuggestions). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/search-getSearchSuggestions)."}}
+[info] +  functions[us-central1-auth-register]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/auth-register). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/auth-register)."}}
+[info] +  functions[us-central1-auth-loginWithEmail]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/auth-loginWithEmail). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/auth-loginWithEmail)."}}
+[info] +  functions[us-central1-auth-getUserInfo]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/auth-getUserInfo). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/auth-getUserInfo)."}}
+[info] +  functions[us-central1-auth-updateProfile]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/auth-updateProfile). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/auth-updateProfile)."}}
+[info] +  functions[us-central1-auth-deleteAccount]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/auth-deleteAccount). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/auth-deleteAccount)."}}
+[info] +  functions[us-central1-profile-getFavoritePlaylists]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/profile-getFavoritePlaylists). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/profile-getFavoritePlaylists)."}}
+[info] +  functions[us-central1-profile-toggleFavoritePlaylist]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/profile-toggleFavoritePlaylist). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/profile-toggleFavoritePlaylist)."}}
+[info] +  functions[us-central1-profile-getUserPlaylists]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/profile-getUserPlaylists). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/profile-getUserPlaylists)."}}
+[info] +  functions[us-central1-profile-getUserStats]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/profile-getUserStats). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/profile-getUserStats)."}}
+[info] +  functions[us-central1-storage-getUploadUrl]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/storage-getUploadUrl). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/storage-getUploadUrl)."}}
+[info] +  functions[us-central1-storage-getDownloadUrl]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/storage-getDownloadUrl). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/storage-getDownloadUrl)."}}
+[info] +  functions[us-central1-storage-deleteFile]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/storage-deleteFile). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/storage-deleteFile)."}}
+[info] +  functions[us-central1-storage-getStorageUsage]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/storage-getStorageUsage). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/storage-getStorageUsage)."}}
+[info] +  functions[us-central1-history-recordPlay]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/history-recordPlay). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/history-recordPlay)."}}
+[info] +  functions[us-central1-history-getPlayHistory]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/history-getPlayHistory). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/history-getPlayHistory)."}}
+[info] +  functions[us-central1-history-clearPlayHistory]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/history-clearPlayHistory). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/history-clearPlayHistory)."}}
+[info] +  functions[us-central1-history-getPlayStats]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/history-getPlayStats). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/history-getPlayStats)."}}
+[info] +  functions[us-central1-healthCheck]: http function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/healthCheck). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/your-firebase-project-id/us-central1/healthCheck)."}}
+[debug] [2026-08-11T08:44:23.092Z] Could not find VSCode notification endpoint: TypeError: fetch failed. If you are not running the Firebase SQL Connect VSCode extension, this is expected and not an issue.
+[info] 
+┌─────────────────────────────────────────────────────────────┐
+│ ✔  All emulators ready! It is now safe to connect your app. │
+│ i  View Emulator UI at http://127.0.0.1:4000/               │
+└─────────────────────────────────────────────────────────────┘
+
+┌───────────┬────────────────┬─────────────────────────────────┐
+│ Emulator  │ Host:Port      │ View in Emulator UI             │
+├───────────┼────────────────┼─────────────────────────────────┤
+│ Functions │ 127.0.0.1:5001 │ http://127.0.0.1:4000/functions │
+└───────────┴────────────────┴─────────────────────────────────┘
+  Emulator Hub host: 127.0.0.1 port: 4400
+  Other reserved ports: 4500
+
+Issues? Report them at https://github.com/firebase/firebase-tools/issues and attach the *-debug.log files.
+ 
