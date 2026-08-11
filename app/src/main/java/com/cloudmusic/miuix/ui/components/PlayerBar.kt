@@ -39,6 +39,7 @@ fun PlayerBar(
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     hasBottomBar: Boolean = true,
+    isFloatingStyle: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     if (playerState.currentTrack != null) {
@@ -46,6 +47,20 @@ fun PlayerBar(
             Surface(
                 modifier = modifier
                     .fillMaxWidth()
+                    .then(
+                        if (isFloatingStyle) {
+                            Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .then(
+                        if (isFloatingStyle) {
+                            Modifier.clip(RoundedCornerShape(16.dp))
+                        } else {
+                            Modifier
+                        }
+                    )
                     .sharedElement(
                         sharedContentState = rememberSharedContentState(key = "player_bar"),
                         animatedVisibilityScope = animatedVisibilityScope
@@ -59,7 +74,7 @@ fun PlayerBar(
                             start = 12.dp,
                             end = 12.dp,
                             top = 8.dp,
-                            bottom = if (hasBottomBar) 8.dp else 32.dp
+                            bottom = if (hasBottomBar && !isFloatingStyle) 8.dp else 8.dp
                         ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

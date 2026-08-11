@@ -4,26 +4,26 @@ import android.annotation.SuppressLint
 import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
-@OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun LoginPage(
@@ -31,15 +31,26 @@ fun LoginPage(
     onLoginSuccess: (String) -> Unit
 ) {
     var loginSuccess by remember { mutableStateOf(false) }
+    val scrollBehavior = MiuixScrollBehavior()
+    
+    BackHandler {
+        onBackClick()
+    }
     
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("登录") },
+            SmallTopAppBar(
+                title = "登录",
+                scrollBehavior = scrollBehavior,
+                defaultWindowInsetsPadding = false,
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回",
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .clickable { onBackClick() }
+                    )
                 }
             )
         }
@@ -68,41 +79,26 @@ fun LoginPage(
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 super.onPageFinished(view, url)
                                 cookieManager.flush()
-                                
-                                android.util.Log.d("LoginPage", "Page finished: $url")
-                                
-                                // Check all possible cookie domains
-                                val domains = listOf(
-                                    "https://music.163.com",
-                                    "https://y.music.163.com",
-                                    "https://y.163.com",
-                                    "https://163.com"
-                                )
-                                
-                                val allCookies = StringBuilder()
-                                for (domain in domains) {
-                                    val domainCookies = cookieManager.getCookie(domain)
-                                    android.util.Log.d("LoginPage", "$domain cookies: $domainCookies")
-                                    if (!domainCookies.isNullOrEmpty()) {
-                                        if (allCookies.isNotEmpty()) allCookies.append("; ")
-                                        allCookies.append(domainCookies)
+
+                                val music163Cookies = cookieManager.getCookie("https://music.163.com") ?: ""
+                                val yMusicCookies = cookieManager.getCookie("https://y.music.163.com") ?: ""
+
+                                val allCookies = buildString {
+                                    if (music163Cookies.isNotEmpty()) append(music163Cookies)
+                                    if (yMusicCookies.isNotEmpty()) {
+                                        if (isNotEmpty()) append("; ")
+                                        append(yMusicCookies)
                                     }
                                 }
-                                
-                                android.util.Log.d("LoginPage", "All combined cookies: $allCookies")
-                                
-                                if (!loginSuccess && allCookies.contains("MUSIC_U")) {
+
+                                if (allCookies.isNotEmpty() && allCookies.contains("MUSIC_U") && !loginSuccess) {
                                     loginSuccess = true
-                                    // Also set cookies to music.163.com domain for OkHttp
-                                    val music163Cookies = cookieManager.getCookie("https://music.163.com") ?: ""
-                                    android.util.Log.d("LoginPage", "MUSIC_U found! music163 cookies: $music163Cookies")
-                                    android.util.Log.d("LoginPage", "All cookies: $allCookies")
-                                    onLoginSuccess(allCookies.toString())
+                                    onLoginSuccess(allCookies)
                                 }
                             }
                         }
 
-                        loadUrl("https://y.music.163.com/m/login")
+                        loadUrl("https://music.163.com/#/login")
                     }
                 },
                 modifier = Modifier.fillMaxSize()

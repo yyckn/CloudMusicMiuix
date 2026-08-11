@@ -1,6 +1,7 @@
 package com.cloudmusic.miuix.ui.pages
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,6 +80,7 @@ fun PlaylistDetailPage(
                         modifier = Modifier
                             .padding(start = 8.dp)
                             .size(24.dp)
+                            .clickable { onBackClick() }
                     )
                 }
             )

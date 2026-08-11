@@ -27,16 +27,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cloudmusic.miuix.data.api.NeteaseApi
 import com.cloudmusic.miuix.ui.components.PlayerBar
+import com.cloudmusic.miuix.ui.pages.AboutPage
 import com.cloudmusic.miuix.ui.pages.LoginPage
-import com.cloudmusic.miuix.ui.pages.MyPage
 import com.cloudmusic.miuix.ui.pages.PlaylistDetailPage
 import com.cloudmusic.miuix.ui.pages.PlaylistPage
 import com.cloudmusic.miuix.ui.pages.RecommendPage
+import com.cloudmusic.miuix.ui.pages.SettingsPage
+import com.cloudmusic.miuix.ui.pages.ThemeSettingsPage
+import com.cloudmusic.miuix.ui.components.LiquidGlassNavigationBar
+import com.cloudmusic.miuix.ui.components.LiquidGlassNavigationBarItem
 import com.cloudmusic.miuix.ui.theme.CloudMusicMiuixTheme
+import com.cloudmusic.miuix.ui.theme.ThemeSettings
 import com.cloudmusic.miuix.viewmodel.MusicPlayerViewModel
+import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
+import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.NavigationRail
@@ -44,14 +54,16 @@ import top.yukonga.miuix.kmp.basic.NavigationRailItem
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.rememberNavigationRailState
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Contacts
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.ListView
+import top.yukonga.miuix.kmp.icon.extended.Settings
 
 sealed class Screen {
     object Main : Screen()
     object PlaylistDetail : Screen()
     object Login : Screen()
+    object ThemeSettings : Screen()
+    object About : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -59,6 +71,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         NeteaseApi.init(applicationContext)
+        ThemeSettings.init(applicationContext)
         enableEdgeToEdge()
         setContent {
             CloudMusicMiuixTheme {
@@ -77,29 +90,37 @@ fun MainScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Main) }
     var isLoggedIn by remember { mutableStateOf(NeteaseApi.isLoggedIn()) }
-    val tabs = listOf("推荐", "歌单", "我的")
-    val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Contacts)
+    val tabs = listOf("推荐", "歌单", "设置")
+    val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Settings)
     val railState = rememberNavigationRailState()
     val useNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact
 
     SharedTransitionLayout {
-        AnimatedContent(
-            targetState = currentScreen,
-            transitionSpec = {
-                when {
-                    initialState is Screen.Main && targetState is Screen.PlaylistDetail ->
-                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                    initialState is Screen.PlaylistDetail && targetState is Screen.Main ->
-                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                    initialState is Screen.Main && targetState is Screen.Login ->
-                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                    initialState is Screen.Login && targetState is Screen.Main ->
-                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                    else -> slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                }
-            },
-            label = "screen_transition"
-        ) { screen ->
+    AnimatedContent(
+        targetState = currentScreen,
+        transitionSpec = {
+            when {
+                initialState is Screen.Main && targetState is Screen.PlaylistDetail ->
+                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                initialState is Screen.PlaylistDetail && targetState is Screen.Main ->
+                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                initialState is Screen.Main && targetState is Screen.Login ->
+                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                initialState is Screen.Login && targetState is Screen.Main ->
+                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                initialState is Screen.Main && targetState is Screen.ThemeSettings ->
+                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                initialState is Screen.ThemeSettings && targetState is Screen.Main ->
+                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                initialState is Screen.Main && targetState is Screen.About ->
+                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                initialState is Screen.About && targetState is Screen.Main ->
+                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                else -> slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+            }
+        },
+        label = "screen_transition"
+    ) { screen ->
             when (screen) {
                 is Screen.Main -> {
                     if (useNavigationRail) {
@@ -157,13 +178,19 @@ fun MainScreen(
                                             },
                                             modifier = Modifier.padding(padding)
                                         )
-                                        2 -> MyPage(
-                                            isLoggedIn = isLoggedIn,
-                                            onLoginClick = {
-                                                currentScreen = Screen.Login
-                                            },
-                                            modifier = Modifier.padding(padding)
-                                        )
+                                2 -> SettingsPage(
+                                    isLoggedIn = isLoggedIn,
+                                    onLoginClick = {
+                                        currentScreen = Screen.Login
+                                    },
+                                    onThemeSettingsClick = {
+                                        currentScreen = Screen.ThemeSettings
+                                    },
+                                    onAboutClick = {
+                                        currentScreen = Screen.About
+                                    },
+                                    modifier = Modifier.padding(padding)
+                                )
                                     }
                                 }
                             }
@@ -176,18 +203,45 @@ fun MainScreen(
                                         playerState = viewModel.playerState,
                                         onTogglePlayPause = { viewModel.togglePlayPause() },
                                         sharedTransitionScope = this@SharedTransitionLayout,
-                                        animatedVisibilityScope = this@AnimatedContent
+                                        animatedVisibilityScope = this@AnimatedContent,
+                                        hasBottomBar = !ThemeSettings.useFloatingBar,
+                                        isFloatingStyle = ThemeSettings.useFloatingBar
                                     )
-                                    NavigationBar(
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        tabs.forEachIndexed { index, tab ->
-                                            NavigationBarItem(
-                                                selected = selectedTab == index,
-                                                onClick = { selectedTab = index },
-                                                icon = icons[index],
-                                                label = tab
-                                            )
+                                    if (ThemeSettings.useFloatingBar) {
+                                        // 悬浮底栏
+                                        LiquidGlassNavigationBar {
+                                            tabs.forEachIndexed { index, tab ->
+                                                LiquidGlassNavigationBarItem(
+                                                    selected = selectedTab == index,
+                                                    onClick = { selectedTab = index },
+                                                    icon = {
+                                                        Icon(
+                                                            imageVector = icons[index],
+                                                            contentDescription = tab
+                                                        )
+                                                    },
+                                                    label = {
+                                                        Text(
+                                                            text = tab,
+                                                            fontSize = 11.sp
+                                                        )
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        // 普通底栏
+                                        NavigationBar(
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            tabs.forEachIndexed { index, tab ->
+                                                NavigationBarItem(
+                                                    selected = selectedTab == index,
+                                                    onClick = { selectedTab = index },
+                                                    icon = icons[index],
+                                                    label = tab
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -222,10 +276,16 @@ fun MainScreen(
                                         },
                                         modifier = Modifier.padding(padding)
                                     )
-                                    2 -> MyPage(
+                                    2 -> SettingsPage(
                                         isLoggedIn = isLoggedIn,
                                         onLoginClick = {
                                             currentScreen = Screen.Login
+                                        },
+                                        onThemeSettingsClick = {
+                                            currentScreen = Screen.ThemeSettings
+                                        },
+                                        onAboutClick = {
+                                            currentScreen = Screen.About
                                         },
                                         modifier = Modifier.padding(padding)
                                     )
@@ -268,19 +328,36 @@ fun MainScreen(
                         )
                     }
                 }
-                is Screen.Login -> {
-                    LoginPage(
-                        onBackClick = {
-                            currentScreen = Screen.Main
-                        },
-                        onLoginSuccess = { cookies ->
-                            NeteaseApi.setCookie(cookies)
-                            isLoggedIn = true
-                            currentScreen = Screen.Main
-                            viewModel.loadRecommendPlaylists()
-                        }
-                    )
-                }
+            is Screen.Login -> {
+                LoginPage(
+                    onBackClick = {
+                        currentScreen = Screen.Main
+                    },
+                    onLoginSuccess = { cookies ->
+                        NeteaseApi.setCookie(cookies)
+                        isLoggedIn = true
+                        currentScreen = Screen.Main
+                        viewModel.loadRecommendPlaylists()
+                    }
+                )
+            }
+            is Screen.ThemeSettings -> {
+                ThemeSettingsPage(
+                    onBackClick = {
+                        currentScreen = Screen.Main
+                    }
+                )
+            }
+            is Screen.About -> {
+                AboutPage(
+                    onBackClick = {
+                        currentScreen = Screen.Main
+                    },
+                    onOpenSourceClick = {
+                        // TODO: 实现开放源代码许可页面
+                    }
+                )
+            }
             }
         }
     }

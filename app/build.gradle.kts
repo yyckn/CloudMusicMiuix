@@ -44,6 +44,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.miuix.ui)
     implementation(libs.miuix.icons)
+    implementation(libs.miuix.blur)
+    implementation(libs.miuix.preference)
     implementation(libs.androidx.navigationevent)
     implementation(libs.okhttp)
     implementation(libs.gson)
