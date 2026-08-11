@@ -405,6 +405,7 @@ object NeteaseApi {
 
     suspend fun getSongUrl(songId: String): Result<String> = withContext(Dispatchers.IO) {
         try {
+            ensureCookie()
             val id = songId.removePrefix("netrack_")
             val url = "https://interface3.music.163.com/eapi/song/enhance/player/url"
             val eapiUrl = "/api/song/enhance/player/url"
@@ -415,19 +416,26 @@ object NeteaseApi {
                 .add("params", encrypted["params"]!!)
                 .build()
 
+            val cookieStr = "os=pc; ${cookies}"
+
             val request = Request.Builder()
                 .url(url)
                 .post(body)
                 .header("Referer", "https://music.163.com")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                .header("Cookie", "os=pc")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .header("Cookie", cookieStr)
+                .header("Content-Type", "application/x-www-form-urlencoded")
                 .build()
+
+            android.util.Log.d("NeteaseApi", "getSongUrl - Request Cookie: $cookieStr")
 
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
                 return@withContext Result.failure(Exception("HTTP ${response.code}"))
             }
             val responseBody = response.body?.string()
+            android.util.Log.d("NeteaseApi", "getSongUrl - Response: $responseBody")
+
             if (responseBody.isNullOrEmpty()) {
                 return@withContext Result.failure(Exception("Empty response"))
             }
@@ -451,6 +459,7 @@ object NeteaseApi {
                 Result.failure(Exception("No data"))
             }
         } catch (e: Exception) {
+            android.util.Log.e("NeteaseApi", "getSongUrl exception: ${e.message}", e)
             Result.failure(e)
         }
     }
