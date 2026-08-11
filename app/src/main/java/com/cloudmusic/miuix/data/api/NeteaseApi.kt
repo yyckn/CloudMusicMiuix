@@ -524,11 +524,180 @@ object NeteaseApi {
                         albumId = "nealbum_${album.get("id").asLong}",
                         sourceUrl = "https://music.163.com/#/song?id=${song.get("id").asLong}",
                         imgUrl = album.get("picUrl").asString,
-                        duration = if (song.has("duration")) song.get("duration").asLong else 0L
+                        duration = if (song.has("duration")) song.get("duration").asLong else 0L,
+                        isVip = if (song.has("fee")) song.get("fee").asInt == 1 else false
                     )
                 )
             }
             Result.success(tracks)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 二维码登录相关API
+    suspend fun getLoginQrKey(): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://music.163.com/weapi/login/qrcode/unikey"
+            val reqData = """{"type":1}"""
+            val encrypted = NeteaseCrypto.weapi(reqData)
+
+            val body = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            if (responseBody.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            if (json.has("unikey")) {
+                Result.success(json.get("unikey").asString)
+            } else {
+                Result.failure(Exception("No unikey in response"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun getQrCodeUrl(key: String): String {
+        return "https://music.163.com/login?codekey=$key"
+    }
+
+    suspend fun checkQrLoginStatus(key: String): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            ensureCookie()
+            // 使用weapi
+            val url = "https://music.163.com/weapi/login/qrcode/client/login"
+            val reqData = """{"key":"$key","type":1}"""
+            val encrypted = NeteaseCrypto.weapi(reqData)
+
+            val body = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val cookieStr = buildString {
+                if (cookies.isNotEmpty()) append(cookies)
+                if (isNotEmpty()) append("; ")
+                append("os=pc; appver=2.9.7; osver=13; channel=netease; deviceId=0")
+            }
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .header("Referer", "https://music.163.com/")
+                .header("User-Agent", "NeteaseMusic/2.9.7 (Linux; Android 13; Pixel 7 Pro)")
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Cookie", cookieStr)
+                .header("X-Real-IP", "192.168.1.1")
+                .header("X-Forwarded-For", "192.168.1.1")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            android.util.Log.d("NeteaseApi", "checkQrLoginStatus response: $responseBody")
+
+            if (responseBody.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            val code = if (json.has("code")) json.get("code").asInt else -1
+            android.util.Log.d("NeteaseApi", "checkQrLoginStatus code: $code, json: $json")
+
+            // 800: 二维码过期, 801: 等待扫码, 802: 待确认, 803: 登录成功
+            if (code == 803) {
+                // 从响应头中获取cookie
+                val responseCookies = response.headers("Set-Cookie")
+                android.util.Log.d("NeteaseApi", "Login success, cookies: $responseCookies")
+                
+                // 构建cookie字符串
+                val cookieBuilder = StringBuilder()
+                for (cookie in responseCookies) {
+                    // 提取cookie的name=value部分
+                    val cookieParts = cookie.split(";")[0]
+                    if (cookieBuilder.isNotEmpty()) {
+                        cookieBuilder.append("; ")
+                    }
+                    cookieBuilder.append(cookieParts)
+                }
+                
+                if (cookieBuilder.isNotEmpty()) {
+                    setCookie(cookieBuilder.toString())
+                    android.util.Log.d("NeteaseApi", "Saved cookies: $cookieBuilder")
+                } else {
+                    // 如果没有从响应头获取到cookie，尝试从JSON中获取
+                    if (json.has("cookie")) {
+                        setCookie(json.get("cookie").asString)
+                        android.util.Log.d("NeteaseApi", "Saved cookies from JSON: ${json.get("cookie").asString}")
+                    }
+                }
+            }
+            
+            Result.success(code)
+        } catch (e: Exception) {
+            android.util.Log.e("NeteaseApi", "checkQrLoginStatus error: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getUserInfo(): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://music.163.com/api/nuser/account/get"
+            val encrypted = NeteaseCrypto.weapi("{}")
+
+            val body = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Cookie", cookies)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            if (responseBody.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            if (json.has("profile") && !json.get("profile").isJsonNull) {
+                val profile = json.getAsJsonObject("profile")
+                val nickname = if (profile.has("nickname")) profile.get("nickname").asString else ""
+                Result.success(nickname)
+            } else {
+                Result.success("")
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }

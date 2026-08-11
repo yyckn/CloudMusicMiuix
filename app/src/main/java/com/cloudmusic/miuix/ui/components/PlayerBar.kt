@@ -117,17 +117,12 @@ fun PlayerBar(
                     } else {
                         IconButton(
                             onClick = onTogglePlayPause,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(
-                                    MiuixTheme.colorScheme.primary,
-                                    CircleShape
-                                )
+                            modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
                                 imageVector = if (playerState.isPlaying) MiuixIcons.Medium.Pause else MiuixIcons.Medium.Play,
                                 contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                                tint = MiuixTheme.colorScheme.onPrimary,
+                                tint = MiuixTheme.colorScheme.primary,
                                 modifier = Modifier.size(24.dp)
                             )
                         }

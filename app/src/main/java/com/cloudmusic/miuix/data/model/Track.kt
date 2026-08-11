@@ -11,7 +11,8 @@ data class Track(
     val sourceUrl: String,
     val imgUrl: String,
     val url: String? = null,
-    val duration: Long = 0
+    val duration: Long = 0,
+    val isVip: Boolean = false
 )
 
 data class Playlist(

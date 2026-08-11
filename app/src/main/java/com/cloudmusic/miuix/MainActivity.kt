@@ -35,6 +35,7 @@ import com.cloudmusic.miuix.ui.pages.AboutPage
 import com.cloudmusic.miuix.ui.pages.LoginPage
 import com.cloudmusic.miuix.ui.pages.PlaylistDetailPage
 import com.cloudmusic.miuix.ui.pages.PlaylistPage
+import com.cloudmusic.miuix.ui.pages.QrLoginPage
 import com.cloudmusic.miuix.ui.pages.RecommendPage
 import com.cloudmusic.miuix.ui.pages.SettingsPage
 import com.cloudmusic.miuix.ui.pages.ThemeSettingsPage
@@ -62,6 +63,7 @@ sealed class Screen {
     object Main : Screen()
     object PlaylistDetail : Screen()
     object Login : Screen()
+    object QrLogin : Screen()
     object ThemeSettings : Screen()
     object About : Screen()
 }
@@ -107,6 +109,10 @@ fun MainScreen(
                 initialState is Screen.Main && targetState is Screen.Login ->
                     slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
                 initialState is Screen.Login && targetState is Screen.Main ->
+                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                initialState is Screen.Main && targetState is Screen.QrLogin ->
+                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                initialState is Screen.QrLogin && targetState is Screen.Main ->
                     slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
                 initialState is Screen.Main && targetState is Screen.ThemeSettings ->
                     slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
@@ -279,7 +285,7 @@ fun MainScreen(
                                     2 -> SettingsPage(
                                         isLoggedIn = isLoggedIn,
                                         onLoginClick = {
-                                            currentScreen = Screen.Login
+                                            currentScreen = Screen.QrLogin
                                         },
                                         onThemeSettingsClick = {
                                             currentScreen = Screen.ThemeSettings
@@ -335,6 +341,18 @@ fun MainScreen(
                     },
                     onLoginSuccess = { cookies ->
                         NeteaseApi.setCookie(cookies)
+                        isLoggedIn = true
+                        currentScreen = Screen.Main
+                        viewModel.loadRecommendPlaylists()
+                    }
+                )
+            }
+            is Screen.QrLogin -> {
+                QrLoginPage(
+                    onBackClick = {
+                        currentScreen = Screen.Main
+                    },
+                    onLoginSuccess = { nickname ->
                         isLoggedIn = true
                         currentScreen = Screen.Main
                         viewModel.loadRecommendPlaylists()

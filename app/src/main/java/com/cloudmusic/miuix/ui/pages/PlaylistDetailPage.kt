@@ -242,7 +242,7 @@ private fun TrackItem(
     ) {
         BasicComponent(
             modifier = Modifier.fillMaxWidth(),
-            title = track.title,
+            title = if (track.isVip) "${track.title} VIP" else track.title,
             titleColor = if (isPlaying) {
                 BasicComponentDefaults.titleColor(color = MiuixTheme.colorScheme.primary)
             } else {

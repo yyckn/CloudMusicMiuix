@@ -56,6 +56,7 @@ dependencies {
     implementation("androidx.media:media:1.7.0")
     implementation("androidx.media2:media2-session:1.3.0")
     implementation("androidx.compose.material3:material3-window-size-class:1.3.1")
+    implementation("com.google.zxing:core:3.5.3")
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
