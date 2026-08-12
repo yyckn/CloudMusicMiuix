@@ -183,6 +183,37 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
+    fun prepareTrackWithUrl(track: Track, url: String) {
+        currentTrack = track
+        serviceScope.launch {
+            try {
+                updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
+                
+                mediaPlayer?.release()
+                mediaPlayer = MediaPlayer().apply {
+                    setDataSource(url)
+                    setOnPreparedListener {
+                        // 准备完成，但不自动播放
+                        updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
+                    }
+                    setOnCompletionListener {
+                        playNext()
+                    }
+                    setOnErrorListener { _, _, _ ->
+                        this@MediaPlaybackService.isPlaying = false
+                        updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+                        true
+                    }
+                    prepareAsync()
+                }
+                
+                loadAlbumArtAndShowNotification(track)
+            } catch (e: Exception) {
+                Log.e(TAG, "prepareTrackWithUrl error", e)
+            }
+        }
+    }
+
     fun togglePlayPause() {
         if (isPlaying) {
             pausePlayback()

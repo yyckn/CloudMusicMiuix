@@ -65,11 +65,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val gson = Gson()
     private val prefs = application.getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
 
+    private var pendingTrack: Track? = null
+
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as MediaPlaybackService.LocalBinder
             mediaPlaybackService = binder.getService()
             isBound = true
+            // 如果有待播放的歌曲，准备播放
+            pendingTrack?.let { track ->
+                prepareTrack(track)
+                pendingTrack = null
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -80,6 +87,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     init {
         loadLastPlayedTrack()
+        loadLastPlaylist()
         loadRecommendPlaylists()
         bindMediaService()
     }
@@ -96,6 +104,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             try {
                 val track = gson.fromJson(trackJson, Track::class.java)
                 playerState = playerState.copy(currentTrack = track, isPlaying = false)
+                // 自动准备播放
+                prepareTrack(track)
             } catch (e: Exception) {
                 // Ignore parse errors
             }
@@ -105,6 +115,49 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun saveLastPlayedTrack(track: Track) {
         val trackJson = gson.toJson(track)
         prefs.edit().putString("last_track", trackJson).apply()
+    }
+
+    private fun prepareTrack(track: Track) {
+        if (!isBound) {
+            pendingTrack = track
+            return
+        }
+        viewModelScope.launch {
+            NeteaseApi.getSongUrl(track.id).fold(
+                onSuccess = { url ->
+                    try {
+                        mediaPlaybackService?.let { service ->
+                            service.setPlaylist(currentPlaylist)
+                            service.prepareTrackWithUrl(track, url)
+                        }
+                    } catch (e: Exception) {
+                        // Ignore errors
+                    }
+                },
+                onFailure = { e ->
+                    // Ignore errors
+                }
+            )
+        }
+    }
+
+    private fun loadLastPlaylist() {
+        val playlistJson = prefs.getString("last_playlist", null)
+        if (playlistJson != null) {
+            try {
+                val tracks = gson.fromJson(playlistJson, Array<Track>::class.java).toList()
+                currentPlaylist = tracks
+            } catch (e: Exception) {
+                // Ignore parse errors
+            }
+        }
+    }
+
+    private fun saveLastPlaylist() {
+        if (currentPlaylist.isNotEmpty()) {
+            val playlistJson = gson.toJson(currentPlaylist)
+            prefs.edit().putString("last_playlist", playlistJson).apply()
+        }
     }
 
     fun loadRecommendPlaylists() {
@@ -137,6 +190,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         isLoading = false
                     )
                     currentPlaylist = detail.tracks
+                    saveLastPlaylist()
                 },
                 onFailure = { e ->
                     playlistDetailState = playlistDetailState.copy(
@@ -180,6 +234,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             playerState = playerState.copy(isLoading = true, error = null, currentTrack = track)
             saveLastPlayedTrack(track)
+            saveLastPlaylist()
 
             NeteaseApi.getSongUrl(track.id).fold(
                 onSuccess = { url ->
