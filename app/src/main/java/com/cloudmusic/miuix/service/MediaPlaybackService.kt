@@ -222,6 +222,14 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
+    fun getCurrentPosition(): Long {
+        return mediaPlayer?.currentPosition?.toLong() ?: 0L
+    }
+
+    fun getDuration(): Long {
+        return mediaPlayer?.duration?.toLong() ?: 0L
+    }
+
     private fun resumePlayback() {
         Log.d(TAG, "resumePlayback")
         mediaPlayer?.let { player ->
@@ -276,7 +284,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         stopSelf()
     }
 
-    private fun seekTo(position: Long) {
+    fun seekTo(position: Long) {
         mediaPlayer?.seekTo(position.toInt())
         playbackPosition = position
         updatePlaybackState(

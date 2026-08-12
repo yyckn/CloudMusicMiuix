@@ -17,13 +17,16 @@ import com.cloudmusic.miuix.data.model.RecommendPlaylist
 import com.cloudmusic.miuix.data.model.Track
 import com.cloudmusic.miuix.service.MediaPlaybackService
 import com.google.gson.Gson
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class PlayerState(
     val currentTrack: Track? = null,
     val isPlaying: Boolean = false,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val currentPosition: Long = 0L,
+    val duration: Long = 0L
 )
 
 data class RecommendState(
@@ -90,6 +93,23 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         loadLastPlaylist()
         loadRecommendPlaylists()
         bindMediaService()
+        startProgressUpdate()
+    }
+
+    private fun startProgressUpdate() {
+        viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                if (playerState.isPlaying) {
+                    mediaPlaybackService?.let { service ->
+                        playerState = playerState.copy(
+                            currentPosition = service.getCurrentPosition(),
+                            duration = service.getDuration()
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private fun bindMediaService() {
@@ -266,6 +286,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             service.togglePlayPause()
             playerState = playerState.copy(isPlaying = !playerState.isPlaying)
         }
+    }
+
+    fun seekTo(position: Long) {
+        mediaPlaybackService?.seekTo(position)
+        playerState = playerState.copy(currentPosition = position)
     }
 
     fun playNext() {

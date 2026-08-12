@@ -521,7 +521,8 @@ fun MainScreen(
                     },
                     onTogglePlayPause = { viewModel.togglePlayPause() },
                     onPrevious = { viewModel.playPrevious() },
-                    onNext = { viewModel.playNext() }
+                    onNext = { viewModel.playNext() },
+                    onSeekTo = { position -> viewModel.seekTo(position) }
                 )
             }
         }

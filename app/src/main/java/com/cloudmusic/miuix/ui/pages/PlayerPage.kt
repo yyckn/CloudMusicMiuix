@@ -29,8 +29,9 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.cloudmusic.miuix.viewmodel.PlayerState
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -50,6 +51,7 @@ fun PlayerPage(
     onTogglePlayPause: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    onSeekTo: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -117,28 +119,54 @@ fun PlayerPage(
             Spacer(modifier = Modifier.weight(1f))
 
             // 播放进度条
-            LinearProgressIndicator(
-                progress = 0.5f,
+            val progress = if (playerState.duration > 0) {
+                playerState.currentPosition.toFloat() / playerState.duration.toFloat()
+            } else {
+                0f
+            }
+
+            Slider(
+                value = progress,
+                onValueChange = { newValue ->
+                    val newPosition = (newValue * playerState.duration).toLong()
+                    onSeekTo(newPosition)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp)
+                    .padding(bottom = 4.dp)
             )
+
+            // 时间显示
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = formatDuration(playerState.currentPosition),
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Text(
+                    text = formatDuration(playerState.duration),
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
 
             // 控制器区域
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 32.dp),
+                    .padding(bottom = 48.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 上一首按钮
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .padding(8.dp)
-                        .clickable { onPrevious() },
-                    contentAlignment = Alignment.Center
+                IconButton(
+                    onClick = onPrevious,
+                    modifier = Modifier.size(56.dp)
                 ) {
                     Icon(
                         imageVector = MiuixIcons.ChevronBackward,
@@ -151,21 +179,14 @@ fun PlayerPage(
                 Spacer(modifier = Modifier.width(16.dp))
 
                 // 播放/暂停按钮
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .padding(8.dp)
-                        .background(
-                            MiuixTheme.colorScheme.primary,
-                            CircleShape
-                        )
-                        .clickable { onTogglePlayPause() },
-                    contentAlignment = Alignment.Center
+                IconButton(
+                    onClick = onTogglePlayPause,
+                    modifier = Modifier.size(72.dp)
                 ) {
                     Icon(
                         imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
                         contentDescription = if (playerState.isPlaying) "暂停" else "播放",
-                        tint = MiuixTheme.colorScheme.onPrimary,
+                        tint = MiuixTheme.colorScheme.primary,
                         modifier = Modifier.size(40.dp)
                     )
                 }
@@ -173,12 +194,9 @@ fun PlayerPage(
                 Spacer(modifier = Modifier.width(16.dp))
 
                 // 下一首按钮
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .padding(8.dp)
-                        .clickable { onNext() },
-                    contentAlignment = Alignment.Center
+                IconButton(
+                    onClick = onNext,
+                    modifier = Modifier.size(56.dp)
                 ) {
                     Icon(
                         imageVector = MiuixIcons.ChevronForward,
@@ -190,4 +208,12 @@ fun PlayerPage(
             }
         }
     }
+}
+
+private fun formatDuration(durationMs: Long): String {
+    if (durationMs <= 0) return "0:00"
+    val totalSeconds = durationMs / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
 }
