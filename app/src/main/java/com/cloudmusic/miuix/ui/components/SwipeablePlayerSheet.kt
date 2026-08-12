@@ -1,5 +1,6 @@
 package com.cloudmusic.miuix.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -32,6 +33,14 @@ fun SwipeablePlayerSheet(
     val scope = rememberCoroutineScope()
     val offsetY = remember { Animatable(0f) }
     val screenHeight = with(density) { 800.dp.toPx() }
+
+    // 处理系统返回手势 - 优先级高于其他BackHandler
+    BackHandler(enabled = isVisible) {
+        scope.launch {
+            offsetY.animateTo(screenHeight, tween(300))
+            onDismiss()
+        }
+    }
 
     // 监听isVisible变化，执行动画
     LaunchedEffect(isVisible) {

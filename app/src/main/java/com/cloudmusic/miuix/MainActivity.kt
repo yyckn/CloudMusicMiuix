@@ -469,6 +469,7 @@ fun MainScreen(
                             },
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
+                            isBackHandlerEnabled = !showPlayerPage,
                             modifier = Modifier.padding(padding)
                         )
                     }

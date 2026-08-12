@@ -65,11 +65,12 @@ fun PlaylistDetailPage(
     onPlayAllClick: (List<Track>) -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
+    isBackHandlerEnabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     
-    BackHandler {
+    BackHandler(enabled = isBackHandlerEnabled) {
         onBackClick()
     }
 
