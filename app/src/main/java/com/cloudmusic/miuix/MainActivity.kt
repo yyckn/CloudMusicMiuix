@@ -56,6 +56,8 @@ import com.cloudmusic.miuix.ui.pages.ThemeSettingsPage
 import com.cloudmusic.miuix.ui.pages.TrackItem
 import com.cloudmusic.miuix.ui.components.LiquidGlassNavigationBar
 import com.cloudmusic.miuix.ui.components.LiquidGlassNavigationBarItem
+import com.cloudmusic.miuix.ui.components.PlayerBar
+import com.cloudmusic.miuix.ui.components.SwipeablePlayerSheet
 import com.cloudmusic.miuix.ui.theme.CloudMusicMiuixTheme
 import com.cloudmusic.miuix.ui.theme.ThemeSettings
 import com.cloudmusic.miuix.viewmodel.MusicPlayerViewModel
@@ -172,6 +174,7 @@ fun MainScreen(
                                             playerState = viewModel.playerState,
                                             onTogglePlayPause = { viewModel.togglePlayPause() },
                                             onPlayerBarClick = { showPlayerPage = true },
+                                            onSwipeUp = { showPlayerPage = true },
                                             onPlaylistClick = { showPlaylistSheet = true },
                                             sharedTransitionScope = this@SharedTransitionLayout,
                                             animatedVisibilityScope = this@AnimatedContent
@@ -285,6 +288,7 @@ fun MainScreen(
                                         playerState = viewModel.playerState,
                                         onTogglePlayPause = { viewModel.togglePlayPause() },
                                         onPlayerBarClick = { showPlayerPage = true },
+                                        onSwipeUp = { showPlayerPage = true },
                                         onPlaylistClick = { showPlaylistSheet = true },
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = this@AnimatedContent,
@@ -516,11 +520,11 @@ fun MainScreen(
         }
         }
 
-        // 播放器页面覆盖层
-        androidx.compose.animation.AnimatedVisibility(
-            visible = showPlayerPage,
-            enter = androidx.compose.animation.slideInVertically { it },
-            exit = androidx.compose.animation.slideOutVertically { it }
+        // 播放器页面覆盖层 - 使用可滑动的底部弹出层
+        SwipeablePlayerSheet(
+            isVisible = showPlayerPage,
+            onShow = { showPlayerPage = true },
+            onDismiss = { showPlayerPage = false }
         ) {
             PlayerPage(
                 playerState = viewModel.playerState,

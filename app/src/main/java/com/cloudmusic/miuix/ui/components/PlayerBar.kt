@@ -2,12 +2,14 @@ package com.cloudmusic.miuix.ui.components
 
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -25,6 +28,8 @@ import coil.compose.AsyncImage
 import com.cloudmusic.miuix.viewmodel.PlayerState
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
+import top.yukonga.miuix.kmp.basic.ProgressIndicatorDefaults
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -38,6 +43,7 @@ fun PlayerBar(
     playerState: PlayerState,
     onTogglePlayPause: () -> Unit,
     onPlayerBarClick: () -> Unit = {},
+    onSwipeUp: () -> Unit = {},
     onPlaylistClick: () -> Unit = {},
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
@@ -61,16 +67,45 @@ fun PlayerBar(
                     .sharedElement(
                         sharedContentState = rememberSharedContentState(key = "player_bar"),
                         animatedVisibilityScope = animatedVisibilityScope
-                    ),
+                    )
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onVerticalDrag = { change, dragAmount ->
+                                if (dragAmount < -10) { // 上滑超过10px
+                                    change.consume()
+                                    onSwipeUp()
+                                }
+                            }
+                        )
+                    },
                 shape = if (isFloatingStyle) RoundedCornerShape(16.dp) else RoundedCornerShape(0.dp),
                 color = MiuixTheme.colorScheme.surfaceVariant
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Column {
+                    // 顶部进度条
+                    val progress = if (playerState.duration > 0) {
+                        playerState.currentPosition.toFloat() / playerState.duration.toFloat()
+                    } else {
+                        0f
+                    }
+
+                    LinearProgressIndicator(
+                        progress = progress,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp),
+                        colors = ProgressIndicatorDefaults.progressIndicatorColors(
+                            foregroundColor = MiuixTheme.colorScheme.primary,
+                            backgroundColor = MiuixTheme.colorScheme.surfaceVariant
+                        ),
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                     // 封面图片
                     AsyncImage(
                         model = playerState.currentTrack?.imgUrl,
@@ -142,6 +177,7 @@ fun PlayerBar(
                             modifier = Modifier.size(24.dp)
                         )
                     }
+                }
                 }
             }
         }
