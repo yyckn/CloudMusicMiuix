@@ -3,6 +3,9 @@ package com.cloudmusic.miuix.ui.components
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,7 +26,6 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.cloudmusic.miuix.viewmodel.PlayerState
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
@@ -36,6 +38,7 @@ import top.yukonga.miuix.kmp.icon.extended.Play
 fun PlayerBar(
     playerState: PlayerState,
     onTogglePlayPause: () -> Unit,
+    onPlayerBarClick: () -> Unit = {},
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     hasBottomBar: Boolean = true,
@@ -45,6 +48,7 @@ fun PlayerBar(
     if (playerState.currentTrack != null) {
         with(sharedTransitionScope) {
             Surface(
+                onClick = { onPlayerBarClick() },
                 modifier = modifier
                     .fillMaxWidth()
                     .then(
@@ -54,30 +58,20 @@ fun PlayerBar(
                             Modifier
                         }
                     )
-                    .then(
-                        if (isFloatingStyle) {
-                            Modifier.clip(RoundedCornerShape(16.dp))
-                        } else {
-                            Modifier
-                        }
-                    )
                     .sharedElement(
                         sharedContentState = rememberSharedContentState(key = "player_bar"),
                         animatedVisibilityScope = animatedVisibilityScope
                     ),
+                shape = if (isFloatingStyle) RoundedCornerShape(16.dp) else RoundedCornerShape(0.dp),
                 color = MiuixTheme.colorScheme.surfaceVariant
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(
-                            start = 12.dp,
-                            end = 12.dp,
-                            top = 8.dp,
-                            bottom = if (hasBottomBar && !isFloatingStyle) 8.dp else 8.dp
-                        ),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // 封面图片
                     AsyncImage(
                         model = playerState.currentTrack?.imgUrl,
                         contentDescription = playerState.currentTrack?.title,
@@ -90,7 +84,8 @@ fun PlayerBar(
 
                     Spacer(modifier = Modifier.width(12.dp))
 
-                    androidx.compose.foundation.layout.Column(
+                    // 歌曲信息
+                    Column(
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
@@ -110,19 +105,26 @@ fun PlayerBar(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
+                    // 播放/暂停按钮
                     if (playerState.isLoading) {
                         InfiniteProgressIndicator(
                             modifier = Modifier.size(36.dp)
                         )
                     } else {
-                        IconButton(
-                            onClick = onTogglePlayPause,
-                            modifier = Modifier.size(40.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(
+                                    MiuixTheme.colorScheme.primary,
+                                    CircleShape
+                                )
+                                .clickable { onTogglePlayPause() },
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = if (playerState.isPlaying) MiuixIcons.Medium.Pause else MiuixIcons.Medium.Play,
                                 contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                                tint = MiuixTheme.colorScheme.primary,
+                                tint = MiuixTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(24.dp)
                             )
                         }

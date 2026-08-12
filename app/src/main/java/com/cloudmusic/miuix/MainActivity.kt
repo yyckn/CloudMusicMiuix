@@ -33,6 +33,7 @@ import com.cloudmusic.miuix.data.api.NeteaseApi
 import com.cloudmusic.miuix.ui.components.PlayerBar
 import com.cloudmusic.miuix.ui.pages.AboutPage
 import com.cloudmusic.miuix.ui.pages.LoginPage
+import com.cloudmusic.miuix.ui.pages.PlayerPage
 import com.cloudmusic.miuix.ui.pages.PlaylistDetailPage
 import com.cloudmusic.miuix.ui.pages.PlaylistPage
 import com.cloudmusic.miuix.ui.pages.QrLoginPage
@@ -69,6 +70,7 @@ sealed class Screen {
     object QrLogin : Screen()
     object ThemeSettings : Screen()
     object About : Screen()
+    object Player : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -125,6 +127,10 @@ fun MainScreen(
                     slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
                 initialState is Screen.About && targetState is Screen.Main ->
                     slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                initialState is Screen.Main && targetState is Screen.Player ->
+                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                initialState is Screen.Player && targetState is Screen.Main ->
+                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
                 else -> slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
             }
         },
@@ -152,6 +158,7 @@ fun MainScreen(
                                         PlayerBar(
                                             playerState = viewModel.playerState,
                                             onTogglePlayPause = { viewModel.togglePlayPause() },
+                                            onPlayerBarClick = { currentScreen = Screen.Player },
                                             sharedTransitionScope = this@SharedTransitionLayout,
                                             animatedVisibilityScope = this@AnimatedContent
                                         )
@@ -213,6 +220,7 @@ fun MainScreen(
                                     PlayerBar(
                                         playerState = viewModel.playerState,
                                         onTogglePlayPause = { viewModel.togglePlayPause() },
+                                        onPlayerBarClick = { currentScreen = Screen.Player },
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = this@AnimatedContent,
                                         hasBottomBar = !ThemeSettings.useFloatingBar,
@@ -313,6 +321,7 @@ fun MainScreen(
                             PlayerBar(
                                 playerState = viewModel.playerState,
                                 onTogglePlayPause = { viewModel.togglePlayPause() },
+                                onPlayerBarClick = { currentScreen = Screen.Player },
                                 sharedTransitionScope = this@SharedTransitionLayout,
                                 animatedVisibilityScope = this@AnimatedContent,
                                 hasBottomBar = false
@@ -387,7 +396,18 @@ fun MainScreen(
                     }
                 )
             }
+            is Screen.Player -> {
+                PlayerPage(
+                    playerState = viewModel.playerState,
+                    onBackClick = {
+                        currentScreen = Screen.Main
+                    },
+                    onTogglePlayPause = { viewModel.togglePlayPause() },
+                    onPrevious = { viewModel.playPrevious() },
+                    onNext = { viewModel.playNext() }
+                )
             }
         }
     }
+}
 }
