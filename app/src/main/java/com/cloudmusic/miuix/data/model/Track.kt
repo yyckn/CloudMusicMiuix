@@ -35,5 +35,24 @@ data class RecommendPlaylist(
     val coverImgUrl: String,
     val playCount: Long = 0,
     val trackCount: Int = 0,
-    val description: String = ""
+    val description: String = "",
+    val isCloudDisk: Boolean = false
+)
+
+data class UserProfile(
+    val userId: Long = 0,
+    val nickname: String = "",
+    val avatarUrl: String = "",
+    val gender: Int = 0, // 0: 未知, 1: 男, 2: 女
+    val birthday: Long = 0,
+    val province: Int = 0,
+    val city: Int = 0,
+    val signature: String = "",
+    val description: String = "",
+    val detailDescription: String = "",
+    val backgroundUrl: String = "",
+    val vipType: Int = 0,
+    val authStatus: Int = 0,
+    val expertTags: List<String> = emptyList(),
+    val createTime: Long = 0 // 注册时间戳（毫秒）
 )

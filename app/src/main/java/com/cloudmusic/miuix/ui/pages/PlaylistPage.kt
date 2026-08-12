@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -18,7 +19,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
@@ -33,6 +33,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
@@ -66,8 +67,16 @@ fun PlaylistPage(
         }
     }
 
-    // 按喜欢的音乐在前，其他歌单在后排序
-    val sortedPlaylists = recommendState.userPlaylists.sortedByDescending { it.title.contains("喜欢") }
+    // 按我喜欢的音乐、云盘、其他歌单排序
+    val likedPlaylists = recommendState.userPlaylists.filter { it.title.contains("喜欢") }
+    val otherPlaylists = recommendState.userPlaylists.filter { !it.title.contains("喜欢") }
+    val cloudDiskPlaylist = RecommendPlaylist(
+        id = "cloud_disk",
+        title = "云盘",
+        coverImgUrl = "",
+        trackCount = 0,
+        isCloudDisk = true
+    )
 
     Scaffold(
         topBar = {
@@ -92,29 +101,58 @@ fun PlaylistPage(
             ),
             modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
         ) {
-            if (sortedPlaylists.isEmpty() && !isRefreshing) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "暂无歌单",
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                        fontSize = 14.sp
+            LazyVerticalStaggeredGrid(
+                columns = StaggeredGridCells.Adaptive(160.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .overScrollVertical()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalItemSpacing = 12.dp
+            ) {
+                // 云盘歌单（第一位）
+                item {
+                    UserPlaylistCard(
+                        playlist = cloudDiskPlaylist,
+                        onClick = { onPlaylistClick(cloudDiskPlaylist.id, cloudDiskPlaylist.coverImgUrl, cloudDiskPlaylist.title) }
                     )
                 }
-            } else {
-                LazyVerticalStaggeredGrid(
-                    columns = StaggeredGridCells.Adaptive(160.dp),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .overScrollVertical()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalItemSpacing = 12.dp
-                ) {
-                    items(sortedPlaylists) { playlist ->
+
+                // 我喜欢的音乐歌单
+                if (likedPlaylists.isEmpty()) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
+                        Text(
+                            text = "暂无喜欢的音乐",
+                            modifier = Modifier.padding(vertical = 16.dp),
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        )
+                    }
+                } else {
+                    items(likedPlaylists) { playlist ->
+                        UserPlaylistCard(
+                            playlist = playlist,
+                            onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }
+                        )
+                    }
+                }
+
+                // 我的歌单标题
+                item(span = StaggeredGridItemSpan.FullLine) {
+                    SmallTitle("我的歌单")
+                }
+
+                // 其他歌单
+                if (otherPlaylists.isEmpty()) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
+                        Text(
+                            text = "暂无歌单",
+                            modifier = Modifier.padding(vertical = 16.dp),
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        )
+                    }
+                } else {
+                    items(otherPlaylists) { playlist ->
                         UserPlaylistCard(
                             playlist = playlist,
                             onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }

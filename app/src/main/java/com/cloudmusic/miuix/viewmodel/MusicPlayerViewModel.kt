@@ -33,6 +33,7 @@ data class PlayerState(
 data class RecommendState(
     val playlists: List<RecommendPlaylist> = emptyList(),
     val userPlaylists: List<RecommendPlaylist> = emptyList(),
+    val dailySongs: List<Track> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -94,6 +95,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         loadLastPlayedTrack()
         loadLastPlaylist()
         loadRecommendPlaylists()
+        loadDailyRecommendSongs()
         loadUserPlaylists()
         bindMediaService()
         startProgressUpdate()
@@ -199,6 +201,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         isLoading = false,
                         error = e.message
                     )
+                }
+            )
+        }
+    }
+
+    fun loadDailyRecommendSongs() {
+        viewModelScope.launch {
+            NeteaseApi.getDailyRecommendSongs().fold(
+                onSuccess = { songs ->
+                    recommendState = recommendState.copy(dailySongs = songs)
+                },
+                onFailure = { e ->
+                    android.util.Log.e("MusicPlayerViewModel", "loadDailyRecommendSongs error: ${e.message}")
                 }
             )
         }

@@ -4,6 +4,7 @@ import com.cloudmusic.miuix.data.model.Playlist
 import com.cloudmusic.miuix.data.model.PlaylistDetail
 import com.cloudmusic.miuix.data.model.RecommendPlaylist
 import com.cloudmusic.miuix.data.model.Track
+import com.cloudmusic.miuix.data.model.UserProfile
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonArray
@@ -719,6 +720,144 @@ object NeteaseApi {
         }
     }
 
+    suspend fun getUserProfile(): Result<UserProfile> = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://music.163.com/api/nuser/account/get"
+            val encrypted = NeteaseCrypto.weapi("{}")
+
+            val body = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Cookie", cookies)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            android.util.Log.d("NeteaseApi", "getUserProfile response: $responseBody")
+            
+            if (responseBody.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            if (json.has("profile") && !json.get("profile").isJsonNull) {
+                val profile = json.getAsJsonObject("profile")
+                android.util.Log.d("NeteaseApi", "Parsing profile: ${profile.toString().take(200)}")
+                val userProfile = UserProfile(
+                    userId = if (profile.has("userId")) profile.get("userId").asLong else 0,
+                    nickname = if (profile.has("nickname")) profile.get("nickname").asString else "",
+                    avatarUrl = if (profile.has("avatarUrl")) profile.get("avatarUrl").asString else "",
+                    gender = if (profile.has("gender")) profile.get("gender").asInt else 0,
+                    birthday = if (profile.has("birthday")) profile.get("birthday").asLong else 0,
+                    province = if (profile.has("province")) profile.get("province").asInt else 0,
+                    city = if (profile.has("city")) profile.get("city").asInt else 0,
+                    signature = if (profile.has("signature")) profile.get("signature").asString else "",
+                    description = if (profile.has("description") && !profile.get("description").isJsonNull) profile.get("description").asString else "",
+                    detailDescription = if (profile.has("detailDescription") && !profile.get("detailDescription").isJsonNull) profile.get("detailDescription").asString else "",
+                    backgroundUrl = if (profile.has("backgroundUrl")) profile.get("backgroundUrl").asString else "",
+                    vipType = if (profile.has("vipType")) profile.get("vipType").asInt else 0,
+                    authStatus = if (profile.has("authStatus")) profile.get("authStatus").asInt else 0,
+                    createTime = if (profile.has("createTime")) profile.get("createTime").asLong else 0
+                )
+                android.util.Log.d("NeteaseApi", "UserProfile created: nickname=${userProfile.nickname}, userId=${userProfile.userId}, createTime=${userProfile.createTime}")
+                // 保存到缓存
+                saveUserProfileToCache(userProfile)
+                Result.success(userProfile)
+            } else {
+                Result.failure(Exception("No profile found"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun saveUserProfileToCache(profile: UserProfile) {
+        context?.let { ctx ->
+            val prefs = ctx.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
+            prefs.edit().apply {
+                putLong("profile_userId", profile.userId)
+                putString("profile_nickname", profile.nickname)
+                putString("profile_avatarUrl", profile.avatarUrl)
+                putInt("profile_gender", profile.gender)
+                putLong("profile_birthday", profile.birthday)
+                putInt("profile_province", profile.province)
+                putInt("profile_city", profile.city)
+                putString("profile_signature", profile.signature)
+                putString("profile_description", profile.description)
+                putString("profile_detailDescription", profile.detailDescription)
+                putString("profile_backgroundUrl", profile.backgroundUrl)
+                putInt("profile_vipType", profile.vipType)
+                putInt("profile_authStatus", profile.authStatus)
+                putLong("profile_createTime", profile.createTime)
+                apply()
+            }
+            android.util.Log.d("NeteaseApi", "UserProfile saved to cache")
+        }
+    }
+
+    fun getUserProfileFromCache(): UserProfile? {
+        return context?.let { ctx ->
+            val prefs = ctx.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
+            val userId = prefs.getLong("profile_userId", 0)
+            if (userId == 0L) return null
+            UserProfile(
+                userId = userId,
+                nickname = prefs.getString("profile_nickname", "") ?: "",
+                avatarUrl = prefs.getString("profile_avatarUrl", "") ?: "",
+                gender = prefs.getInt("profile_gender", 0),
+                birthday = prefs.getLong("profile_birthday", 0),
+                province = prefs.getInt("profile_province", 0),
+                city = prefs.getInt("profile_city", 0),
+                signature = prefs.getString("profile_signature", "") ?: "",
+                description = prefs.getString("profile_description", "") ?: "",
+                detailDescription = prefs.getString("profile_detailDescription", "") ?: "",
+                backgroundUrl = prefs.getString("profile_backgroundUrl", "") ?: "",
+                vipType = prefs.getInt("profile_vipType", 0),
+                authStatus = prefs.getInt("profile_authStatus", 0),
+                createTime = prefs.getLong("profile_createTime", 0)
+            )
+        }
+    }
+
+    suspend fun logout() {
+        cookies = ""
+        userId = null
+        context?.let { ctx ->
+            val prefs = ctx.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
+            prefs.edit().apply {
+                remove("cookies")
+                // 清除用户资料缓存
+                remove("profile_userId")
+                remove("profile_nickname")
+                remove("profile_avatarUrl")
+                remove("profile_gender")
+                remove("profile_birthday")
+                remove("profile_province")
+                remove("profile_city")
+                remove("profile_signature")
+                remove("profile_description")
+                remove("profile_detailDescription")
+                remove("profile_backgroundUrl")
+                remove("profile_vipType")
+                remove("profile_authStatus")
+                remove("profile_createTime")
+                apply()
+            }
+        }
+    }
+
     suspend fun getUserId(): Long? = withContext(Dispatchers.IO) {
         try {
             val url = "https://music.163.com/api/nuser/account/get"
@@ -835,6 +974,151 @@ object NeteaseApi {
             }
             android.util.Log.d("NeteaseApi", "getUserPlaylists - parsed ${playlists.size} playlists")
             Result.success(playlists)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getDailyRecommendSongs(): Result<List<Track>> = withContext(Dispatchers.IO) {
+        try {
+            ensureCookie()
+            val url = "https://music.163.com/api/v3/discovery/recommend/songs"
+            val reqData = """{"offset":0,"total":true,"limit":30}"""
+            val encrypted = NeteaseCrypto.weapi(reqData)
+
+            val body = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Cookie", cookies)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            if (responseBody.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            if (!json.has("data")) {
+                return@withContext Result.failure(Exception("No data field in response"))
+            }
+
+            val data = json.getAsJsonObject("data")
+            if (!data.has("dailySongs")) {
+                return@withContext Result.failure(Exception("No dailySongs field"))
+            }
+
+            val songsArray = data.getAsJsonArray("dailySongs")
+            val tracks = mutableListOf<Track>()
+            for (i in 0 until songsArray.size()) {
+                try {
+                    val song = songsArray.get(i).asJsonObject
+                    val artists = song.getAsJsonArray("ar")
+                    val artistName = if (artists.size() > 0) artists.get(0).asJsonObject.get("name").asString else "Unknown"
+                    val artistId = if (artists.size() > 0) artists.get(0).asJsonObject.get("id").asLong else 0L
+                    val album = song.getAsJsonObject("al")
+
+                    tracks.add(
+                        Track(
+                            id = "netrack_${song.get("id").asLong}",
+                            title = song.get("name").asString,
+                            artist = artistName,
+                            artistId = "neartist_$artistId",
+                            album = album.get("name").asString,
+                            albumId = "nealbum_${album.get("id").asLong}",
+                            sourceUrl = "https://music.163.com/#/song?id=${song.get("id").asLong}",
+                            imgUrl = album.get("picUrl").asString,
+                            duration = if (song.has("dt")) song.get("dt").asLong else 0L,
+                            isVip = if (song.has("fee")) song.get("fee").asInt == 1 else false
+                        )
+                    )
+                } catch (e: Exception) {
+                    // Skip invalid items
+                }
+            }
+            Result.success(tracks)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getCloudDiskSongs(): Result<List<Track>> = withContext(Dispatchers.IO) {
+        try {
+            ensureCookie()
+            val url = "https://music.163.com/api/v1/cloud/get"
+            val reqData = """{"offset":0,"limit":1000}"""
+            val encrypted = NeteaseCrypto.weapi(reqData)
+
+            val body = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Cookie", cookies)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            if (responseBody.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            if (!json.has("data")) {
+                return@withContext Result.failure(Exception("No data field in response"))
+            }
+
+            val data = json.getAsJsonArray("data")
+            val tracks = mutableListOf<Track>()
+            for (i in 0 until data.size()) {
+                try {
+                    val song = data.get(i).asJsonObject
+                    val artists = song.getAsJsonArray("artist")
+                    val artistName = if (artists.size() > 0) artists.get(0).asJsonObject.get("name").asString else "Unknown"
+                    val artistId = if (artists.size() > 0) artists.get(0).asJsonObject.get("id").asLong else 0L
+                    val album = song.getAsJsonObject("album")
+
+                    tracks.add(
+                        Track(
+                            id = "netrack_${song.get("songId").asLong}",
+                            title = song.get("songName").asString,
+                            artist = artistName,
+                            artistId = "neartist_$artistId",
+                            album = album.get("albumName").asString,
+                            albumId = "nealbum_${album.get("albumId").asLong}",
+                            sourceUrl = "https://music.163.com/#/song?id=${song.get("songId").asLong}",
+                            imgUrl = "",
+                            duration = if (song.has("duration")) song.get("duration").asLong else 0L,
+                            isVip = false
+                        )
+                    )
+                } catch (e: Exception) {
+                    // Skip invalid items
+                }
+            }
+            Result.success(tracks)
         } catch (e: Exception) {
             Result.failure(e)
         }

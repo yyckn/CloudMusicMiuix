@@ -1,9 +1,5 @@
 package com.cloudmusic.miuix.ui.pages
 
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.SharedTransitionScope
-import android.content.Context
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,11 +14,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -34,10 +30,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,22 +44,19 @@ import com.cloudmusic.miuix.data.model.RecommendPlaylist
 import com.cloudmusic.miuix.data.model.Track
 import com.cloudmusic.miuix.viewmodel.MusicPlayerViewModel
 import com.cloudmusic.miuix.viewmodel.RecommendState
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SearchBar
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
+import android.content.Context
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -69,48 +64,17 @@ fun RecommendPage(
     recommendState: RecommendState,
     onPlaylistClick: (String, String, String) -> Unit,
     viewModel: MusicPlayerViewModel,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
-    var searchText by remember { mutableStateOf("") }
-    var expanded by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     val pullToRefreshState = rememberPullToRefreshState()
-    val searchState = viewModel.searchState
-    val context = LocalContext.current
-    val searchHistory = remember { mutableStateListOf<String>() }
-    val prefs = context.getSharedPreferences("search_history", Context.MODE_PRIVATE)
-
-    // 加载搜索历史
-    LaunchedEffect(Unit) {
-        val history = prefs.getStringSet("history", emptySet()) ?: emptySet()
-        searchHistory.clear()
-        searchHistory.addAll(history)
-    }
-
-    // 保存搜索历史
-    fun saveSearchHistory(query: String) {
-        if (query.isBlank()) return
-        val history = prefs.getStringSet("history", mutableSetOf()) ?: mutableSetOf()
-        val newHistory = history.toMutableSet()
-        newHistory.add(query)
-        prefs.edit().putStringSet("history", newHistory).apply()
-        searchHistory.clear()
-        searchHistory.addAll(newHistory)
-    }
-
-    // 清除搜索历史
-    fun clearSearchHistory() {
-        prefs.edit().remove("history").apply()
-        searchHistory.clear()
-    }
 
     // 下拉刷新回调
     LaunchedEffect(isRefreshing) {
         if (isRefreshing) {
             viewModel.loadRecommendPlaylists()
+            viewModel.loadDailyRecommendSongs()
             isRefreshing = false
         }
     }
@@ -121,139 +85,7 @@ fun RecommendPage(
                 title = "推荐",
                 largeTitle = "推荐",
                 scrollBehavior = scrollBehavior,
-                defaultWindowInsetsPadding = false,
-                bottomContent = {
-                    SearchBar(
-                        modifier = Modifier.padding(vertical = 8.dp),
-                        inputField = {
-                            InputField(
-                                query = searchText,
-                                onQueryChange = { searchText = it },
-                                onSearch = {
-                                    if (searchText.isNotEmpty()) {
-                                        viewModel.searchSongs(searchText)
-                                        saveSearchHistory(searchText)
-                                    }
-                                },
-                                expanded = expanded,
-                                onExpandedChange = { expanded = it },
-                                label = "搜索音乐"
-                            )
-                        },
-                        expanded = expanded,
-                        onExpandedChange = { expanded = it },
-                        outsideEndAction = {
-                            Text(
-                                modifier = Modifier
-                                    .padding(end = 12.dp)
-                                    .clickable(
-                                        interactionSource = null,
-                                        indication = null
-                                    ) {
-                                        expanded = false
-                                        searchText = ""
-                                        viewModel.clearSearch()
-                                    },
-                                text = "取消",
-                                color = MiuixTheme.colorScheme.primary
-                            )
-                        }
-                    ) {
-                        // 搜索结果内容 - 展开时覆盖全屏
-                        if (searchState.isLoading) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(32.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                InfiniteProgressIndicator()
-                            }
-                        } else if (searchState.error != null) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(32.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "搜索失败: ${searchState.error}",
-                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                )
-                            }
-                        } else if (searchState.results.isNotEmpty()) {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(vertical = 8.dp)
-                            ) {
-                                items(searchState.results) { track ->
-                                    TrackItem(
-                                        track = track,
-                                        isPlaying = track.id == viewModel.playerState.currentTrack?.id,
-                                        onClick = {
-                                            viewModel.currentPlaylist = searchState.results
-                                            viewModel.playTrack(track)
-                                        }
-                                    )
-                                }
-                            }
-                        } else {
-                            // 显示搜索历史
-                            if (searchHistory.isNotEmpty()) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "搜索历史",
-                                            style = MiuixTheme.textStyles.main,
-                                            color = MiuixTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "清除",
-                                            modifier = Modifier.clickable { clearSearchHistory() },
-                                            color = MiuixTheme.colorScheme.primary
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    FlowRow(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        searchHistory.forEach { history ->
-                                            TextButton(
-                                                text = history,
-                                                onClick = {
-                                                    searchText = history
-                                                    viewModel.searchSongs(history)
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(32.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "输入关键词搜索音乐",
-                                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                defaultWindowInsetsPadding = false
             )
         }
     ) { paddingValues ->
@@ -299,12 +131,26 @@ fun RecommendPage(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalItemSpacing = 12.dp
                 ) {
+                    // 每日推荐歌单
+                    if (recommendState.dailySongs.isNotEmpty()) {
+                        item(span = StaggeredGridItemSpan.FullLine) {
+                            DailyRecommendCard(
+                                songs = recommendState.dailySongs,
+                                onClick = {
+                                    viewModel.currentPlaylist = recommendState.dailySongs
+                                    if (recommendState.dailySongs.isNotEmpty()) {
+                                        viewModel.playTrack(recommendState.dailySongs.first())
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    // 推荐歌单
                     items(recommendState.playlists) { playlist ->
                         RecommendPlaylistCard(
                             playlist = playlist,
-                            onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) },
-                            sharedTransitionScope = sharedTransitionScope,
-                            animatedVisibilityScope = animatedVisibilityScope
+                            onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }
                         )
                     }
                 }
@@ -317,45 +163,85 @@ fun RecommendPage(
 private fun RecommendPlaylistCard(
     playlist: RecommendPlaylist,
     onClick: () -> Unit,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier
 ) {
-    with(sharedTransitionScope) {
-        Card(
-            modifier = modifier.fillMaxWidth(),
-            pressFeedbackType = PressFeedbackType.Tilt,
-            showIndication = true,
-            onClick = onClick
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        pressFeedbackType = PressFeedbackType.Tilt,
+        showIndication = true,
+        onClick = onClick
+    ) {
+        AsyncImage(
+            model = playlist.coverImgUrl,
+            contentDescription = playlist.title,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f),
+            contentScale = ContentScale.Crop,
+            error = painterResource(android.R.drawable.ic_menu_gallery)
+        )
+
+        Text(
+            text = playlist.title,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            style = MiuixTheme.textStyles.body2,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        if (playlist.playCount > 0) {
+            Text(
+                text = formatPlayCount(playlist.playCount),
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+                style = MiuixTheme.textStyles.footnote2,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DailyRecommendCard(
+    songs: List<Track>,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        pressFeedbackType = PressFeedbackType.Tilt,
+        showIndication = true,
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             AsyncImage(
-                model = playlist.coverImgUrl,
-                contentDescription = playlist.title,
+                model = songs.firstOrNull()?.imgUrl,
+                contentDescription = "每日推荐",
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .sharedElement(
-                        sharedContentState = rememberSharedContentState(key = "playlist_cover_${playlist.id}"),
-                        animatedVisibilityScope = animatedVisibilityScope
-                    ),
+                    .size(80.dp)
+                    .clip(RoundedCornerShape(8.dp)),
                 contentScale = ContentScale.Crop,
                 error = painterResource(android.R.drawable.ic_menu_gallery)
             )
 
-            Text(
-                text = playlist.title,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                style = MiuixTheme.textStyles.body2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            Spacer(modifier = Modifier.width(16.dp))
 
-            if (playlist.playCount > 0) {
+            Column {
                 Text(
-                    text = formatPlayCount(playlist.playCount),
-                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
-                    style = MiuixTheme.textStyles.footnote2,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    text = "每日推荐",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${songs.size}首歌曲",
+                    fontSize = 14.sp,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
             }
         }

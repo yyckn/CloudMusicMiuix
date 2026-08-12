@@ -49,6 +49,7 @@ import com.cloudmusic.miuix.ui.pages.LoginPage
 import com.cloudmusic.miuix.ui.pages.PlayerPage
 import com.cloudmusic.miuix.ui.pages.PlaylistDetailPage
 import com.cloudmusic.miuix.ui.pages.PlaylistPage
+import com.cloudmusic.miuix.ui.pages.ProfilePage
 import com.cloudmusic.miuix.ui.pages.QrLoginPage
 import com.cloudmusic.miuix.ui.pages.RecommendPage
 import com.cloudmusic.miuix.ui.pages.SettingsPage
@@ -87,6 +88,7 @@ sealed class Screen {
     object QrLogin : Screen()
     object ThemeSettings : Screen()
     object About : Screen()
+    object Profile : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -243,17 +245,15 @@ fun MainScreen(
                                     label = "tab_transition"
                                 ) { tab ->
                                     when (tab) {
-                                        0 -> RecommendPage(
-                                            recommendState = viewModel.recommendState,
-                                            onPlaylistClick = { playlistId, coverUrl, title ->
-                                                viewModel.loadPlaylistDetail(playlistId)
-                                                currentScreen = Screen.PlaylistDetail(coverUrl, title)
-                                            },
-                                            viewModel = viewModel,
-                                            sharedTransitionScope = this@SharedTransitionLayout,
-                                            animatedVisibilityScope = this@AnimatedContent,
-                                            modifier = Modifier.padding(padding)
-                                        )
+                                    0 -> RecommendPage(
+                                        recommendState = viewModel.recommendState,
+                                        onPlaylistClick = { playlistId, coverUrl, title ->
+                                            viewModel.loadPlaylistDetail(playlistId)
+                                            currentScreen = Screen.PlaylistDetail(coverUrl, title)
+                                        },
+                                        viewModel = viewModel,
+                                        modifier = Modifier.padding(padding)
+                                    )
                                         1 -> PlaylistPage(
                                             recommendState = viewModel.recommendState,
                                             onPlaylistClick = { playlistId, coverUrl, title ->
@@ -267,6 +267,9 @@ fun MainScreen(
                                     isLoggedIn = isLoggedIn,
                                     onLoginClick = {
                                         currentScreen = Screen.Login
+                                    },
+                                    onProfileClick = {
+                                        currentScreen = Screen.Profile
                                     },
                                     onThemeSettingsClick = {
                                         currentScreen = Screen.ThemeSettings
@@ -403,8 +406,6 @@ fun MainScreen(
                                         currentScreen = Screen.PlaylistDetail(coverUrl, title)
                                     },
                                     viewModel = viewModel,
-                                    sharedTransitionScope = this@SharedTransitionLayout,
-                                    animatedVisibilityScope = this@AnimatedContent,
                                     modifier = Modifier.padding(padding)
                                 )
                                         1 -> PlaylistPage(
@@ -416,19 +417,22 @@ fun MainScreen(
                                             onRefresh = { viewModel.loadUserPlaylists() },
                                             modifier = Modifier.padding(padding)
                                         )
-                                    2 -> SettingsPage(
-                                        isLoggedIn = isLoggedIn,
-                                        onLoginClick = {
-                                            currentScreen = Screen.QrLogin
-                                        },
-                                        onThemeSettingsClick = {
-                                            currentScreen = Screen.ThemeSettings
-                                        },
-                                        onAboutClick = {
-                                            currentScreen = Screen.About
-                                        },
-                                        modifier = Modifier.padding(padding)
-                                    )
+                                2 -> SettingsPage(
+                                    isLoggedIn = isLoggedIn,
+                                    onLoginClick = {
+                                        currentScreen = Screen.QrLogin
+                                    },
+                                    onProfileClick = {
+                                        currentScreen = Screen.Profile
+                                    },
+                                    onThemeSettingsClick = {
+                                        currentScreen = Screen.ThemeSettings
+                                    },
+                                    onAboutClick = {
+                                        currentScreen = Screen.About
+                                    },
+                                    modifier = Modifier.padding(padding)
+                                )
                                 }
                             }
                         }
@@ -515,6 +519,17 @@ fun MainScreen(
                     },
                     onOpenSourceClick = {
                         // TODO: 实现开放源代码许可页面
+                    }
+                )
+            }
+            is Screen.Profile -> {
+                ProfilePage(
+                    onBackClick = {
+                        currentScreen = Screen.Main
+                    },
+                    onLogout = {
+                        isLoggedIn = false
+                        currentScreen = Screen.Main
                     }
                 )
             }
