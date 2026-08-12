@@ -8,6 +8,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonArray
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
@@ -27,6 +29,7 @@ object NeteaseApi {
 
     private var cookies: String = ""
     private var context: android.content.Context? = null
+    private var userId: Long? = null
 
     fun init(appContext: android.content.Context) {
         context = appContext.applicationContext
@@ -34,6 +37,13 @@ object NeteaseApi {
         val prefs = context!!.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
         cookies = prefs.getString("cookies", "") ?: ""
         android.util.Log.d("NeteaseApi", "Init - Loaded cookies: $cookies")
+        // 获取用户ID
+        if (cookies.isNotEmpty()) {
+            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                userId = getUserId()
+                android.util.Log.d("NeteaseApi", "Init - User ID: $userId")
+            }
+        }
     }
 
     fun setCookie(newCookies: String) {
@@ -44,6 +54,11 @@ object NeteaseApi {
             prefs.edit().putString("cookies", cookies).apply()
         }
         android.util.Log.d("NeteaseApi", "Cookie set and saved: $cookies")
+        // 获取用户ID
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            userId = getUserId()
+            android.util.Log.d("NeteaseApi", "User ID: $userId")
+        }
     }
 
     fun getCookie(): String = cookies
@@ -699,6 +714,127 @@ object NeteaseApi {
             } else {
                 Result.success("")
             }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getUserId(): Long? = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://music.163.com/api/nuser/account/get"
+            val encrypted = NeteaseCrypto.weapi("{}")
+
+            val body = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Cookie", cookies)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                android.util.Log.e("NeteaseApi", "getUserId failed: HTTP ${response.code}")
+                return@withContext null
+            }
+            val responseBody = response.body?.string()
+            android.util.Log.d("NeteaseApi", "getUserId response: $responseBody")
+            if (responseBody.isNullOrEmpty()) {
+                return@withContext null
+            }
+            val json = gson.fromJson(responseBody, JsonObject::class.java) ?: return@withContext null
+
+            if (json.has("account") && !json.get("account").isJsonNull) {
+                val account = json.getAsJsonObject("account")
+                val userId = if (account.has("id")) account.get("id").asLong else null
+                android.util.Log.d("NeteaseApi", "getUserId result: $userId")
+                userId
+            } else {
+                android.util.Log.d("NeteaseApi", "getUserId: no account field")
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun getCurrentUserId(): Long? = userId
+
+    suspend fun getUserPlaylists(userId: Long): Result<List<RecommendPlaylist>> = withContext(Dispatchers.IO) {
+        try {
+            ensureCookie()
+            val url = "https://music.163.com/api/user/playlist"
+
+            android.util.Log.d("NeteaseApi", "getUserPlaylists - userId: $userId")
+            android.util.Log.d("NeteaseApi", "getUserPlaylists - url: $url")
+            android.util.Log.d("NeteaseApi", "getUserPlaylists - cookies: $cookies")
+
+            val body = FormBody.Builder()
+                .add("uid", userId.toString())
+                .add("limit", "1000")
+                .add("offset", "0")
+                .add("includeVideo", "true")
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Cookie", cookies)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            val response = client.newCall(request).execute()
+            android.util.Log.d("NeteaseApi", "getUserPlaylists - response code: ${response.code}")
+            
+            if (!response.isSuccessful) {
+                android.util.Log.e("NeteaseApi", "getUserPlaylists - HTTP ${response.code}")
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            android.util.Log.d("NeteaseApi", "getUserPlaylists - response length: ${responseBody?.length}")
+            android.util.Log.d("NeteaseApi", "getUserPlaylists - response body: $responseBody")
+            
+            if (responseBody.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            if (!json.has("playlist")) {
+                android.util.Log.e("NeteaseApi", "getUserPlaylists - No playlist field")
+                return@withContext Result.failure(Exception("No playlist field in response"))
+            }
+
+            val playlistArray = json.getAsJsonArray("playlist")
+            android.util.Log.d("NeteaseApi", "getUserPlaylists - playlist count: ${playlistArray.size()}")
+            val playlists = mutableListOf<RecommendPlaylist>()
+            for (i in 0 until playlistArray.size()) {
+                try {
+                    val obj = playlistArray.get(i).asJsonObject
+                    playlists.add(
+                        RecommendPlaylist(
+                            id = "neplaylist_${obj.get("id").asLong}",
+                            title = obj.get("name").asString,
+                            coverImgUrl = if (obj.has("coverImgUrl")) obj.get("coverImgUrl").asString else "",
+                            playCount = if (obj.has("playCount")) obj.get("playCount").asLong else 0,
+                            trackCount = if (obj.has("trackCount")) obj.get("trackCount").asInt else 0,
+                            description = if (obj.has("description") && !obj.get("description").isJsonNull) obj.get("description").asString else ""
+                        )
+                    )
+                } catch (e: Exception) {
+                    // Skip invalid items
+                }
+            }
+            android.util.Log.d("NeteaseApi", "getUserPlaylists - parsed ${playlists.size} playlists")
+            Result.success(playlists)
         } catch (e: Exception) {
             Result.failure(e)
         }

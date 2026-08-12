@@ -255,11 +255,12 @@ fun MainScreen(
                                             modifier = Modifier.padding(padding)
                                         )
                                         1 -> PlaylistPage(
-                                            tracks = viewModel.currentPlaylist,
-                                            currentTrack = viewModel.playerState.currentTrack,
-                                            onTrackClick = { track ->
-                                                viewModel.playTrack(track)
+                                            recommendState = viewModel.recommendState,
+                                            onPlaylistClick = { playlistId, coverUrl, title ->
+                                                viewModel.loadPlaylistDetail(playlistId)
+                                                currentScreen = Screen.PlaylistDetail(coverUrl, title)
                                             },
+                                            onRefresh = { viewModel.loadUserPlaylists() },
                                             modifier = Modifier.padding(padding)
                                         )
                                 2 -> SettingsPage(
@@ -405,14 +406,15 @@ fun MainScreen(
                                     animatedVisibilityScope = this@AnimatedContent,
                                     modifier = Modifier.padding(padding)
                                 )
-                                    1 -> PlaylistPage(
-                                        tracks = viewModel.currentPlaylist,
-                                        currentTrack = viewModel.playerState.currentTrack,
-                                        onTrackClick = { track ->
-                                            viewModel.playTrack(track)
-                                        },
-                                        modifier = Modifier.padding(padding)
-                                    )
+                                        1 -> PlaylistPage(
+                                            recommendState = viewModel.recommendState,
+                                            onPlaylistClick = { playlistId, coverUrl, title ->
+                                                viewModel.loadPlaylistDetail(playlistId)
+                                                currentScreen = Screen.PlaylistDetail(coverUrl, title)
+                                            },
+                                            onRefresh = { viewModel.loadUserPlaylists() },
+                                            modifier = Modifier.padding(padding)
+                                        )
                                     2 -> SettingsPage(
                                         isLoggedIn = isLoggedIn,
                                         onLoginClick = {
@@ -492,6 +494,7 @@ fun MainScreen(
                         isLoggedIn = true
                         currentScreen = Screen.Main
                         viewModel.loadRecommendPlaylists()
+                        viewModel.loadUserPlaylists()
                     },
                     context = androidx.compose.ui.platform.LocalContext.current
                 )

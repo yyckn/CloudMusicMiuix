@@ -32,6 +32,7 @@ data class PlayerState(
 
 data class RecommendState(
     val playlists: List<RecommendPlaylist> = emptyList(),
+    val userPlaylists: List<RecommendPlaylist> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -93,6 +94,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         loadLastPlayedTrack()
         loadLastPlaylist()
         loadRecommendPlaylists()
+        loadUserPlaylists()
         bindMediaService()
         startProgressUpdate()
     }
@@ -199,6 +201,28 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     )
                 }
             )
+        }
+    }
+
+    fun loadUserPlaylists() {
+        viewModelScope.launch {
+            android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists called")
+            val userId = NeteaseApi.getCurrentUserId()
+            android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists userId: $userId")
+            if (userId != null) {
+                android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists - calling API with userId: $userId")
+                NeteaseApi.getUserPlaylists(userId).fold(
+                    onSuccess = { playlists ->
+                        android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists success: ${playlists.size} playlists")
+                        recommendState = recommendState.copy(userPlaylists = playlists)
+                    },
+                    onFailure = { e ->
+                        android.util.Log.e("MusicPlayerViewModel", "loadUserPlaylists error: ${e.message}")
+                    }
+                )
+            } else {
+                android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists: userId is null - user not logged in")
+            }
         }
     }
 

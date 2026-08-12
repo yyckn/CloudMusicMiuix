@@ -34,5 +34,6 @@ data class RecommendPlaylist(
     val title: String,
     val coverImgUrl: String,
     val playCount: Long = 0,
+    val trackCount: Int = 0,
     val description: String = ""
 )
