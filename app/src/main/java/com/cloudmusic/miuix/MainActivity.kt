@@ -85,7 +85,6 @@ sealed class Screen {
     object QrLogin : Screen()
     object ThemeSettings : Screen()
     object About : Screen()
-    object Player : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -113,45 +112,43 @@ fun MainScreen(
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Main) }
     var isLoggedIn by remember { mutableStateOf(NeteaseApi.isLoggedIn()) }
     var showPlaylistSheet by remember { mutableStateOf(false) }
+    var showPlayerPage by remember { mutableStateOf(false) }
     val tabs = listOf("推荐", "歌单", "设置")
     val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Settings)
     val railState = rememberNavigationRailState()
     val useNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact
 
     SharedTransitionLayout {
-    AnimatedContent(
-        targetState = currentScreen,
-        transitionSpec = {
-            when {
-                initialState is Screen.Main && targetState is Screen.PlaylistDetail ->
-                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                initialState is Screen.PlaylistDetail && targetState is Screen.Main ->
-                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                initialState is Screen.Main && targetState is Screen.Login ->
-                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                initialState is Screen.Login && targetState is Screen.Main ->
-                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                initialState is Screen.Main && targetState is Screen.QrLogin ->
-                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                initialState is Screen.QrLogin && targetState is Screen.Main ->
-                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                initialState is Screen.Main && targetState is Screen.ThemeSettings ->
-                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                initialState is Screen.ThemeSettings && targetState is Screen.Main ->
-                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                initialState is Screen.Main && targetState is Screen.About ->
-                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                initialState is Screen.About && targetState is Screen.Main ->
-                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                initialState is Screen.Main && targetState is Screen.Player ->
-                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                initialState is Screen.Player && targetState is Screen.Main ->
-                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                else -> slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-            }
-        },
-        label = "screen_transition"
-    ) { screen ->
+    Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedContent(
+            targetState = currentScreen,
+            transitionSpec = {
+                when {
+                    initialState is Screen.Main && targetState is Screen.PlaylistDetail ->
+                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                    initialState is Screen.PlaylistDetail && targetState is Screen.Main ->
+                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                    initialState is Screen.Main && targetState is Screen.Login ->
+                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                    initialState is Screen.Login && targetState is Screen.Main ->
+                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                    initialState is Screen.Main && targetState is Screen.QrLogin ->
+                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                    initialState is Screen.QrLogin && targetState is Screen.Main ->
+                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                    initialState is Screen.Main && targetState is Screen.ThemeSettings ->
+                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                    initialState is Screen.ThemeSettings && targetState is Screen.Main ->
+                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                    initialState is Screen.Main && targetState is Screen.About ->
+                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                    initialState is Screen.About && targetState is Screen.Main ->
+                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                    else -> slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                }
+            },
+            label = "screen_transition"
+        ) { screen ->
             when (screen) {
                 is Screen.Main -> {
                     if (useNavigationRail) {
@@ -174,7 +171,7 @@ fun MainScreen(
                                         PlayerBar(
                                             playerState = viewModel.playerState,
                                             onTogglePlayPause = { viewModel.togglePlayPause() },
-                                            onPlayerBarClick = { currentScreen = Screen.Player },
+                                            onPlayerBarClick = { showPlayerPage = true },
                                             onPlaylistClick = { showPlaylistSheet = true },
                                             sharedTransitionScope = this@SharedTransitionLayout,
                                             animatedVisibilityScope = this@AnimatedContent
@@ -287,7 +284,7 @@ fun MainScreen(
                                     PlayerBar(
                                         playerState = viewModel.playerState,
                                         onTogglePlayPause = { viewModel.togglePlayPause() },
-                                        onPlayerBarClick = { currentScreen = Screen.Player },
+                                        onPlayerBarClick = { showPlayerPage = true },
                                         onPlaylistClick = { showPlaylistSheet = true },
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = this@AnimatedContent,
@@ -439,7 +436,7 @@ fun MainScreen(
                             PlayerBar(
                                 playerState = viewModel.playerState,
                                 onTogglePlayPause = { viewModel.togglePlayPause() },
-                                onPlayerBarClick = { currentScreen = Screen.Player },
+                                onPlayerBarClick = { showPlayerPage = true },
                                 sharedTransitionScope = this@SharedTransitionLayout,
                                 animatedVisibilityScope = this@AnimatedContent,
                                 hasBottomBar = false
@@ -516,19 +513,24 @@ fun MainScreen(
                     }
                 )
             }
-            is Screen.Player -> {
-                PlayerPage(
-                    playerState = viewModel.playerState,
-                    onBackClick = {
-                        currentScreen = Screen.Main
-                    },
-                    onTogglePlayPause = { viewModel.togglePlayPause() },
-                    onPrevious = { viewModel.playPrevious() },
-                    onNext = { viewModel.playNext() },
-                    onSeekTo = { position -> viewModel.seekTo(position) }
-                )
-            }
+        }
+        }
+
+        // 播放器页面覆盖层
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showPlayerPage,
+            enter = androidx.compose.animation.slideInVertically { it },
+            exit = androidx.compose.animation.slideOutVertically { it }
+        ) {
+            PlayerPage(
+                playerState = viewModel.playerState,
+                onBackClick = { showPlayerPage = false },
+                onTogglePlayPause = { viewModel.togglePlayPause() },
+                onPrevious = { viewModel.playPrevious() },
+                onNext = { viewModel.playNext() },
+                onSeekTo = { position -> viewModel.seekTo(position) }
+            )
         }
     }
-}
+    }
 }

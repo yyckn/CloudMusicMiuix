@@ -78,6 +78,7 @@ fun PlayerPage(
                     )
                 },
                 bottomContent = {
+                    // 歌手 - 专辑
                     Text(
                         text = "${track?.artist ?: ""} - ${track?.album ?: ""}",
                         fontSize = MiuixTheme.textStyles.body2.fontSize,
