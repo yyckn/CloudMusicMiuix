@@ -2,7 +2,6 @@ package com.cloudmusic.miuix.ui.components
 
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -31,6 +29,7 @@ import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ListView
 import top.yukonga.miuix.kmp.icon.extended.Pause
 import top.yukonga.miuix.kmp.icon.extended.Play
 
@@ -39,6 +38,7 @@ fun PlayerBar(
     playerState: PlayerState,
     onTogglePlayPause: () -> Unit,
     onPlayerBarClick: () -> Unit = {},
+    onPlaylistClick: () -> Unit = {},
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     hasBottomBar: Boolean = true,
@@ -114,20 +114,33 @@ fun PlayerBar(
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .background(
-                                    MiuixTheme.colorScheme.primary,
-                                    CircleShape
-                                )
+                                .clip(RoundedCornerShape(12.dp))
                                 .clickable { onTogglePlayPause() },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = if (playerState.isPlaying) MiuixIcons.Medium.Pause else MiuixIcons.Medium.Play,
+                                imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
                                 contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                                tint = MiuixTheme.colorScheme.onPrimary,
+                                tint = MiuixTheme.colorScheme.primary,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
+                    }
+
+                    // 列表按钮
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onPlaylistClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.ListView,
+                            contentDescription = "播放列表",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
             }

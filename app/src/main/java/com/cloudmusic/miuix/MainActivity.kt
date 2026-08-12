@@ -20,14 +20,27 @@ import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSiz
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cloudmusic.miuix.data.api.NeteaseApi
 import com.cloudmusic.miuix.ui.components.PlayerBar
@@ -40,6 +53,7 @@ import com.cloudmusic.miuix.ui.pages.QrLoginPage
 import com.cloudmusic.miuix.ui.pages.RecommendPage
 import com.cloudmusic.miuix.ui.pages.SettingsPage
 import com.cloudmusic.miuix.ui.pages.ThemeSettingsPage
+import com.cloudmusic.miuix.ui.pages.TrackItem
 import com.cloudmusic.miuix.ui.components.LiquidGlassNavigationBar
 import com.cloudmusic.miuix.ui.components.LiquidGlassNavigationBarItem
 import com.cloudmusic.miuix.ui.theme.CloudMusicMiuixTheme
@@ -59,6 +73,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.ListView
 import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 
 sealed class Screen {
     object Main : Screen()
@@ -97,6 +112,7 @@ fun MainScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Main) }
     var isLoggedIn by remember { mutableStateOf(NeteaseApi.isLoggedIn()) }
+    var showPlaylistSheet by remember { mutableStateOf(false) }
     val tabs = listOf("推荐", "歌单", "设置")
     val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Settings)
     val railState = rememberNavigationRailState()
@@ -159,12 +175,62 @@ fun MainScreen(
                                             playerState = viewModel.playerState,
                                             onTogglePlayPause = { viewModel.togglePlayPause() },
                                             onPlayerBarClick = { currentScreen = Screen.Player },
+                                            onPlaylistClick = { showPlaylistSheet = true },
                                             sharedTransitionScope = this@SharedTransitionLayout,
                                             animatedVisibilityScope = this@AnimatedContent
                                         )
                                     }
                                 }
                             ) { padding ->
+                                // 播放列表抽屉
+                                OverlayBottomSheet(
+                                    show = showPlaylistSheet,
+                                    title = "播放列表",
+                                    insideMargin = DpSize(12.dp, 0.dp),
+                                    onDismissRequest = { showPlaylistSheet = false }
+                                ) {
+                                    if (viewModel.currentPlaylist.isEmpty()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(200.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "暂无歌曲",
+                                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                            )
+                                        }
+                                    } else {
+                                        LazyColumn(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            contentPadding = PaddingValues(vertical = 8.dp)
+                                        ) {
+                                            items(viewModel.currentPlaylist) { track ->
+                                                Card(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(vertical = 4.dp),
+                                                    pressFeedbackType = PressFeedbackType.Tilt,
+                                                    showIndication = true,
+                                                    onClick = {
+                                                        viewModel.playTrack(track)
+                                                        showPlaylistSheet = false
+                                                    }
+                                                ) {
+                                                    TrackItem(
+                                                        track = track,
+                                                        isPlaying = track.id == viewModel.playerState.currentTrack?.id,
+                                                        onClick = {
+                                                            viewModel.playTrack(track)
+                                                            showPlaylistSheet = false
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 AnimatedContent(
                                     targetState = selectedTab,
                                     transitionSpec = {
@@ -221,6 +287,7 @@ fun MainScreen(
                                         playerState = viewModel.playerState,
                                         onTogglePlayPause = { viewModel.togglePlayPause() },
                                         onPlayerBarClick = { currentScreen = Screen.Player },
+                                        onPlaylistClick = { showPlaylistSheet = true },
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = this@AnimatedContent,
                                         hasBottomBar = !ThemeSettings.useFloatingBar,
@@ -266,6 +333,55 @@ fun MainScreen(
                                 }
                             }
                         ) { padding ->
+                            // 播放列表抽屉
+                            OverlayBottomSheet(
+                                show = showPlaylistSheet,
+                                title = "播放列表",
+                                insideMargin = DpSize(12.dp, 0.dp),
+                                onDismissRequest = { showPlaylistSheet = false }
+                            ) {
+                                if (viewModel.currentPlaylist.isEmpty()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(200.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "暂无歌曲",
+                                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                        )
+                                    }
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentPadding = PaddingValues(vertical = 8.dp)
+                                    ) {
+                                        items(viewModel.currentPlaylist) { track ->
+                                            Card(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp),
+                                                pressFeedbackType = PressFeedbackType.Tilt,
+                                                showIndication = true,
+                                                onClick = {
+                                                    viewModel.playTrack(track)
+                                                    showPlaylistSheet = false
+                                                }
+                                            ) {
+                                                TrackItem(
+                                                    track = track,
+                                                    isPlaying = track.id == viewModel.playerState.currentTrack?.id,
+                                                    onClick = {
+                                                        viewModel.playTrack(track)
+                                                        showPlaylistSheet = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             AnimatedContent(
                                 targetState = selectedTab,
                                 transitionSpec = {
@@ -277,8 +393,8 @@ fun MainScreen(
                                 },
                                 label = "tab_transition"
                             ) { tab ->
-                            when (tab) {
-                                0 -> RecommendPage(
+                                when (tab) {
+                                    0 -> RecommendPage(
                                     recommendState = viewModel.recommendState,
                                     onPlaylistClick = { playlistId, coverUrl, title ->
                                         viewModel.loadPlaylistDetail(playlistId)
