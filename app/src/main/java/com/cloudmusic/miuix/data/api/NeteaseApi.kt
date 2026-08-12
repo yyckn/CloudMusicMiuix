@@ -31,6 +31,11 @@ object NeteaseApi {
     private var cookies: String = ""
     private var context: android.content.Context? = null
     private var userId: Long? = null
+    private var onProfileChanged: (() -> Unit)? = null
+
+    fun setOnProfileChangedListener(listener: (() -> Unit)?) {
+        onProfileChanged = listener
+    }
 
     fun init(appContext: android.content.Context) {
         context = appContext.applicationContext
@@ -57,8 +62,18 @@ object NeteaseApi {
         android.util.Log.d("NeteaseApi", "Cookie set and saved: $cookies")
         // 获取用户ID
         kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val oldUserId = userId
             userId = getUserId()
             android.util.Log.d("NeteaseApi", "User ID: $userId")
+            // 如果用户ID变化，清除旧的用户资料缓存并通知UI
+            if (oldUserId != null && oldUserId != userId) {
+                android.util.Log.d("NeteaseApi", "User changed from $oldUserId to $userId, clearing profile cache")
+                clearUserProfileCache()
+                // 通知UI更新
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onProfileChanged?.invoke()
+                }
+            }
         }
     }
 
@@ -756,20 +771,20 @@ object NeteaseApi {
                 val profile = json.getAsJsonObject("profile")
                 android.util.Log.d("NeteaseApi", "Parsing profile: ${profile.toString().take(200)}")
                 val userProfile = UserProfile(
-                    userId = if (profile.has("userId")) profile.get("userId").asLong else 0,
-                    nickname = if (profile.has("nickname")) profile.get("nickname").asString else "",
-                    avatarUrl = if (profile.has("avatarUrl")) profile.get("avatarUrl").asString else "",
-                    gender = if (profile.has("gender")) profile.get("gender").asInt else 0,
-                    birthday = if (profile.has("birthday")) profile.get("birthday").asLong else 0,
-                    province = if (profile.has("province")) profile.get("province").asInt else 0,
-                    city = if (profile.has("city")) profile.get("city").asInt else 0,
-                    signature = if (profile.has("signature")) profile.get("signature").asString else "",
+                    userId = if (profile.has("userId") && !profile.get("userId").isJsonNull) profile.get("userId").asLong else 0,
+                    nickname = if (profile.has("nickname") && !profile.get("nickname").isJsonNull) profile.get("nickname").asString else "",
+                    avatarUrl = if (profile.has("avatarUrl") && !profile.get("avatarUrl").isJsonNull) profile.get("avatarUrl").asString else "",
+                    gender = if (profile.has("gender") && !profile.get("gender").isJsonNull) profile.get("gender").asInt else 0,
+                    birthday = if (profile.has("birthday") && !profile.get("birthday").isJsonNull) profile.get("birthday").asLong else 0,
+                    province = if (profile.has("province") && !profile.get("province").isJsonNull) profile.get("province").asInt else 0,
+                    city = if (profile.has("city") && !profile.get("city").isJsonNull) profile.get("city").asInt else 0,
+                    signature = if (profile.has("signature") && !profile.get("signature").isJsonNull) profile.get("signature").asString else "",
                     description = if (profile.has("description") && !profile.get("description").isJsonNull) profile.get("description").asString else "",
                     detailDescription = if (profile.has("detailDescription") && !profile.get("detailDescription").isJsonNull) profile.get("detailDescription").asString else "",
-                    backgroundUrl = if (profile.has("backgroundUrl")) profile.get("backgroundUrl").asString else "",
-                    vipType = if (profile.has("vipType")) profile.get("vipType").asInt else 0,
-                    authStatus = if (profile.has("authStatus")) profile.get("authStatus").asInt else 0,
-                    createTime = if (profile.has("createTime")) profile.get("createTime").asLong else 0
+                    backgroundUrl = if (profile.has("backgroundUrl") && !profile.get("backgroundUrl").isJsonNull) profile.get("backgroundUrl").asString else "",
+                    vipType = if (profile.has("vipType") && !profile.get("vipType").isJsonNull) profile.get("vipType").asInt else 0,
+                    authStatus = if (profile.has("authStatus") && !profile.get("authStatus").isJsonNull) profile.get("authStatus").asInt else 0,
+                    createTime = if (profile.has("createTime") && !profile.get("createTime").isJsonNull) profile.get("createTime").asLong else 0
                 )
                 android.util.Log.d("NeteaseApi", "UserProfile created: nickname=${userProfile.nickname}, userId=${userProfile.userId}, createTime=${userProfile.createTime}")
                 // 保存到缓存
@@ -828,6 +843,30 @@ object NeteaseApi {
                 authStatus = prefs.getInt("profile_authStatus", 0),
                 createTime = prefs.getLong("profile_createTime", 0)
             )
+        }
+    }
+
+    private fun clearUserProfileCache() {
+        context?.let { ctx ->
+            val prefs = ctx.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
+            prefs.edit().apply {
+                remove("profile_userId")
+                remove("profile_nickname")
+                remove("profile_avatarUrl")
+                remove("profile_gender")
+                remove("profile_birthday")
+                remove("profile_province")
+                remove("profile_city")
+                remove("profile_signature")
+                remove("profile_description")
+                remove("profile_detailDescription")
+                remove("profile_backgroundUrl")
+                remove("profile_vipType")
+                remove("profile_authStatus")
+                remove("profile_createTime")
+                apply()
+            }
+            android.util.Log.d("NeteaseApi", "User profile cache cleared")
         }
     }
 

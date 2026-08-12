@@ -55,6 +55,8 @@ import top.yukonga.miuix.kmp.basic.Icon
 fun ProfilePage(
     onBackClick: () -> Unit,
     onLogout: () -> Unit,
+    isLoggedIn: Boolean = true,
+    profileVersion: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -67,29 +69,35 @@ fun ProfilePage(
         onBackClick()
     }
 
-    // 加载用户信息（先从缓存加载）
-    LaunchedEffect(Unit) {
-        android.util.Log.d("ProfilePage", "Loading user profile from cache...")
-        val cachedProfile = NeteaseApi.getUserProfileFromCache()
-        if (cachedProfile != null) {
-            android.util.Log.d("ProfilePage", "Using cached profile: ${cachedProfile.nickname}")
-            userProfile = cachedProfile
+    // 加载用户信息（当isLoggedIn或profileVersion变化时重新加载）
+    LaunchedEffect(isLoggedIn, profileVersion) {
+        android.util.Log.d("ProfilePage", "LaunchedEffect triggered: isLoggedIn=$isLoggedIn, profileVersion=$profileVersion")
+        if (!isLoggedIn) {
+            android.util.Log.d("ProfilePage", "Not logged in, clearing profile")
+            userProfile = null
             isLoading = false
-        } else {
-            android.util.Log.d("ProfilePage", "No cache, loading from API...")
-            NeteaseApi.getUserProfile().fold(
-                onSuccess = { profile ->
-                    android.util.Log.d("ProfilePage", "Profile loaded from API: nickname=${profile.nickname}, userId=${profile.userId}")
-                    userProfile = profile
-                    isLoading = false
-                    android.util.Log.d("ProfilePage", "isLoading set to false")
-                },
-                onFailure = { e ->
-                    android.util.Log.e("ProfilePage", "Failed to load profile: ${e.message}")
-                    isLoading = false
-                }
-            )
+            return@LaunchedEffect
         }
+        android.util.Log.d("ProfilePage", "Loading user profile from API...")
+        NeteaseApi.getUserProfile().fold(
+            onSuccess = { profile ->
+                android.util.Log.d("ProfilePage", "Profile loaded from API: nickname=${profile.nickname}, userId=${profile.userId}")
+                userProfile = profile
+                isLoading = false
+                android.util.Log.d("ProfilePage", "isLoading set to false")
+            },
+            onFailure = { e ->
+                android.util.Log.e("ProfilePage", "Failed to load profile: ${e.message}")
+                // 如果API失败，尝试从缓存加载
+                val cachedProfile = NeteaseApi.getUserProfileFromCache()
+                if (cachedProfile != null) {
+                    android.util.Log.d("ProfilePage", "Using cached profile: ${cachedProfile.nickname}")
+                    userProfile = cachedProfile
+                }
+                isLoading = false
+                android.util.Log.d("ProfilePage", "isLoading set to false (from cache)")
+            }
+        )
     }
 
     // 下拉刷新回调（手动刷新才请求API）

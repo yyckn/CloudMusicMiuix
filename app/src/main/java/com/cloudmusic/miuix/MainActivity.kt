@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -115,12 +116,20 @@ fun MainScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Main) }
     var isLoggedIn by remember { mutableStateOf(NeteaseApi.isLoggedIn()) }
+    var profileVersion by remember { mutableIntStateOf(0) } // 用于触发UI刷新
     var showPlaylistSheet by remember { mutableStateOf(false) }
     var showPlayerPage by remember { mutableStateOf(false) }
     val tabs = listOf("推荐", "歌单", "设置")
     val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Settings)
     val railState = rememberNavigationRailState()
     val useNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact
+
+    // 设置用户信息变化监听器
+    LaunchedEffect(Unit) {
+        NeteaseApi.setOnProfileChangedListener {
+            profileVersion++
+        }
+    }
 
     SharedTransitionLayout {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -252,6 +261,9 @@ fun MainScreen(
                                             currentScreen = Screen.PlaylistDetail(coverUrl, title)
                                         },
                                         viewModel = viewModel,
+                                        isLoggedIn = isLoggedIn,
+                                        isPlayerPageVisible = showPlayerPage,
+                                        onOpenPlayerPage = { showPlayerPage = true },
                                         modifier = Modifier.padding(padding)
                                     )
                                         1 -> PlaylistPage(
@@ -406,6 +418,9 @@ fun MainScreen(
                                         currentScreen = Screen.PlaylistDetail(coverUrl, title)
                                     },
                                     viewModel = viewModel,
+                                    isLoggedIn = isLoggedIn,
+                                    isPlayerPageVisible = showPlayerPage,
+                                    onOpenPlayerPage = { showPlayerPage = true },
                                     modifier = Modifier.padding(padding)
                                 )
                                         1 -> PlaylistPage(
@@ -530,7 +545,9 @@ fun MainScreen(
                     onLogout = {
                         isLoggedIn = false
                         currentScreen = Screen.Main
-                    }
+                    },
+                    isLoggedIn = isLoggedIn,
+                    profileVersion = profileVersion
                 )
             }
         }
