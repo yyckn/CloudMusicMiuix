@@ -21,10 +21,16 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -72,6 +78,7 @@ import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.NavigationRail
 import top.yukonga.miuix.kmp.basic.NavigationRailItem
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.NavigationRailValue
 import top.yukonga.miuix.kmp.basic.rememberNavigationRailState
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Home
@@ -121,7 +128,7 @@ fun MainScreen(
     var showPlayerPage by remember { mutableStateOf(false) }
     val tabs = listOf("推荐", "歌单", "设置")
     val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Settings)
-    val railState = rememberNavigationRailState()
+    val railState = rememberNavigationRailState(initialValue = NavigationRailValue.Expanded)
     val useNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact
 
     // 设置用户信息变化监听器
@@ -180,17 +187,16 @@ fun MainScreen(
                             }
                             Scaffold(
                                 bottomBar = {
-                                    Column {
-                                        PlayerBar(
-                                            playerState = viewModel.playerState,
-                                            onTogglePlayPause = { viewModel.togglePlayPause() },
-                                            onPlayerBarClick = { showPlayerPage = true },
-                                            onSwipeUp = { showPlayerPage = true },
-                                            onPlaylistClick = { showPlaylistSheet = true },
-                                            sharedTransitionScope = this@SharedTransitionLayout,
-                                            animatedVisibilityScope = this@AnimatedContent
-                                        )
-                                    }
+                                    PlayerBar(
+                                        playerState = viewModel.playerState,
+                                        onTogglePlayPause = { viewModel.togglePlayPause() },
+                                        onPlayerBarClick = { showPlayerPage = true },
+                                        onSwipeUp = { showPlayerPage = true },
+                                        onPlaylistClick = { showPlaylistSheet = true },
+                                        sharedTransitionScope = this@SharedTransitionLayout,
+                                        animatedVisibilityScope = this@AnimatedContent,
+                                        hasBottomBar = false
+                                    )
                                 }
                             ) { padding ->
                                 // 播放列表抽屉

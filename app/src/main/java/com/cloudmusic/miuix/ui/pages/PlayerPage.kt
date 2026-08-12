@@ -91,9 +91,18 @@ fun PlayerPage(
             )
         }
     ) { paddingValues ->
+        val configuration = LocalConfiguration.current
+        val screenHeight = configuration.screenHeightDp.dp
+        val screenWidth = configuration.screenWidthDp.dp
+        val topPadding = paddingValues.calculateTopPadding()
+        // 预留底部控件高度：Slider区域 + 按钮区域 + 底部间距
+        val bottomReserved = 186.dp
+        val availableHeight = screenHeight - topPadding - bottomReserved
+        val imageSize = minOf(availableHeight, screenWidth - 24.dp).coerceAtLeast(0.dp)
+
         Column(
             modifier = Modifier
-                .padding(top = paddingValues.calculateTopPadding())
+                .padding(top = topPadding)
                 .fillMaxSize()
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -101,12 +110,6 @@ fun PlayerPage(
             Spacer(modifier = Modifier.height(16.dp))
 
             // 封面图片
-            val configuration = LocalConfiguration.current
-            val screenHeight = configuration.screenHeightDp.dp
-            val screenWidth = configuration.screenWidthDp.dp
-            val availableHeight = screenHeight - 300.dp
-            val imageSize = minOf(availableHeight, screenWidth - 48.dp)
-
             AsyncImage(
                 model = track?.imgUrl,
                 contentDescription = track?.title,

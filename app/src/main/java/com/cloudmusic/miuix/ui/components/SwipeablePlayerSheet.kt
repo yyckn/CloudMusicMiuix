@@ -66,12 +66,12 @@ fun SwipeablePlayerSheet(
                     detectVerticalDragGestures(
                         onDragEnd = {
                             scope.launch {
-                                if (offsetY.value > screenHeight * 0.3f) {
-                                    // 滑动超过30%，关闭
+                                if (offsetY.value > screenHeight * 0.15f) {
+                                    // 滑动超过15%，关闭
                                     offsetY.animateTo(screenHeight, tween(300))
                                     onDismiss()
                                 } else {
-                                    // 滑动不足30%，弹回
+                                    // 滑动不足15%，弹回
                                     offsetY.animateTo(0f, tween(300))
                                 }
                             }
