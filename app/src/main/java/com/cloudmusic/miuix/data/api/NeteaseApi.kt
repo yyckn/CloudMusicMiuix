@@ -403,7 +403,7 @@ object NeteaseApi {
         }
     }
 
-    suspend fun getSongUrl(songId: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun getSongUrl(songId: String): Result<Pair<String, Int>> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()
             val id = songId.removePrefix("netrack_")
@@ -454,7 +454,8 @@ object NeteaseApi {
                 } else {
                     return@withContext Result.failure(Exception("Song not available"))
                 }
-                Result.success(songUrl)
+                val bitrate = if (songData.has("br")) songData.get("br").asInt else 128000
+                Result.success(Pair(songUrl, bitrate))
             } else {
                 Result.failure(Exception("No data"))
             }

@@ -136,7 +136,7 @@ fun PlayerPage(
                     .padding(bottom = 4.dp)
             )
 
-            // 时间显示
+            // 时间显示和音质
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -147,6 +147,11 @@ fun PlayerPage(
                     text = formatDuration(playerState.currentPosition),
                     fontSize = 12.sp,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Text(
+                    text = getQualityText(playerState.bitrate),
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.primary
                 )
                 Text(
                     text = formatDuration(playerState.duration),
@@ -216,4 +221,14 @@ private fun formatDuration(durationMs: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "%d:%02d".format(minutes, seconds)
+}
+
+private fun getQualityText(bitrate: Int): String {
+    return when {
+        bitrate <= 0 -> "未知品质"
+        bitrate <= 320000 -> "低品质"
+        bitrate <= 1411000 -> "SQ 标准品质"
+        bitrate <= 2304000 -> "HQ 高品质"
+        else -> "Hi-Res 无损音频"
+    }
 }

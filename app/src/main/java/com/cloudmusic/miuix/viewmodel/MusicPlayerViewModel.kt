@@ -26,7 +26,8 @@ data class PlayerState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val currentPosition: Long = 0L,
-    val duration: Long = 0L
+    val duration: Long = 0L,
+    val bitrate: Int = 0
 )
 
 data class RecommendState(
@@ -144,11 +145,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
         viewModelScope.launch {
             NeteaseApi.getSongUrl(track.id).fold(
-                onSuccess = { url ->
+                onSuccess = { (url, bitrate) ->
                     try {
                         mediaPlaybackService?.let { service ->
                             service.setPlaylist(currentPlaylist)
                             service.prepareTrackWithUrl(track, url)
+                            playerState = playerState.copy(bitrate = bitrate)
                         }
                     } catch (e: Exception) {
                         // Ignore errors
@@ -257,12 +259,16 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             saveLastPlaylist()
 
             NeteaseApi.getSongUrl(track.id).fold(
-                onSuccess = { url ->
+                onSuccess = { (url, bitrate) ->
                     try {
                         mediaPlaybackService?.let { service ->
                             service.setPlaylist(currentPlaylist)
                             service.playTrackWithUrl(track, url)
-                            playerState = playerState.copy(isPlaying = true, isLoading = false)
+                            playerState = playerState.copy(
+                                isPlaying = true,
+                                isLoading = false,
+                                bitrate = bitrate
+                            )
                         }
                     } catch (e: Exception) {
                         playerState = playerState.copy(
