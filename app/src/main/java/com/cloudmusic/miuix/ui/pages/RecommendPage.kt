@@ -2,11 +2,14 @@ package com.cloudmusic.miuix.ui.pages
 
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionScope
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -32,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,12 +56,14 @@ import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SearchBar
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RecommendPage(
     recommendState: RecommendState,
@@ -72,6 +79,33 @@ fun RecommendPage(
     var isRefreshing by remember { mutableStateOf(false) }
     val pullToRefreshState = rememberPullToRefreshState()
     val searchState = viewModel.searchState
+    val context = LocalContext.current
+    val searchHistory = remember { mutableStateListOf<String>() }
+    val prefs = context.getSharedPreferences("search_history", Context.MODE_PRIVATE)
+
+    // 加载搜索历史
+    LaunchedEffect(Unit) {
+        val history = prefs.getStringSet("history", emptySet()) ?: emptySet()
+        searchHistory.clear()
+        searchHistory.addAll(history)
+    }
+
+    // 保存搜索历史
+    fun saveSearchHistory(query: String) {
+        if (query.isBlank()) return
+        val history = prefs.getStringSet("history", mutableSetOf()) ?: mutableSetOf()
+        val newHistory = history.toMutableSet()
+        newHistory.add(query)
+        prefs.edit().putStringSet("history", newHistory).apply()
+        searchHistory.clear()
+        searchHistory.addAll(newHistory)
+    }
+
+    // 清除搜索历史
+    fun clearSearchHistory() {
+        prefs.edit().remove("history").apply()
+        searchHistory.clear()
+    }
 
     // 下拉刷新回调
     LaunchedEffect(isRefreshing) {
@@ -98,6 +132,7 @@ fun RecommendPage(
                                 onSearch = {
                                     if (searchText.isNotEmpty()) {
                                         viewModel.searchSongs(searchText)
+                                        saveSearchHistory(searchText)
                                     }
                                 },
                                 expanded = expanded,
@@ -163,16 +198,58 @@ fun RecommendPage(
                                 }
                             }
                         } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(32.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "输入关键词搜索音乐",
-                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                )
+                            // 显示搜索历史
+                            if (searchHistory.isNotEmpty()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "搜索历史",
+                                            style = MiuixTheme.textStyles.main,
+                                            color = MiuixTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "清除",
+                                            modifier = Modifier.clickable { clearSearchHistory() },
+                                            color = MiuixTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        searchHistory.forEach { history ->
+                                            TextButton(
+                                                text = history,
+                                                onClick = {
+                                                    searchText = history
+                                                    viewModel.searchSongs(history)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(32.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "输入关键词搜索音乐",
+                                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                }
                             }
                         }
                     }
