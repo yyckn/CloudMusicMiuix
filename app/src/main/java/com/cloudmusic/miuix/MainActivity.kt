@@ -492,7 +492,8 @@ fun MainScreen(
                         isLoggedIn = true
                         currentScreen = Screen.Main
                         viewModel.loadRecommendPlaylists()
-                    }
+                    },
+                    context = androidx.compose.ui.platform.LocalContext.current
                 )
             }
             is Screen.ThemeSettings -> {

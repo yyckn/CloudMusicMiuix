@@ -74,7 +74,6 @@ fun SettingsPage(
                 ) {
                     ArrowPreference(
                         title = "主题设置",
-                        summary = "主题模式、悬浮底栏、模糊效果",
                         onClick = onThemeSettingsClick
                     )
                 }

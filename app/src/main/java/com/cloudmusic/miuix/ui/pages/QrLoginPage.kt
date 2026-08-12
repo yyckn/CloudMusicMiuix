@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,12 +38,20 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import android.content.ContentValues
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.widget.Toast
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -51,6 +60,7 @@ import com.google.zxing.qrcode.QRCodeWriter
 fun QrLoginPage(
     onBackClick: () -> Unit,
     onLoginSuccess: (String) -> Unit,
+    context: Context,
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -188,6 +198,31 @@ fun QrLoginPage(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // 保存二维码到相册按钮
+            Button(
+                onClick = {
+                    qrBitmap?.let { bitmap ->
+                        val saved = saveBitmapToGallery(context, bitmap, "qrcode_${System.currentTimeMillis()}")
+                        if (saved) {
+                            Toast.makeText(context, "保存成功", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "保存失败", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Download,
+                    contentDescription = "Download"
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = "保存二维码到相册")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 刷新登录状态按钮
             Button(
                 onClick = {
                     coroutineScope.launch {
@@ -275,5 +310,30 @@ private fun generateQrCode(content: String): Bitmap? {
     } catch (e: Exception) {
         e.printStackTrace()
         null
+    }
+}
+
+private fun saveBitmapToGallery(context: Context, bitmap: Bitmap, displayName: String): Boolean {
+    return try {
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+            }
+        }
+
+        val resolver = context.contentResolver
+        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+        uri?.let {
+            resolver.openOutputStream(it)?.use { outputStream ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+            }
+            true
+        } ?: false
+    } catch (e: Exception) {
+        e.printStackTrace()
+        false
     }
 }
