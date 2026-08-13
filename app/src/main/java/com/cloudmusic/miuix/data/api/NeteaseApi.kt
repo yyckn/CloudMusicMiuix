@@ -1093,11 +1093,16 @@ object NeteaseApi {
         }
     }
 
-    suspend fun getCloudDiskSongs(): Result<List<Track>> = withContext(Dispatchers.IO) {
+    data class CloudDiskResult(
+        val tracks: List<Track>,
+        val hasMore: Boolean
+    )
+
+    suspend fun getCloudDiskSongs(offset: Int = 0, limit: Int = 100): Result<CloudDiskResult> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()
             val url = "https://music.163.com/api/v1/cloud/get"
-            val reqData = """{"offset":0,"limit":1000}"""
+            val reqData = """{"offset":$offset,"limit":$limit}"""
             val encrypted = NeteaseCrypto.weapi(reqData)
 
             val body = FormBody.Builder()
@@ -1109,10 +1114,12 @@ object NeteaseApi {
                 .url(url)
                 .post(body)
                 .header("Referer", "https://music.163.com")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                 .header("Cookie", cookies)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .build()
+
+            android.util.Log.d("NeteaseApi", "getCloudDiskSongs - offset: $offset, limit: $limit")
 
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
@@ -1125,40 +1132,72 @@ object NeteaseApi {
             val json = gson.fromJson(responseBody, JsonObject::class.java)
                 ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
 
+            val hasMore = if (json.has("hasMore")) json.get("hasMore").asBoolean else false
+            android.util.Log.d("NeteaseApi", "getCloudDiskSongs - hasMore: $hasMore")
+
             if (!json.has("data")) {
                 return@withContext Result.failure(Exception("No data field in response"))
             }
 
             val data = json.getAsJsonArray("data")
+            android.util.Log.d("NeteaseApi", "getCloudDiskSongs - received ${data.size()} items")
+
             val tracks = mutableListOf<Track>()
             for (i in 0 until data.size()) {
                 try {
-                    val song = data.get(i).asJsonObject
-                    val artists = song.getAsJsonArray("artist")
-                    val artistName = if (artists.size() > 0) artists.get(0).asJsonObject.get("name").asString else "Unknown"
-                    val artistId = if (artists.size() > 0) artists.get(0).asJsonObject.get("id").asLong else 0L
-                    val album = song.getAsJsonObject("album")
-
+                    val item = data.get(i).asJsonObject
+                    val song = if (item.has("simpleSong")) item.getAsJsonObject("simpleSong") else item
+                    
+                    val songId = if (song.has("id")) song.get("id").asLong else 0L
+                    val songName = if (song.has("name") && !song.get("name").isJsonNull) song.get("name").asString else ""
+                    
+                    var artistName = "Unknown"
+                    if (song.has("ar") && song.get("ar").isJsonArray) {
+                        val artists = song.getAsJsonArray("ar")
+                        if (artists.size() > 0) {
+                            val artist = artists.get(0).asJsonObject
+                            if (artist.has("name") && !artist.get("name").isJsonNull) {
+                                artistName = artist.get("name").asString
+                            }
+                        }
+                    } else if (song.has("artist") && !song.get("artist").isJsonNull) {
+                        artistName = song.get("artist").asString
+                    }
+                    
+                    var albumName = ""
+                    if (song.has("al") && song.get("al").isJsonObject) {
+                        val album = song.getAsJsonObject("al")
+                        if (album.has("name") && !album.get("name").isJsonNull) {
+                            albumName = album.get("name").asString
+                        }
+                    } else if (song.has("album") && !song.get("album").isJsonNull) {
+                        albumName = song.get("album").asString
+                    }
+                    
+                    val duration = if (song.has("dt")) song.get("dt").asLong else 0L
+                    
                     tracks.add(
                         Track(
-                            id = "netrack_${song.get("songId").asLong}",
-                            title = song.get("songName").asString,
+                            id = "netrack_$songId",
+                            title = songName,
                             artist = artistName,
-                            artistId = "neartist_$artistId",
-                            album = album.get("albumName").asString,
-                            albumId = "nealbum_${album.get("albumId").asLong}",
-                            sourceUrl = "https://music.163.com/#/song?id=${song.get("songId").asLong}",
+                            artistId = "neartist_0",
+                            album = albumName,
+                            albumId = "nealbum_0",
+                            sourceUrl = "https://music.163.com/#/song?id=$songId",
                             imgUrl = "",
-                            duration = if (song.has("duration")) song.get("duration").asLong else 0L,
+                            duration = duration,
                             isVip = false
                         )
                     )
                 } catch (e: Exception) {
-                    // Skip invalid items
+                    android.util.Log.e("NeteaseApi", "getCloudDiskSongs - parse item error: ${e.message}")
                 }
             }
-            Result.success(tracks)
+            android.util.Log.d("NeteaseApi", "getCloudDiskSongs - loaded ${tracks.size} tracks, hasMore: $hasMore")
+            Result.success(CloudDiskResult(tracks, hasMore))
         } catch (e: Exception) {
+            android.util.Log.e("NeteaseApi", "getCloudDiskSongs error: ${e.message}")
             Result.failure(e)
         }
     }

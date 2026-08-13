@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cloudmusic.miuix.data.api.NeteaseApi
+import com.cloudmusic.miuix.data.model.Playlist
 import com.cloudmusic.miuix.data.model.PlaylistDetail
 import com.cloudmusic.miuix.data.model.RecommendPlaylist
 import com.cloudmusic.miuix.data.model.Track
@@ -244,20 +245,93 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun loadPlaylistDetail(playlistId: String) {
         viewModelScope.launch {
             playlistDetailState = playlistDetailState.copy(isLoading = true, error = null)
-            NeteaseApi.getPlaylistDetail(playlistId).fold(
-                onSuccess = { detail ->
+            
+            // 云盘歌单特殊处理
+            if (playlistId == "cloud_disk") {
+                cloudDiskOffset = 0
+                cloudDiskHasMore = true
+                NeteaseApi.getCloudDiskSongs(offset = 0, limit = cloudDiskLimit).fold(
+                    onSuccess = { result ->
+                        cloudDiskOffset = result.tracks.size
+                        cloudDiskHasMore = result.hasMore
+                        playlistDetailState = playlistDetailState.copy(
+                            detail = PlaylistDetail(
+                                info = Playlist(
+                                    id = "cloud_disk",
+                                    title = "云盘",
+                                    coverImgUrl = "",
+                                    sourceUrl = "",
+                                    trackCount = result.tracks.size,
+                                    description = ""
+                                ),
+                                tracks = result.tracks
+                            ),
+                            isLoading = false
+                        )
+                        currentPlaylist = result.tracks
+                        saveLastPlaylist()
+                    },
+                    onFailure = { e ->
+                        playlistDetailState = playlistDetailState.copy(
+                            isLoading = false,
+                            error = e.message ?: "Unknown error"
+                        )
+                    }
+                )
+            } else {
+                NeteaseApi.getPlaylistDetail(playlistId).fold(
+                    onSuccess = { detail ->
+                        playlistDetailState = playlistDetailState.copy(
+                            detail = detail,
+                            isLoading = false
+                        )
+                        currentPlaylist = detail.tracks
+                        saveLastPlaylist()
+                    },
+                    onFailure = { e ->
+                        playlistDetailState = playlistDetailState.copy(
+                            isLoading = false,
+                            error = e.message ?: "Unknown error"
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    // 云盘分段加载相关变量
+    private var cloudDiskOffset = 0
+    private var cloudDiskHasMore = true
+    private val cloudDiskLimit = 100
+    var isCloudDiskLoadingMore by mutableStateOf(false)
+        private set
+
+    fun loadMoreCloudDiskSongs() {
+        if (!cloudDiskHasMore || isCloudDiskLoadingMore) return
+        
+        viewModelScope.launch {
+            isCloudDiskLoadingMore = true
+            NeteaseApi.getCloudDiskSongs(offset = cloudDiskOffset, limit = cloudDiskLimit).fold(
+                onSuccess = { result ->
+                    cloudDiskOffset += result.tracks.size
+                    cloudDiskHasMore = result.hasMore
+                    
+                    val currentTracks = playlistDetailState.detail?.tracks ?: emptyList()
+                    val allTracks = currentTracks + result.tracks
+                    
                     playlistDetailState = playlistDetailState.copy(
-                        detail = detail,
-                        isLoading = false
+                        detail = playlistDetailState.detail?.copy(
+                            info = playlistDetailState.detail?.info?.copy(
+                                trackCount = allTracks.size
+                            ) ?: Playlist("", "", "", "", allTracks.size),
+                            tracks = allTracks
+                        )
                     )
-                    currentPlaylist = detail.tracks
-                    saveLastPlaylist()
+                    currentPlaylist = allTracks
+                    isCloudDiskLoadingMore = false
                 },
                 onFailure = { e ->
-                    playlistDetailState = playlistDetailState.copy(
-                        isLoading = false,
-                        error = e.message ?: "Unknown error"
-                    )
+                    isCloudDiskLoadingMore = false
                 }
             )
         }

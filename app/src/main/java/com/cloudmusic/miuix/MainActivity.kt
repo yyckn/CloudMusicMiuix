@@ -103,6 +103,18 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // 时间限制检查 - 2026年8月15日23:59:59
+        val expirationTime = java.util.Calendar.getInstance().apply {
+            set(2026, java.util.Calendar.AUGUST, 15, 23, 59, 59)
+            set(java.util.Calendar.MILLISECOND, 999)
+        }.timeInMillis
+        if (System.currentTimeMillis() > expirationTime) {
+            android.util.Log.e("MainActivity", "App expired! Current time: ${System.currentTimeMillis()}, Expiration: $expirationTime")
+            finish()
+            return
+        }
+        
         NeteaseApi.init(applicationContext)
         ThemeSettings.init(applicationContext)
         enableEdgeToEdge()
@@ -279,6 +291,7 @@ fun MainScreen(
                                                 currentScreen = Screen.PlaylistDetail(coverUrl, title)
                                             },
                                             onRefresh = { viewModel.loadUserPlaylists() },
+                                            isLoggedIn = isLoggedIn,
                                             modifier = Modifier.padding(padding)
                                         )
                                 2 -> SettingsPage(
@@ -436,6 +449,7 @@ fun MainScreen(
                                                 currentScreen = Screen.PlaylistDetail(coverUrl, title)
                                             },
                                             onRefresh = { viewModel.loadUserPlaylists() },
+                                            isLoggedIn = isLoggedIn,
                                             modifier = Modifier.padding(padding)
                                         )
                                 2 -> SettingsPage(
@@ -479,6 +493,9 @@ fun MainScreen(
                             currentTrack = viewModel.playerState.currentTrack,
                             initialCoverUrl = screen.coverUrl,
                             initialTitle = screen.title,
+                            isCloudDisk = viewModel.playlistDetailState.detail?.info?.id == "cloud_disk",
+                            isLoadingMore = viewModel.isCloudDiskLoadingMore,
+                            onLoadMore = { viewModel.loadMoreCloudDiskSongs() },
                             onBackClick = {
                                 viewModel.clearPlaylistDetail()
                                 currentScreen = Screen.Main

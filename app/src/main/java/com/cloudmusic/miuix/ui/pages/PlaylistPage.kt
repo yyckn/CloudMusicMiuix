@@ -9,10 +9,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
-import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,6 +46,7 @@ fun PlaylistPage(
     recommendState: RecommendState,
     onPlaylistClick: (String, String, String) -> Unit,
     onRefresh: () -> Unit,
+    isLoggedIn: Boolean,
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -101,27 +102,29 @@ fun PlaylistPage(
             ),
             modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
         ) {
-            LazyVerticalStaggeredGrid(
-                columns = StaggeredGridCells.Adaptive(160.dp),
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(160.dp),
                 modifier = Modifier
                     .fillMaxSize()
                     .overScrollVertical()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalItemSpacing = 12.dp
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // 云盘歌单（第一位）
-                item {
-                    UserPlaylistCard(
-                        playlist = cloudDiskPlaylist,
-                        onClick = { onPlaylistClick(cloudDiskPlaylist.id, cloudDiskPlaylist.coverImgUrl, cloudDiskPlaylist.title) }
-                    )
+                // 云盘歌单（第一位，仅登录时显示）
+                if (isLoggedIn) {
+                    item {
+                        UserPlaylistCard(
+                            playlist = cloudDiskPlaylist,
+                            onClick = { onPlaylistClick(cloudDiskPlaylist.id, cloudDiskPlaylist.coverImgUrl, cloudDiskPlaylist.title) }
+                        )
+                    }
                 }
 
                 // 我喜欢的音乐歌单
                 if (likedPlaylists.isEmpty()) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
                         Text(
                             text = "暂无喜欢的音乐",
                             modifier = Modifier.padding(vertical = 16.dp),
@@ -137,14 +140,9 @@ fun PlaylistPage(
                     }
                 }
 
-                // 我的歌单标题
-                item(span = StaggeredGridItemSpan.FullLine) {
-                    SmallTitle("我的歌单")
-                }
-
                 // 其他歌单
                 if (otherPlaylists.isEmpty()) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
                         Text(
                             text = "暂无歌单",
                             modifier = Modifier.padding(vertical = 16.dp),
@@ -194,12 +192,17 @@ private fun UserPlaylistCard(
             overflow = TextOverflow.Ellipsis
         )
 
-        Text(
-            text = "${playlist.trackCount}首音乐",
-            modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
-            style = MiuixTheme.textStyles.footnote2,
-            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-        )
+        // 云盘歌单不显示歌曲数量
+        if (!playlist.isCloudDisk) {
+            Text(
+                text = "${playlist.trackCount}首音乐",
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+                style = MiuixTheme.textStyles.footnote2,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+        } else {
+            Spacer(modifier = Modifier.height(8.dp))
+        }
     }
 }
 

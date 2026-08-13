@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,6 +61,9 @@ fun PlaylistDetailPage(
     currentTrack: Track?,
     initialCoverUrl: String = "",
     initialTitle: String = "",
+    isCloudDisk: Boolean = false,
+    isLoadingMore: Boolean = false,
+    onLoadMore: () -> Unit = {},
     onBackClick: () -> Unit,
     onTrackClick: (Track) -> Unit,
     onPlayAllClick: (List<Track>) -> Unit,
@@ -155,12 +159,32 @@ fun PlaylistDetailPage(
                 }
             } else if (playlistDetail != null) {
                 itemsIndexed(playlistDetail.tracks) { index, track ->
+                    // 当滚动到接近底部时触发加载更多
+                    if (isCloudDisk && index >= playlistDetail.tracks.size - 5 && !isLoadingMore) {
+                        LaunchedEffect(Unit) {
+                            onLoadMore()
+                        }
+                    }
                     TrackItem(
                         index = index + 1,
                         track = track,
                         isPlaying = track.id == currentTrack?.id,
                         onClick = { onTrackClick(track) }
                     )
+                }
+                
+                // 加载更多的指示器
+                if (isLoadingMore) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            InfiniteProgressIndicator()
+                        }
+                    }
                 }
             }
         }
