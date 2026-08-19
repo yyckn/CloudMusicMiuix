@@ -405,7 +405,7 @@ private fun DailyRecommendCard(
                 model = songs.firstOrNull()?.imgUrl,
                 contentDescription = "每日推荐",
                 modifier = Modifier
-                    .size(80.dp)
+                    .size(56.dp)
                     .clip(RoundedCornerShape(8.dp)),
                 contentScale = ContentScale.Crop,
                 error = painterResource(android.R.drawable.ic_menu_gallery)
@@ -416,14 +416,16 @@ private fun DailyRecommendCard(
             Column {
                 Text(
                     text = "每日推荐",
-                    fontSize = 18.sp,
+                    style = MiuixTheme.textStyles.main,
                     fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface
+                    color = MiuixTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "${songs.size}首歌曲",
-                    fontSize = 14.sp,
+                    style = MiuixTheme.textStyles.subtitle,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
             }

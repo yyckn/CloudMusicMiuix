@@ -2,18 +2,22 @@ package com.cloudmusic.miuix.ui.pages
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -103,14 +108,12 @@ fun PlaylistPage(
             ),
             modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
         ) {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(160.dp),
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .overScrollVertical()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // 云盘歌单（第一位，仅登录时显示）
@@ -125,7 +128,7 @@ fun PlaylistPage(
 
                 // 我喜欢的音乐歌单
                 if (likedPlaylists.isEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item {
                         Text(
                             text = "暂无喜欢的音乐",
                             modifier = Modifier.padding(vertical = 16.dp),
@@ -143,7 +146,7 @@ fun PlaylistPage(
 
                 // 其他歌单
                 if (otherPlaylists.isEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item {
                         Text(
                             text = "暂无歌单",
                             modifier = Modifier.padding(vertical = 16.dp),
@@ -175,42 +178,42 @@ private fun UserPlaylistCard(
         showIndication = true,
         onClick = onClick
     ) {
-        AsyncImage(
-            model = playlist.coverImgUrl,
-            contentDescription = playlist.title,
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1f),
-            contentScale = ContentScale.Crop,
-            error = painterResource(android.R.drawable.ic_menu_gallery)
-        )
-
-        // 固定两行高度的标题区域
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            contentAlignment = Alignment.CenterStart
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = playlist.title,
-                style = MiuixTheme.textStyles.body2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+            AsyncImage(
+                model = playlist.coverImgUrl,
+                contentDescription = playlist.title,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Crop,
+                error = painterResource(android.R.drawable.ic_menu_gallery)
             )
-        }
 
-        // 云盘歌单不显示歌曲数量
-        if (!playlist.isCloudDisk) {
-            Text(
-                text = "${playlist.trackCount}首音乐",
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
-                style = MiuixTheme.textStyles.footnote2,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-            )
-        } else {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column {
+                Text(
+                    text = playlist.title,
+                    style = MiuixTheme.textStyles.main,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                if (!playlist.isCloudDisk) {
+                    Text(
+                        text = "${playlist.trackCount}首歌曲",
+                        style = MiuixTheme.textStyles.subtitle,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+            }
         }
     }
 }
