@@ -9,12 +9,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -32,6 +37,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpSize
@@ -105,21 +112,29 @@ fun PlayerPage(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = track?.title ?: "播放",
-                largeTitle = track?.title ?: "播放",
-                scrollBehavior = scrollBehavior,
-                defaultWindowInsetsPadding = false,
-                navigationIcon = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .clickable { onBackClick() }
-                    )
-                },
-                actions = {
+            // 简单的TopBar，不使用大标题
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MiuixTheme.colorScheme.surface)
+                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                    .padding(horizontal = 8.dp, vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 返回按钮
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    // 更多按钮
                     Box {
                         IconButton(
                             onClick = { showMoreMenu = true }
@@ -150,19 +165,8 @@ fun PlayerPage(
                             }
                         }
                     }
-                },
-                bottomContent = {
-                    // 歌手 - 专辑
-                    Text(
-                        text = "${track?.artist ?: ""} - ${track?.album ?: ""}",
-                        fontSize = MiuixTheme.textStyles.body2.fontSize,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(start = 26.dp, end = 26.dp, bottom = 8.dp)
-                    )
                 }
-            )
+            }
         }
     ) { paddingValues ->
         val configuration = LocalConfiguration.current
@@ -171,7 +175,10 @@ fun PlayerPage(
         val topPadding = paddingValues.calculateTopPadding()
         // 预留底部控件高度：Slider区域 + 按钮区域 + 底部间距
         val bottomReserved = 186.dp
-        val availableHeight = screenHeight - topPadding - bottomReserved
+        // 标题区域高度（歌曲名称 + 歌手专辑 + 间距）
+        val titleAreaHeight = 80.dp
+        // 封面可用高度 = 屏幕高度 - 顶部padding - 底部预留 - 标题区域高度 - 额外间距
+        val availableHeight = screenHeight - topPadding - bottomReserved - titleAreaHeight - 32.dp
         val imageSize = minOf(availableHeight, screenWidth - 24.dp).coerceAtLeast(0.dp)
 
         Box(modifier = Modifier.fillMaxSize()) {
@@ -179,23 +186,55 @@ fun PlayerPage(
                 modifier = Modifier
                     .padding(top = topPadding)
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(horizontal = 24.dp)
             ) {
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // 封面图片
-                AsyncImage(
-                    model = track?.imgUrl,
-                    contentDescription = track?.title,
+                // 歌曲标题和信息（紧贴TopAppBar）
+                Column(
                     modifier = Modifier
-                        .size(imageSize)
-                        .clip(RoundedCornerShape(16.dp)),
-                    contentScale = ContentScale.Crop,
-                    error = painterResource(android.R.drawable.ic_menu_gallery)
-                )
+                        .fillMaxWidth()
+                        .padding(top = 8.dp, bottom = 16.dp)
+                ) {
+                    // 歌曲名称
+                    Text(
+                        text = track?.title ?: "未知歌曲",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-                Spacer(modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // 歌手 - 专辑
+                    Text(
+                        text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}",
+                        fontSize = 16.sp,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // 封面图片（居中显示）
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = track?.imgUrl,
+                        contentDescription = track?.title,
+                        modifier = Modifier
+                            .size(imageSize)
+                            .clip(RoundedCornerShape(16.dp)),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(android.R.drawable.ic_menu_gallery)
+                    )
+                }
 
                 // 播放进度条
                 val progress = if (playerState.duration > 0) {
