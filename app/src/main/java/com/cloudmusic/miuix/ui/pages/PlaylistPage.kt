@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -184,13 +185,21 @@ private fun UserPlaylistCard(
             error = painterResource(android.R.drawable.ic_menu_gallery)
         )
 
-        Text(
-            text = playlist.title,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            style = MiuixTheme.textStyles.body2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+        // 固定两行高度的标题区域
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(
+                text = playlist.title,
+                style = MiuixTheme.textStyles.body2,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
 
         // 云盘歌单不显示歌曲数量
         if (!playlist.isCloudDisk) {

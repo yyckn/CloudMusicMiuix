@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,9 +15,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,9 +34,13 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.cloudmusic.miuix.data.model.Track
 import com.cloudmusic.miuix.viewmodel.PlayerState
+import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -35,10 +48,21 @@ import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.DropdownImpl
+import top.yukonga.miuix.kmp.basic.ListPopupColumn
+import top.yukonga.miuix.kmp.basic.PopupPositionProvider
+import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.ChevronForward
+import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.icon.extended.ListView
+import top.yukonga.miuix.kmp.icon.extended.Location
+import top.yukonga.miuix.kmp.icon.extended.More
+import top.yukonga.miuix.kmp.icon.extended.Notes
 import top.yukonga.miuix.kmp.icon.extended.Pause
 import top.yukonga.miuix.kmp.icon.extended.Play
 import androidx.compose.material.icons.Icons
@@ -47,15 +71,33 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 @Composable
 fun PlayerPage(
     playerState: PlayerState,
+    currentPlaylist: List<Track> = emptyList(),
     onBackClick: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onSeekTo: (Long) -> Unit,
+    onDownload: () -> Unit = {},
+    onPlayTrack: (Track) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     val track = playerState.currentTrack
+    var showMoreMenu by remember { mutableStateOf(false) }
+    var showPlaylistSheet by remember { mutableStateOf(false) }
+    val playlistListState = rememberLazyListState()
+
+    // 打开播放列表时自动定位到当前歌曲
+    LaunchedEffect(showPlaylistSheet) {
+        if (showPlaylistSheet) {
+            val currentIndex = currentPlaylist.indexOfFirst { 
+                it.id == playerState.currentTrack?.id 
+            }
+            if (currentIndex >= 0) {
+                playlistListState.scrollToItem(currentIndex)
+            }
+        }
+    }
 
     BackHandler {
         onBackClick()
@@ -76,6 +118,38 @@ fun PlayerPage(
                             .padding(start = 8.dp)
                             .clickable { onBackClick() }
                     )
+                },
+                actions = {
+                    Box {
+                        IconButton(
+                            onClick = { showMoreMenu = true }
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.More,
+                                contentDescription = "更多",
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
+                        }
+                        OverlayListPopup(
+                            show = showMoreMenu,
+                            alignment = PopupPositionProvider.Align.TopEnd,
+                            onDismissRequest = { showMoreMenu = false }
+                        ) {
+                            ListPopupColumn {
+                                DropdownImpl(
+                                    text = "下载此歌曲",
+                                    optionSize = 1,
+                                    isSelected = false,
+                                    index = 0,
+                                    enabled = true,
+                                    onSelectedIndexChange = {
+                                        showMoreMenu = false
+                                        onDownload()
+                                    }
+                                )
+                            }
+                        }
+                    }
                 },
                 bottomContent = {
                     // 歌手 - 专辑
@@ -100,119 +174,228 @@ fun PlayerPage(
         val availableHeight = screenHeight - topPadding - bottomReserved
         val imageSize = minOf(availableHeight, screenWidth - 24.dp).coerceAtLeast(0.dp)
 
-        Column(
-            modifier = Modifier
-                .padding(top = topPadding)
-                .fillMaxSize()
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 封面图片
-            AsyncImage(
-                model = track?.imgUrl,
-                contentDescription = track?.title,
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
-                    .size(imageSize)
-                    .clip(RoundedCornerShape(16.dp)),
-                contentScale = ContentScale.Crop,
-                error = painterResource(android.R.drawable.ic_menu_gallery)
-            )
+                    .padding(top = topPadding)
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.weight(1f))
+                // 封面图片
+                AsyncImage(
+                    model = track?.imgUrl,
+                    contentDescription = track?.title,
+                    modifier = Modifier
+                        .size(imageSize)
+                        .clip(RoundedCornerShape(16.dp)),
+                    contentScale = ContentScale.Crop,
+                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                )
 
-            // 播放进度条
-            val progress = if (playerState.duration > 0) {
-                playerState.currentPosition.toFloat() / playerState.duration.toFloat()
-            } else {
-                0f
+                Spacer(modifier = Modifier.weight(1f))
+
+                // 播放进度条
+                val progress = if (playerState.duration > 0) {
+                    playerState.currentPosition.toFloat() / playerState.duration.toFloat()
+                } else {
+                    0f
+                }
+
+                Slider(
+                    value = progress,
+                    onValueChange = { newValue ->
+                        val newPosition = (newValue * playerState.duration).toLong()
+                        onSeekTo(newPosition)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 4.dp)
+                )
+
+                // 时间显示和音质
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = formatDuration(playerState.currentPosition),
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = getQualityText(playerState.bitrate),
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = formatDuration(playerState.duration),
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+
+                // 控制器区域
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 48.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 歌词按钮
+                    IconButton(
+                        onClick = { /* 暂不实现 */ },
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Notes,
+                            contentDescription = "歌词",
+                            tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    // 上一首按钮
+                    IconButton(
+                        onClick = onPrevious,
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.ChevronBackward,
+                            contentDescription = "上一首",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+
+                    // 播放/暂停按钮
+                    IconButton(
+                        onClick = onTogglePlayPause,
+                        modifier = Modifier.size(72.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
+                            contentDescription = if (playerState.isPlaying) "暂停" else "播放",
+                            tint = MiuixTheme.colorScheme.primary,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+
+                    // 下一首按钮
+                    IconButton(
+                        onClick = onNext,
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.ChevronForward,
+                            contentDescription = "下一首",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+
+                    // 播放列表按钮
+                    IconButton(
+                        onClick = { showPlaylistSheet = true },
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.ListView,
+                            contentDescription = "播放列表",
+                            tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
             }
 
-            Slider(
-                value = progress,
-                onValueChange = { newValue ->
-                    val newPosition = (newValue * playerState.duration).toLong()
-                    onSeekTo(newPosition)
+            // 播放列表抽屉（作为覆盖层）
+            var shouldScrollToCurrent by remember { mutableStateOf(false) }
+            
+            LaunchedEffect(shouldScrollToCurrent) {
+                if (shouldScrollToCurrent) {
+                    val currentIndex = currentPlaylist.indexOfFirst { 
+                        it.id == playerState.currentTrack?.id 
+                    }
+                    if (currentIndex >= 0) {
+                        playlistListState.animateScrollToItem(currentIndex)
+                    }
+                    shouldScrollToCurrent = false
+                }
+            }
+            
+            OverlayBottomSheet(
+                show = showPlaylistSheet,
+                title = "播放列表",
+                insideMargin = DpSize(12.dp, 0.dp),
+                startAction = {
+                    IconButton(
+                        onClick = { shouldScrollToCurrent = true }
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Location,
+                            contentDescription = "定位到当前歌曲",
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 4.dp)
-            )
-
-            // 时间显示和音质
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                endAction = {
+                    IconButton(
+                        onClick = { showPlaylistSheet = false }
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Close,
+                            contentDescription = "关闭",
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
+                },
+                onDismissRequest = { showPlaylistSheet = false }
             ) {
-                Text(
-                    text = formatDuration(playerState.currentPosition),
-                    fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-                Text(
-                    text = getQualityText(playerState.bitrate),
-                    fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.primary
-                )
-                Text(
-                    text = formatDuration(playerState.duration),
-                    fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
-
-            // 控制器区域
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 48.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 上一首按钮
-                IconButton(
-                    onClick = onPrevious,
-                    modifier = Modifier.size(56.dp)
-                ) {
-                    Icon(
-                        imageVector = MiuixIcons.ChevronBackward,
-                        contentDescription = "上一首",
-                        tint = MiuixTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                // 播放/暂停按钮
-                IconButton(
-                    onClick = onTogglePlayPause,
-                    modifier = Modifier.size(72.dp)
-                ) {
-                    Icon(
-                        imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
-                        contentDescription = if (playerState.isPlaying) "暂停" else "播放",
-                        tint = MiuixTheme.colorScheme.primary,
-                        modifier = Modifier.size(40.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                // 下一首按钮
-                IconButton(
-                    onClick = onNext,
-                    modifier = Modifier.size(56.dp)
-                ) {
-                    Icon(
-                        imageVector = MiuixIcons.ChevronForward,
-                        contentDescription = "下一首",
-                        tint = MiuixTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(32.dp)
-                    )
+                if (currentPlaylist.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "暂无歌曲",
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        state = playlistListState,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        items(currentPlaylist) { track ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                pressFeedbackType = PressFeedbackType.Tilt,
+                                showIndication = true,
+                                onClick = {
+                                    onPlayTrack(track)
+                                    showPlaylistSheet = false
+                                }
+                            ) {
+                                TrackItem(
+                                    track = track,
+                                    isPlaying = track.id == playerState.currentTrack?.id,
+                                    onClick = {
+                                        onPlayTrack(track)
+                                        showPlaylistSheet = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

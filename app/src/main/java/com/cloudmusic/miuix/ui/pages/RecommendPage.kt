@@ -314,11 +314,8 @@ fun RecommendPage(
                             DailyRecommendCard(
                                 songs = recommendState.dailySongs,
                                 onClick = {
-                                    viewModel.currentPlaylist = recommendState.dailySongs
-                                    if (recommendState.dailySongs.isNotEmpty()) {
-                                        viewModel.playTrack(recommendState.dailySongs.first())
-                                        onOpenPlayerPage()
-                                    }
+                                    // 跳转到每日推荐歌单详情页
+                                    onPlaylistClick("daily_recommend", "", "每日推荐")
                                 }
                             )
                         }
@@ -359,13 +356,21 @@ private fun RecommendPlaylistCard(
             error = painterResource(android.R.drawable.ic_menu_gallery)
         )
 
-        Text(
-            text = playlist.title,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            style = MiuixTheme.textStyles.body2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+        // 固定两行高度的标题区域
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(
+                text = playlist.title,
+                style = MiuixTheme.textStyles.body2,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
 
         if (playlist.playCount > 0) {
             Text(

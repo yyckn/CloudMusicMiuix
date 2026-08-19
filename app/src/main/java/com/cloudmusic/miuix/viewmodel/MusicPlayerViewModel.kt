@@ -150,7 +150,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
         viewModelScope.launch {
             NeteaseApi.getSongUrl(track.id).fold(
-                onSuccess = { (url, bitrate) ->
+                onSuccess = { (url, bitrate, _) ->
                     try {
                         mediaPlaybackService?.let { service ->
                             service.setPlaylist(currentPlaylist)
@@ -246,8 +246,26 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             playlistDetailState = playlistDetailState.copy(isLoading = true, error = null)
             
+            // 每日推荐歌单特殊处理
+            if (playlistId == "daily_recommend") {
+                val dailySongs = recommendState.dailySongs
+                playlistDetailState = playlistDetailState.copy(
+                    detail = PlaylistDetail(
+                        info = Playlist(
+                            id = "daily_recommend",
+                            title = "每日推荐",
+                            coverImgUrl = dailySongs.firstOrNull()?.imgUrl ?: "",
+                            sourceUrl = "",
+                            trackCount = dailySongs.size,
+                            description = "根据你的音乐口味生成"
+                        ),
+                        tracks = dailySongs
+                    ),
+                    isLoading = false
+                )
+            }
             // 云盘歌单特殊处理
-            if (playlistId == "cloud_disk") {
+            else if (playlistId == "cloud_disk") {
                 cloudDiskOffset = 0
                 cloudDiskHasMore = true
                 NeteaseApi.getCloudDiskSongs(offset = 0, limit = cloudDiskLimit).fold(
@@ -268,8 +286,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             ),
                             isLoading = false
                         )
-                        currentPlaylist = result.tracks
-                        saveLastPlaylist()
                     },
                     onFailure = { e ->
                         playlistDetailState = playlistDetailState.copy(
@@ -285,8 +301,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             detail = detail,
                             isLoading = false
                         )
-                        currentPlaylist = detail.tracks
-                        saveLastPlaylist()
                     },
                     onFailure = { e ->
                         playlistDetailState = playlistDetailState.copy(
@@ -372,7 +386,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             saveLastPlaylist()
 
             NeteaseApi.getSongUrl(track.id).fold(
-                onSuccess = { (url, bitrate) ->
+                onSuccess = { (url, bitrate, _) ->
                     try {
                         mediaPlaybackService?.let { service ->
                             service.setPlaylist(currentPlaylist)
@@ -425,6 +439,40 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val index = currentPlaylist.indexOfFirst { it.id == current.id }
         if (index > 0) {
             playTrack(currentPlaylist[index - 1])
+        }
+    }
+
+    fun downloadCurrentTrack() {
+        val track = playerState.currentTrack ?: return
+        viewModelScope.launch {
+            NeteaseApi.getSongUrl(track.id).fold(
+                onSuccess = { (url, _, type) ->
+                    if (url.isNotEmpty()) {
+                        // 触发下载
+                        downloadSong(url, track.title, track.artist, type)
+                    }
+                },
+                onFailure = { e ->
+                    android.util.Log.e("MusicPlayerViewModel", "Failed to get download URL: ${e.message}")
+                }
+            )
+        }
+    }
+
+    private fun downloadSong(url: String, title: String, artist: String, type: String = "mp3") {
+        try {
+            val context = getApplication<Application>()
+            val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+            val fileName = "$title - $artist.$type"
+            val request = android.app.DownloadManager.Request(android.net.Uri.parse(url))
+                .setTitle("$title - $artist")
+                .setDescription("正在下载歌曲")
+                .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_MUSIC, fileName)
+            downloadManager.enqueue(request)
+            android.util.Log.d("MusicPlayerViewModel", "Download started: $fileName")
+        } catch (e: Exception) {
+            android.util.Log.e("MusicPlayerViewModel", "Download failed: ${e.message}")
         }
     }
 

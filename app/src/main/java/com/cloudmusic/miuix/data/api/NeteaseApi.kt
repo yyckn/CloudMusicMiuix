@@ -434,7 +434,7 @@ object NeteaseApi {
         }
     }
 
-    suspend fun getSongUrl(songId: String): Result<Pair<String, Int>> = withContext(Dispatchers.IO) {
+    suspend fun getSongUrl(songId: String): Result<Triple<String, Int, String>> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()
             val id = songId.removePrefix("netrack_")
@@ -486,7 +486,18 @@ object NeteaseApi {
                     return@withContext Result.failure(Exception("Song not available"))
                 }
                 val bitrate = if (songData.has("br")) songData.get("br").asInt else 128000
-                Result.success(Pair(songUrl, bitrate))
+                val type = if (songData.has("type") && !songData.get("type").isJsonNull) {
+                    songData.get("type").asString.lowercase()
+                } else {
+                    // 从URL推断格式
+                    when {
+                        songUrl.contains(".flac") -> "flac"
+                        songUrl.contains(".mp3") -> "mp3"
+                        else -> "mp3"
+                    }
+                }
+                android.util.Log.d("NeteaseApi", "getSongUrl - URL: $songUrl, bitrate: $bitrate, type: $type")
+                Result.success(Triple(songUrl, bitrate, type))
             } else {
                 Result.failure(Exception("No data"))
             }

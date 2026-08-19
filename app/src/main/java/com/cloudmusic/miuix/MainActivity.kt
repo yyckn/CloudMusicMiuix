@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -80,9 +81,13 @@ import top.yukonga.miuix.kmp.basic.NavigationRailItem
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.NavigationRailValue
 import top.yukonga.miuix.kmp.basic.rememberNavigationRailState
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.ListView
+import top.yukonga.miuix.kmp.icon.extended.Location
+import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 
@@ -200,10 +205,60 @@ fun MainScreen(
                                 }
                             ) { padding ->
                                 // 播放列表抽屉
+                                val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                                var shouldScrollToCurrent by remember { mutableStateOf(false) }
+                                
+                                // 处理定位到当前歌曲
+                                LaunchedEffect(shouldScrollToCurrent) {
+                                    if (shouldScrollToCurrent) {
+                                        val currentIndex = viewModel.currentPlaylist.indexOfFirst { 
+                                            it.id == viewModel.playerState.currentTrack?.id 
+                                        }
+                                        if (currentIndex >= 0) {
+                                            listState.animateScrollToItem(currentIndex)
+                                        }
+                                        shouldScrollToCurrent = false
+                                    }
+                                }
+                                
+                                // 打开抽屉时自动定位到正在播放的歌曲
+                                LaunchedEffect(showPlaylistSheet) {
+                                    if (showPlaylistSheet) {
+                                        val currentIndex = viewModel.currentPlaylist.indexOfFirst { 
+                                            it.id == viewModel.playerState.currentTrack?.id 
+                                        }
+                                        if (currentIndex >= 0) {
+                                            listState.scrollToItem(currentIndex)
+                                        }
+                                    }
+                                }
+                                
                                 OverlayBottomSheet(
                                     show = showPlaylistSheet,
                                     title = "播放列表",
                                     insideMargin = DpSize(12.dp, 0.dp),
+                                    startAction = {
+                                        IconButton(
+                                            onClick = { shouldScrollToCurrent = true }
+                                        ) {
+                                            Icon(
+                                                imageVector = MiuixIcons.Location,
+                                                contentDescription = "定位到当前歌曲",
+                                                tint = MiuixTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    },
+                                    endAction = {
+                                        IconButton(
+                                            onClick = { showPlaylistSheet = false }
+                                        ) {
+                                            Icon(
+                                                imageVector = MiuixIcons.Close,
+                                                contentDescription = "关闭",
+                                                tint = MiuixTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    },
                                     onDismissRequest = { showPlaylistSheet = false }
                                 ) {
                                     if (viewModel.currentPlaylist.isEmpty()) {
@@ -220,14 +275,13 @@ fun MainScreen(
                                         }
                                     } else {
                                         LazyColumn(
+                                            state = listState,
                                             modifier = Modifier.fillMaxWidth(),
                                             contentPadding = PaddingValues(vertical = 8.dp)
                                         ) {
                                             items(viewModel.currentPlaylist) { track ->
                                                 Card(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(vertical = 4.dp),
+                                                    modifier = Modifier.fillMaxWidth(),
                                                     pressFeedbackType = PressFeedbackType.Tilt,
                                                     showIndication = true,
                                                     onClick = {
@@ -358,10 +412,60 @@ fun MainScreen(
                             }
                         ) { padding ->
                             // 播放列表抽屉
+                            val listState = rememberLazyListState()
+                            var shouldScrollToCurrent by remember { mutableStateOf(false) }
+                            
+                            // 处理定位到当前歌曲
+                            LaunchedEffect(shouldScrollToCurrent) {
+                                if (shouldScrollToCurrent) {
+                                    val currentIndex = viewModel.currentPlaylist.indexOfFirst { 
+                                        it.id == viewModel.playerState.currentTrack?.id 
+                                    }
+                                    if (currentIndex >= 0) {
+                                        listState.animateScrollToItem(currentIndex)
+                                    }
+                                    shouldScrollToCurrent = false
+                                }
+                            }
+                            
+                            // 打开抽屉时自动定位到正在播放的歌曲
+                            LaunchedEffect(showPlaylistSheet) {
+                                if (showPlaylistSheet) {
+                                    val currentIndex = viewModel.currentPlaylist.indexOfFirst { 
+                                        it.id == viewModel.playerState.currentTrack?.id 
+                                    }
+                                    if (currentIndex >= 0) {
+                                        listState.scrollToItem(currentIndex)
+                                    }
+                                }
+                            }
+                            
                             OverlayBottomSheet(
                                 show = showPlaylistSheet,
                                 title = "播放列表",
                                 insideMargin = DpSize(12.dp, 0.dp),
+                                startAction = {
+                                    IconButton(
+                                        onClick = { shouldScrollToCurrent = true }
+                                    ) {
+                                        Icon(
+                                            imageVector = MiuixIcons.Location,
+                                            contentDescription = "定位到当前歌曲",
+                                            tint = MiuixTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                },
+                                endAction = {
+                                    IconButton(
+                                        onClick = { showPlaylistSheet = false }
+                                    ) {
+                                        Icon(
+                                            imageVector = MiuixIcons.Close,
+                                            contentDescription = "关闭",
+                                            tint = MiuixTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                },
                                 onDismissRequest = { showPlaylistSheet = false }
                             ) {
                                 if (viewModel.currentPlaylist.isEmpty()) {
@@ -378,14 +482,13 @@ fun MainScreen(
                                     }
                                 } else {
                                     LazyColumn(
+                                        state = listState,
                                         modifier = Modifier.fillMaxWidth(),
                                         contentPadding = PaddingValues(vertical = 8.dp)
                                     ) {
                                         items(viewModel.currentPlaylist) { track ->
                                             Card(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(vertical = 4.dp),
+                                                modifier = Modifier.fillMaxWidth(),
                                                 pressFeedbackType = PressFeedbackType.Tilt,
                                                 showIndication = true,
                                                 onClick = {
@@ -468,12 +571,112 @@ fun MainScreen(
                                 playerState = viewModel.playerState,
                                 onTogglePlayPause = { viewModel.togglePlayPause() },
                                 onPlayerBarClick = { showPlayerPage = true },
+                                onSwipeUp = { showPlayerPage = true },
+                                onPlaylistClick = { showPlaylistSheet = true },
                                 sharedTransitionScope = this@SharedTransitionLayout,
                                 animatedVisibilityScope = this@AnimatedContent,
                                 hasBottomBar = false
                             )
                         }
                     ) { padding ->
+                        // 播放列表抽屉
+                        val listState = rememberLazyListState()
+                        var shouldScrollToCurrent by remember { mutableStateOf(false) }
+                        
+                        // 处理定位到当前歌曲
+                        LaunchedEffect(shouldScrollToCurrent) {
+                            if (shouldScrollToCurrent) {
+                                val currentIndex = viewModel.currentPlaylist.indexOfFirst { 
+                                    it.id == viewModel.playerState.currentTrack?.id 
+                                }
+                                if (currentIndex >= 0) {
+                                    listState.animateScrollToItem(currentIndex)
+                                }
+                                shouldScrollToCurrent = false
+                            }
+                        }
+                        
+                        // 打开抽屉时自动定位到正在播放的歌曲
+                        LaunchedEffect(showPlaylistSheet) {
+                            if (showPlaylistSheet) {
+                                val currentIndex = viewModel.currentPlaylist.indexOfFirst { 
+                                    it.id == viewModel.playerState.currentTrack?.id 
+                                }
+                                if (currentIndex >= 0) {
+                                    listState.scrollToItem(currentIndex)
+                                }
+                            }
+                        }
+                        
+                        OverlayBottomSheet(
+                            show = showPlaylistSheet,
+                            title = "播放列表",
+                            insideMargin = DpSize(12.dp, 0.dp),
+                            startAction = {
+                                IconButton(
+                                    onClick = { shouldScrollToCurrent = true }
+                                ) {
+                                    Icon(
+                                        imageVector = MiuixIcons.Location,
+                                        contentDescription = "定位到当前歌曲",
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
+                                }
+                            },
+                            endAction = {
+                                IconButton(
+                                    onClick = { showPlaylistSheet = false }
+                                ) {
+                                    Icon(
+                                        imageVector = MiuixIcons.Close,
+                                        contentDescription = "关闭",
+                                        tint = MiuixTheme.colorScheme.onSurface
+                                    )
+                                }
+                            },
+                            onDismissRequest = { showPlaylistSheet = false }
+                        ) {
+                            if (viewModel.currentPlaylist.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "暂无歌曲",
+                                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                }
+                            } else {
+                                LazyColumn(
+                                    state = listState,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentPadding = PaddingValues(vertical = 8.dp)
+                                ) {
+                                    items(viewModel.currentPlaylist) { track ->
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            pressFeedbackType = PressFeedbackType.Tilt,
+                                            showIndication = true,
+                                            onClick = {
+                                                viewModel.playTrack(track)
+                                                showPlaylistSheet = false
+                                            }
+                                        ) {
+                                            TrackItem(
+                                                track = track,
+                                                isPlaying = track.id == viewModel.playerState.currentTrack?.id,
+                                                onClick = {
+                                                    viewModel.playTrack(track)
+                                                    showPlaylistSheet = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         PlaylistDetailPage(
                             playlistDetail = viewModel.playlistDetailState.detail,
                             isLoading = viewModel.playlistDetailState.isLoading,
@@ -489,6 +692,11 @@ fun MainScreen(
                                 currentScreen = Screen.Main
                             },
                             onTrackClick = { track ->
+                                // 点击歌曲时替换播放列表
+                                val tracks = viewModel.playlistDetailState.detail?.tracks
+                                if (tracks != null) {
+                                    viewModel.currentPlaylist = tracks
+                                }
                                 viewModel.playTrack(track)
                             },
                             onPlayAllClick = { tracks ->
@@ -572,11 +780,14 @@ fun MainScreen(
         ) {
             PlayerPage(
                 playerState = viewModel.playerState,
+                currentPlaylist = viewModel.currentPlaylist,
                 onBackClick = { showPlayerPage = false },
                 onTogglePlayPause = { viewModel.togglePlayPause() },
                 onPrevious = { viewModel.playPrevious() },
                 onNext = { viewModel.playNext() },
-                onSeekTo = { position -> viewModel.seekTo(position) }
+                onSeekTo = { position -> viewModel.seekTo(position) },
+                onDownload = { viewModel.downloadCurrentTrack() },
+                onPlayTrack = { track -> viewModel.playTrack(track) }
             )
         }
     }
