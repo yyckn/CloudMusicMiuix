@@ -1267,13 +1267,36 @@ object NeteaseApi {
                     tlyric.get("lyric").asString else ""
             } else ""
 
-            android.util.Log.d("NeteaseApi", "getSongLyric - lrc length: ${lrcLyric.length}")
-            android.util.Log.d("NeteaseApi", "getSongLyric - lrc content: ${lrcLyric.take(300)}")
-            android.util.Log.d("NeteaseApi", "getSongLyric - tlyric length: ${tLyric.length}")
+            // 获取YRC逐字歌词
+            val yrcLyric = if (json.has("yrc") && !json.get("yrc").isJsonNull) {
+                val yrc = json.getAsJsonObject("yrc")
+                if (yrc.has("lyric") && !yrc.get("lyric").isJsonNull) yrc.get("lyric").asString else ""
+            } else ""
 
-            val lyrics = parseLrc(lrcLyric, tLyric)
-            android.util.Log.d("NeteaseApi", "getSongLyric - parsed ${lyrics.lines.size} lyric lines")
-            Result.success(lyrics)
+            android.util.Log.d("NeteaseApi", "getSongLyric - lrc length: ${lrcLyric.length}")
+            android.util.Log.d("NeteaseApi", "getSongLyric - tlyric length: ${tLyric.length}")
+            android.util.Log.d("NeteaseApi", "getSongLyric - yrc length: ${yrcLyric.length}")
+
+            // 优先使用YRC逐字歌词，否则使用LRC
+            val lyrics = if (yrcLyric.isNotEmpty()) {
+                parseYrc(yrcLyric, tLyric)
+            } else {
+                parseLrc(lrcLyric, tLyric)
+            }
+            
+            // 判断是否为纯音乐：歌词小于3行且包含"纯音乐"关键词
+            val isPureMusic = lyrics.lines.size < 3 && lyrics.lines.any { 
+                it.text.contains("纯音乐") || it.text.contains("纯音乐，请欣赏") 
+            }
+            
+            val result = if (isPureMusic) {
+                SongLyrics(lines = lyrics.lines, isPureMusic = true)
+            } else {
+                lyrics
+            }
+            
+            android.util.Log.d("NeteaseApi", "getSongLyric - parsed ${result.lines.size} lyric lines, isPureMusic: ${result.isPureMusic}")
+            Result.success(result)
         } catch (e: Exception) {
             android.util.Log.e("NeteaseApi", "getSongLyric error: ${e.message}")
             Result.failure(e)
@@ -1325,6 +1348,84 @@ object NeteaseApi {
                     val translation = tlyricMap[time] ?: ""
                     lines.add(LyricLine(text = text, translation = translation, startAt = time))
                 }
+            }
+        }
+
+        return SongLyrics(lines = lines.sortedBy { it.startAt })
+    }
+
+    /**
+     * 解析YRC逐字歌词格式
+     * 格式示例: [12580,3470](12580,250,0)难(12830,300,0)忘
+     */
+    private fun parseYrc(yrc: String, tlyric: String): SongLyrics {
+        val headerRegex = Regex("""\[(\d{1,19}),\s*(\d{1,19})]""")
+        val segRegex = Regex("""\((\d{1,19}),\s*(\d{1,19}),\s*[-\d]{1,20}\)([^()\n\r]*)""")
+        val tlyricRegex = Regex("""\[(\d+):(\d+\.\d+)](.*)""")
+        
+        // 解析翻译歌词
+        val tlyricMap = mutableMapOf<Long, String>()
+        if (tlyric.isNotEmpty()) {
+            for (line in tlyric.split("\n")) {
+                val match = tlyricRegex.find(line)
+                if (match != null) {
+                    val min = match.groupValues[1].toLong()
+                    val sec = (match.groupValues[2].toDouble() * 1000).toLong()
+                    val time = min * 60 * 1000 + sec
+                    val text = match.groupValues[3].trim()
+                    if (text.isNotEmpty()) {
+                        tlyricMap[time] = text
+                    }
+                }
+            }
+        }
+
+        val lines = mutableListOf<LyricLine>()
+        var foundFirstNonColonLine = false
+
+        for (line in yrc.split("\n")) {
+            val header = headerRegex.find(line) ?: continue
+            val start = header.groupValues[1].toLong()
+            val dur = header.groupValues[2].toLong()
+            val end = start + dur
+
+            val segs = segRegex.findAll(line).toList()
+            val words = mutableListOf<com.cloudmusic.miuix.data.model.LyricWord>()
+            val sb = StringBuilder()
+            
+            for (m in segs) {
+                val ws = m.groupValues[1].toLong()
+                val wd = m.groupValues[2].toLong()
+                val t = m.groupValues[3]
+                sb.append(t)
+                words.add(com.cloudmusic.miuix.data.model.LyricWord(
+                    text = t,
+                    startAt = ws,
+                    endAt = ws + wd
+                ))
+            }
+
+            val text = sb.toString().trim()
+            if (text.isNotEmpty()) {
+                // 跳过开头连续的冒号行
+                if (!foundFirstNonColonLine) {
+                    if (text.contains(":") || text.contains("：")) {
+                        continue
+                    } else {
+                        foundFirstNonColonLine = true
+                    }
+                }
+
+                // 查找翻译（使用开始时间匹配）
+                val translation = tlyricMap[start] ?: ""
+                
+                lines.add(LyricLine(
+                    text = text,
+                    translation = translation,
+                    startAt = start,
+                    endAt = end,
+                    words = words.takeIf { it.isNotEmpty() }
+                ))
             }
         }
 

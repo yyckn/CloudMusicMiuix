@@ -18,6 +18,11 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.CloudMusicMiuix">
+        
+        <!-- Lyricon词幕适配 -->
+        <meta-data android:name="lyricon_module" android:value="true" />
+        <meta-data android:name="lyricon_module_author" android:value="yyckn" />
+        <meta-data android:name="lyricon_module_description" android:value="基于Miuix框架开发的网易云音乐客户端" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

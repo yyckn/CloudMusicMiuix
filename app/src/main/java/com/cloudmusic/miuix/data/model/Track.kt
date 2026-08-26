@@ -60,9 +60,18 @@ data class UserProfile(
 data class LyricLine(
     val text: String,
     val translation: String = "",
-    val startAt: Long // 毫秒
+    val startAt: Long, // 毫秒
+    val endAt: Long = 0, // 毫秒
+    val words: List<LyricWord>? = null // 逐字歌词
+)
+
+data class LyricWord(
+    val text: String,
+    val startAt: Long, // 毫秒
+    val endAt: Long // 毫秒
 )
 
 data class SongLyrics(
-    val lines: List<LyricLine> = emptyList()
+    val lines: List<LyricLine> = emptyList(),
+    val isPureMusic: Boolean = false
 )

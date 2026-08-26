@@ -43,6 +43,10 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     
     // 回调接口，用于通知ViewModel歌曲切换
     var onTrackChangedListener: OnTrackChangedListener? = null
+    
+    // Lyricon词幕管理器
+    var lyriconManager: LyriconProviderManager? = null
+        private set
 
     private val binder = LocalBinder()
 
@@ -75,6 +79,10 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         createNotificationChannel()
         initializeMediaSession()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        
+        // 初始化Lyricon词幕
+        lyriconManager = LyriconProviderManager(this)
+        lyriconManager?.initialize()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -164,6 +172,10 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 if (requestAudioFocus()) {
                     updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
                     
+                    // 第一阶段：立即用元数据（无歌词）更新 Lyricon
+                    lyriconManager?.setTrack(track)
+                    lyriconManager?.setPlaybackState(true)
+                    
                     mediaPlayer?.release()
                     mediaPlayer = MediaPlayer().apply {
                         setDataSource(url)
@@ -246,6 +258,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 isPlaying = true
                 updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
                 showNotification()
+                
+                // 同步播放状态到Lyricon
+                lyriconManager?.setPlaybackState(true)
             }
         }
     }
@@ -259,6 +274,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 isPlaying = false
                 updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
                 showNotification()
+                
+                // 同步播放状态到Lyricon
+                lyriconManager?.setPlaybackState(false)
             }
         }
     }
@@ -295,9 +313,23 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 updatePlaybackState(
                     if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
                 )
+                
+                // 同步进度到Lyricon
+                lyriconManager?.seekTo(position)
             } catch (e: Exception) {
                 Log.e(TAG, "seekTo failed: ${e.message}")
             }
+        }
+    }
+
+    fun updateLyrics(lyrics: com.cloudmusic.miuix.data.model.SongLyrics?) {
+        val track = currentTrack ?: return
+        // 只有当歌曲未切换时才更新歌词
+        if (lyriconManager?.isCurrentTrack(track.id) == true) {
+            lyriconManager?.setTrack(track, lyrics)
+            Log.d(TAG, "Updated lyrics for track: ${track.title}, lines: ${lyrics?.lines?.size ?: 0}")
+        } else {
+            Log.d(TAG, "Skipped lyrics update - track changed")
         }
     }
 
@@ -492,5 +524,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         abandonAudioFocus()
         currentBitmap?.recycle()
         currentBitmap = null
+        
+        // 释放Lyricon
+        lyriconManager?.release()
+        lyriconManager = null
     }
 }

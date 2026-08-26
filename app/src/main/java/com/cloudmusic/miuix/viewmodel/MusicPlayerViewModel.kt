@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -83,6 +84,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val prefs = application.getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
 
     private var pendingTrack: Track? = null
+    private var lyricsLoadJob: kotlinx.coroutines.Job? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -127,13 +129,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun startProgressUpdate() {
         viewModelScope.launch {
             while (true) {
-                delay(1000)
+                delay(100)
                 if (playerState.isPlaying) {
                     mediaPlaybackService?.let { service ->
+                        val position = service.getCurrentPosition()
+                        val duration = service.getDuration()
                         playerState = playerState.copy(
-                            currentPosition = service.getCurrentPosition(),
-                            duration = service.getDuration()
+                            currentPosition = position,
+                            duration = duration
                         )
+                        // 同步进度到Lyricon
+                        service.lyriconManager?.setPosition(position)
                     }
                 }
             }
@@ -154,6 +160,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 playerState = playerState.copy(currentTrack = track, isPlaying = false)
                 // 自动准备播放
                 prepareTrack(track)
+                // 加载歌词
+                loadLyrics()
             } catch (e: Exception) {
                 // Ignore parse errors
             }
@@ -407,6 +415,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             saveLastPlayedTrack(track)
             saveLastPlaylist()
 
+            // 第一阶段：立即用元数据（无歌词）更新 Lyricon
+            loadLyrics()
+
             NeteaseApi.getSongUrl(track.id).fold(
                 onSuccess = { (url, bitrate, _) ->
                     try {
@@ -483,15 +494,24 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun loadLyrics() {
         val track = playerState.currentTrack ?: return
+        lyricsLoadJob?.cancel() // 取消之前的歌词加载任务
         lyricState = lyricState.copy(isLoading = true, error = null)
-        viewModelScope.launch {
+        lyricsLoadJob = viewModelScope.launch {
             NeteaseApi.getSongLyric(track.id).fold(
                 onSuccess = { lyrics ->
-                    lyricState = lyricState.copy(lyrics = lyrics, isLoading = false)
+                    // 检查歌曲是否已切换
+                    if (playerState.currentTrack?.id == track.id) {
+                        lyricState = lyricState.copy(lyrics = lyrics, isLoading = false)
+                        // 同步歌词到Lyricon
+                        mediaPlaybackService?.updateLyrics(lyrics)
+                        Log.d("MusicPlayerViewModel", "Lyrics loaded and synced: ${lyrics.lines.size} lines")
+                    } else {
+                        Log.d("MusicPlayerViewModel", "Lyrics loaded but track changed, skipping sync")
+                    }
                 },
                 onFailure = { e ->
                     lyricState = lyricState.copy(isLoading = false, error = e.message)
-                    android.util.Log.e("MusicPlayerViewModel", "Failed to load lyrics: ${e.message}")
+                    Log.e("MusicPlayerViewModel", "Failed to load lyrics: ${e.message}")
                 }
             )
         }

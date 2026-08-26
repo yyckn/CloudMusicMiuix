@@ -103,7 +103,10 @@ fun PlayerPage(
     var showMoreMenu by remember { mutableStateOf(false) }
     var showPlaylistSheet by remember { mutableStateOf(false) }
     val playlistListState = rememberLazyListState()
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    val isPureMusic = lyricState.lyrics?.isPureMusic == true
+    // 纯音乐只有1页（封面），非纯音乐有2页（封面+歌词）
+    val pageCount = if (isPureMusic) 1 else 2
+    val pagerState = rememberPagerState(pageCount = { pageCount })
     val coroutineScope = rememberCoroutineScope()
 
     // 打开播放列表时自动定位到当前歌曲
@@ -338,29 +341,34 @@ fun PlayerPage(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 歌词按钮
-                    IconButton(
-                        onClick = { 
-                            coroutineScope.launch {
-                                if (pagerState.currentPage == 0) {
-                                    pagerState.animateScrollToPage(1)
-                                } else {
-                                    pagerState.animateScrollToPage(0)
+                    // 歌词按钮（纯音乐时隐藏）
+                    if (!isPureMusic) {
+                        IconButton(
+                            onClick = { 
+                                coroutineScope.launch {
+                                    if (pagerState.currentPage == 0) {
+                                        pagerState.animateScrollToPage(1)
+                                    } else {
+                                        pagerState.animateScrollToPage(0)
+                                    }
                                 }
-                            }
-                        },
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Notes,
-                            contentDescription = "歌词",
-                            tint = if (pagerState.currentPage == 1) {
-                                MiuixTheme.colorScheme.primary
-                            } else {
-                                MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             },
-                            modifier = Modifier.size(24.dp)
-                        )
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.Notes,
+                                contentDescription = "歌词",
+                                tint = if (pagerState.currentPage == 1) {
+                                    MiuixTheme.colorScheme.primary
+                                } else {
+                                    MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                },
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    } else {
+                        // 纯音乐时用空的Spacer占位
+                        Spacer(modifier = Modifier.size(56.dp))
                     }
 
                     // 上一首按钮
