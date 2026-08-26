@@ -78,6 +78,8 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.icon.extended.Favorites
+import top.yukonga.miuix.kmp.icon.extended.FavoritesFill
 import top.yukonga.miuix.kmp.icon.extended.ListView
 import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.icon.extended.More
@@ -93,6 +95,7 @@ fun PlayerPage(
     playerState: PlayerState,
     lyricState: LyricState,
     currentPlaylist: List<Track> = emptyList(),
+    isCurrentTrackLiked: Boolean = false,
     onBackClick: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPrevious: () -> Unit,
@@ -102,6 +105,7 @@ fun PlayerPage(
     onPlayTrack: (Track) -> Unit = {},
     onLoadLyrics: () -> Unit = {},
     onOpenSystemUI: () -> Unit = {},
+    onLikeTrack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -377,93 +381,121 @@ fun PlayerPage(
                 }
 
                 // 控制器区域
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 48.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // 歌词按钮（纯音乐时隐藏）
-                    if (!isPureMusic) {
+                    // 第一行：上一首、播放/暂停、下一首
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 上一首按钮
                         IconButton(
-                            onClick = { 
-                                coroutineScope.launch {
-                                    if (pagerState.currentPage == 0) {
-                                        pagerState.animateScrollToPage(1)
-                                    } else {
-                                        pagerState.animateScrollToPage(0)
-                                    }
-                                }
-                            },
+                            onClick = onPrevious,
                             modifier = Modifier.size(56.dp)
                         ) {
                             Icon(
-                                imageVector = MiuixIcons.Notes,
-                                contentDescription = "歌词",
-                                tint = if (pagerState.currentPage == 1) {
-                                    Color.White
-                                } else {
-                                    Color.White.copy(alpha = 0.6f)
+                                imageVector = MiuixIcons.ChevronBackward,
+                                contentDescription = "上一首",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+
+                        // 播放/暂停按钮
+                        IconButton(
+                            onClick = onTogglePlayPause,
+                            modifier = Modifier.size(72.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
+                                contentDescription = if (playerState.isPlaying) "暂停" else "播放",
+                                tint = Color.White,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+
+                        // 下一首按钮
+                        IconButton(
+                            onClick = onNext,
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.ChevronForward,
+                                contentDescription = "下一首",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 第二行：歌词/喜欢/播放列表
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 歌词按钮（纯音乐时隐藏）
+                        if (!isPureMusic) {
+                            IconButton(
+                                onClick = { 
+                                    coroutineScope.launch {
+                                        if (pagerState.currentPage == 0) {
+                                            pagerState.animateScrollToPage(1)
+                                        } else {
+                                            pagerState.animateScrollToPage(0)
+                                        }
+                                    }
                                 },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.Notes,
+                                    contentDescription = "歌词",
+                                    tint = if (pagerState.currentPage == 1) {
+                                        Color.White
+                                    } else {
+                                        Color.White.copy(alpha = 0.6f)
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        } else {
+                            // 纯音乐时用空的Spacer占位
+                            Spacer(modifier = Modifier.size(48.dp))
+                        }
+
+                        // 喜欢按钮
+                        IconButton(
+                            onClick = onLikeTrack,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
+                                contentDescription = if (isCurrentTrackLiked) "取消喜欢" else "喜欢",
+                                tint = if (isCurrentTrackLiked) Color.Red else Color.White.copy(alpha = 0.6f),
                                 modifier = Modifier.size(24.dp)
                             )
                         }
-                    } else {
-                        // 纯音乐时用空的Spacer占位
-                        Spacer(modifier = Modifier.size(56.dp))
-                    }
 
-                    // 上一首按钮
-                    IconButton(
-                        onClick = onPrevious,
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.ChevronBackward,
-                            contentDescription = "上一首",
-                            tint = Color.White,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-
-                    // 播放/暂停按钮
-                    IconButton(
-                        onClick = onTogglePlayPause,
-                        modifier = Modifier.size(72.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
-                            contentDescription = if (playerState.isPlaying) "暂停" else "播放",
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-
-                    // 下一首按钮
-                    IconButton(
-                        onClick = onNext,
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.ChevronForward,
-                            contentDescription = "下一首",
-                            tint = Color.White,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-
-                    // 播放列表按钮
-                    IconButton(
-                        onClick = { showPlaylistSheet = true },
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.ListView,
-                            contentDescription = "播放列表",
-                            tint = Color.White.copy(alpha = 0.6f),
-                            modifier = Modifier.size(24.dp)
-                        )
+                        // 播放列表按钮
+                        IconButton(
+                            onClick = { showPlaylistSheet = true },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.ListView,
+                                contentDescription = "播放列表",
+                                tint = Color.White.copy(alpha = 0.6f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
             }

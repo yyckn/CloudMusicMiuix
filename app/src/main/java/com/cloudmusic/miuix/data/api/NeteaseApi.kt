@@ -1215,6 +1215,112 @@ object NeteaseApi {
         }
     }
 
+    suspend fun likeSong(songId: String, like: Boolean = true): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            ensureCookie()
+            val id = songId.removePrefix("netrack_").toLongOrNull() ?: 0L
+            // 使用 weapi 接口，和 NeriPlayer 一致
+            val url = "https://music.163.com/weapi/song/like"
+            val reqData = """{"trackId":$id,"like":$like}"""
+            val encrypted = NeteaseCrypto.weapi(reqData)
+
+            android.util.Log.d("NeteaseApi", "likeSong - songId: $songId, id: $id, like: $like")
+
+            val body = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; CloudMusicMiuix) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                .header("Cookie", cookies)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Accept", "*/*")
+                .header("Accept-Language", "zh-CN,zh-Hans;q=0.9")
+                .header("Connection", "keep-alive")
+                .build()
+
+            val response = client.newCall(request).execute()
+            android.util.Log.d("NeteaseApi", "likeSong - response code: ${response.code}")
+            
+            if (!response.isSuccessful) {
+                android.util.Log.e("NeteaseApi", "likeSong - HTTP error: ${response.code}")
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            android.util.Log.d("NeteaseApi", "likeSong - response body: $responseBody")
+            
+            if (responseBody.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            val code = if (json.has("code")) json.get("code").asInt else -1
+            android.util.Log.d("NeteaseApi", "likeSong - response code: $code")
+            
+            Result.success(code == 200)
+        } catch (e: Exception) {
+            android.util.Log.e("NeteaseApi", "likeSong error: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun checkSongLiked(songId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            ensureCookie()
+            val id = songId.removePrefix("netrack_")
+            // 使用获取用户喜欢的歌曲列表API
+            val userId = getUserId() ?: return@withContext Result.failure(Exception("Not logged in"))
+            val url = "https://music.163.com/api/song/like/get"
+            val reqData = """{"uid":$userId}"""
+            val encrypted = NeteaseCrypto.weapi(reqData)
+
+            val body = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .header("Cookie", cookies)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("X-Real-IP", "118.88.88.88")
+                .header("X-Forwarded-For", "118.88.88.88")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            if (responseBody.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            val ids = if (json.has("ids") && json.get("ids").isJsonArray) {
+                json.getAsJsonArray("ids").map { it.asLong }
+            } else {
+                emptyList()
+            }
+            
+            val isLiked = ids.contains(id.toLong())
+            android.util.Log.d("NeteaseApi", "checkSongLiked - songId: $id, isLiked: $isLiked")
+            Result.success(isLiked)
+        } catch (e: Exception) {
+            android.util.Log.e("NeteaseApi", "checkSongLiked error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
     suspend fun getSongLyric(songId: String, songTitle: String = "", songArtist: String = "", songDuration: Long = 0): Result<SongLyrics> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()

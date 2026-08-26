@@ -76,6 +76,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     var lyricState by mutableStateOf(LyricState())
         private set
 
+    var isCurrentTrackLiked by mutableStateOf(false)
+        private set
+
     var currentPlaylist by mutableStateOf<List<Track>>(emptyList())
 
     private var mediaPlaybackService: MediaPlaybackService? = null
@@ -162,6 +165,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 prepareTrack(track)
                 // 加载歌词
                 loadLyrics()
+                // 检查是否已喜欢
+                checkIfCurrentTrackLiked()
             } catch (e: Exception) {
                 // Ignore parse errors
             }
@@ -417,6 +422,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
             // 第一阶段：立即用元数据（无歌词）更新 Lyricon
             loadLyrics()
+            checkIfCurrentTrackLiked()
 
             NeteaseApi.getSongUrl(track.id).fold(
                 onSuccess = { (url, bitrate, _) ->
@@ -531,6 +537,39 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             android.util.Log.d("MusicPlayerViewModel", "Download started: $fileName")
         } catch (e: Exception) {
             android.util.Log.e("MusicPlayerViewModel", "Download failed: ${e.message}")
+        }
+    }
+
+    fun likeCurrentTrack() {
+        val track = playerState.currentTrack ?: return
+        viewModelScope.launch {
+            val newLikeState = !isCurrentTrackLiked
+            NeteaseApi.likeSong(track.id, newLikeState).fold(
+                onSuccess = { success ->
+                    if (success) {
+                        isCurrentTrackLiked = newLikeState
+                        Log.d("MusicPlayerViewModel", "Track ${if (newLikeState) "liked" else "unliked"}: ${track.title}")
+                    }
+                },
+                onFailure = { e ->
+                    Log.e("MusicPlayerViewModel", "Failed to like track: ${e.message}")
+                }
+            )
+        }
+    }
+
+    fun checkIfCurrentTrackLiked() {
+        val track = playerState.currentTrack ?: return
+        viewModelScope.launch {
+            NeteaseApi.checkSongLiked(track.id).fold(
+                onSuccess = { isLiked ->
+                    isCurrentTrackLiked = isLiked
+                    Log.d("MusicPlayerViewModel", "Track liked status: $isLiked for ${track.title}")
+                },
+                onFailure = { e ->
+                    Log.e("MusicPlayerViewModel", "Failed to check liked status: ${e.message}")
+                }
+            )
         }
     }
 

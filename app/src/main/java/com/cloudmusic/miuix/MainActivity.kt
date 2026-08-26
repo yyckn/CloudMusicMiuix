@@ -785,6 +785,7 @@ fun MainScreen(
                 playerState = viewModel.playerState,
                 lyricState = viewModel.lyricState,
                 currentPlaylist = viewModel.currentPlaylist,
+                isCurrentTrackLiked = viewModel.isCurrentTrackLiked,
                 onBackClick = { showPlayerPage = false },
                 onTogglePlayPause = { viewModel.togglePlayPause() },
                 onPrevious = { viewModel.playPrevious() },
@@ -801,7 +802,8 @@ fun MainScreen(
                     } catch (e: Exception) {
                         android.util.Log.e("MainActivity", "Failed to open SystemUI: ${e.message}")
                     }
-                }
+                },
+                onLikeTrack = { viewModel.likeCurrentTrack() }
             )
         }
     }
