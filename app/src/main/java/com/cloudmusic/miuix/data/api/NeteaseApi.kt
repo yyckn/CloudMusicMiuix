@@ -1453,12 +1453,12 @@ object NeteaseApi {
                 val text = match.groupValues[3].trim()
                 
                 if (text.isNotEmpty()) {
-                    // 跳过开头连续的冒号行（如"作词:xxx"、"作曲:xxx"）
+                    // 跳过开头连续的歌曲制作团队行（冒号后面有文字）
                     if (!foundFirstNonColonLine) {
-                        if (text.contains(":") || text.contains("：")) {
-                            continue // 跳过开头的冒号行
+                        if (isCreditLine(text)) {
+                            continue // 跳过开头的歌曲制作团队行
                         } else {
-                            foundFirstNonColonLine = true // 找到第一个非冒号行
+                            foundFirstNonColonLine = true // 找到第一个非歌曲制作团队行
                         }
                     }
                     
@@ -1527,9 +1527,9 @@ object NeteaseApi {
 
             val text = sb.toString().trim()
             if (text.isNotEmpty()) {
-                // 跳过开头连续的冒号行
+                // 跳过开头连续的歌曲制作团队行
                 if (!foundFirstNonColonLine) {
-                    if (text.contains(":") || text.contains("：")) {
+                    if (isCreditLine(text)) {
                         continue
                     } else {
                         foundFirstNonColonLine = true
@@ -1556,10 +1556,36 @@ object NeteaseApi {
     }
 
     /**
+     * 判断文本是否是有效的"歌曲制作团队"行
+     * 条件：包含冒号（中文或英文），且冒号后面有文字
+     * 例如：
+     * - "作词：xxx" → true
+     * - "薛之谦：" → false（冒号后面没有文字）
+     */
+    private fun isCreditLine(text: String): Boolean {
+        // 检查是否包含冒号
+        val colonIndex = text.indexOf("：")
+        val englishColonIndex = text.indexOf(":")
+        
+        val index = when {
+            colonIndex >= 0 && englishColonIndex >= 0 -> minOf(colonIndex, englishColonIndex)
+            colonIndex >= 0 -> colonIndex
+            englishColonIndex >= 0 -> englishColonIndex
+            else -> return false // 没有冒号
+        }
+        
+        // 获取冒号后面的文字
+        val afterColon = text.substring(index + 1).trim()
+        
+        // 冒号后面有文字才算有效的歌曲制作团队行
+        return afterColon.isNotEmpty()
+    }
+
+    /**
      * 过滤末尾的"歌曲制作团队"信息
-     * 1. 当末尾歌词有冒号时，直接移除末尾这几句带有冒号的歌词
+     * 1. 当末尾歌词有冒号且冒号后面有文字时，直接移除末尾这几句
      * 2. 当末尾歌词没有冒号时，使用末尾的前一句歌词判断，
-     *    但需要有>=2句相连的带有冒号的歌词才能判断为"歌曲制作团队"，
+     *    但需要有>=2句相连的有效歌词行才能判断为"歌曲制作团队"，
      *    连同这几句和最后一句都要删掉
      */
     private fun filterTailCredits(lines: List<LyricLine>): List<LyricLine> {
@@ -1571,32 +1597,32 @@ object NeteaseApi {
         while (result.isNotEmpty()) {
             val lastLine = result.last()
             
-            // 情况1：末尾歌词有冒号（中文或英文）
-            if (lastLine.text.contains("：") || lastLine.text.contains(":")) {
+            // 情况1：末尾歌词是有效的歌曲制作团队行
+            if (isCreditLine(lastLine.text)) {
                 result.removeAt(result.size - 1)
                 continue
             }
             
-            // 情况2：末尾歌词没有冒号，检查前一句
+            // 情况2：末尾歌词不是歌曲制作团队行，检查前一句
             if (result.size >= 2) {
                 val secondLast = result[result.size - 2]
-                if (secondLast.text.contains("：") || secondLast.text.contains(":")) {
-                    // 找到连续的冒号行
-                    var colonCount = 0
+                if (isCreditLine(secondLast.text)) {
+                    // 找到连续的有效歌词行
+                    var creditCount = 0
                     for (i in result.size - 2 downTo 0) {
-                        if (result[i].text.contains("：") || result[i].text.contains(":")) {
-                            colonCount++
+                        if (isCreditLine(result[i].text)) {
+                            creditCount++
                         } else {
                             break
                         }
                     }
                     
-                    // 如果有>=2句相连的带有冒号的歌词，删除这些和最后一句
-                    if (colonCount >= 2) {
+                    // 如果有>=2句相连的有效歌词行，删除这些和最后一句
+                    if (creditCount >= 2) {
                         // 删除最后一句（无用词）
                         result.removeAt(result.size - 1)
-                        // 删除连续的冒号行
-                        for (i in 0 until colonCount) {
+                        // 删除连续的有效歌词行
+                        for (i in 0 until creditCount) {
                             if (result.isNotEmpty()) {
                                 result.removeAt(result.size - 1)
                             }

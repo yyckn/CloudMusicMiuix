@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -219,13 +220,16 @@ fun PlayerPage(
         val screenHeight = configuration.screenHeightDp.dp
         val screenWidth = configuration.screenWidthDp.dp
         val topPadding = paddingValues.calculateTopPadding()
+        // 判断是否是平板（宽度大于600dp）
+        val isTablet = screenWidth > 600.dp
         // 预留底部控件高度：Slider区域 + 按钮区域 + 底部间距
-        val bottomReserved = 186.dp
+        val bottomReserved = if (isTablet) 186.dp else 186.dp
         // 标题区域高度（歌曲名称 + 歌手专辑 + 间距）
         val titleAreaHeight = 80.dp
         // 封面可用高度 = 屏幕高度 - 顶部padding - 底部预留 - 标题区域高度 - 额外间距
         val availableHeight = screenHeight - topPadding - bottomReserved - titleAreaHeight - 32.dp
-        val imageSize = minOf(availableHeight, screenWidth - 24.dp).coerceAtLeast(0.dp)
+        // 封面大小取高度和宽度的最小值，确保1:1比例不被裁剪
+        val imageSize = minOf(availableHeight, screenWidth - 24.dp, screenHeight - topPadding - 200.dp).coerceAtLeast(0.dp)
 
         Box(modifier = Modifier.fillMaxSize()) {
             // 背景图片（封面放大铺满，模糊，压暗）
@@ -258,57 +262,61 @@ fun PlayerPage(
                 )
             }
             
-            Column(
-                modifier = Modifier
-                    .padding(top = topPadding)
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp)
-            ) {
-                // 歌曲标题和信息（紧贴TopAppBar）
+            if (isTablet) {
+                // 平板布局：左右分屏
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp, bottom = 16.dp)
+                        .padding(top = topPadding)
+                        .fillMaxSize()
                 ) {
-                    // 歌曲名称
-                    Text(
-                        text = track?.title ?: "未知歌曲",
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    // 歌曲标题和信息
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .padding(top = 8.dp, bottom = 16.dp)
+                    ) {
+                        Text(
+                            text = track?.title ?: "未知歌曲",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}",
+                            fontSize = 16.sp,
+                            color = Color.White.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // 歌手 - 专辑
-                    Text(
-                        text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}",
-                        fontSize = 16.sp,
-                        color = Color.White.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                // 水平翻页器（封面/歌词）
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                ) { page ->
-                    when (page) {
-                        0 -> {
-                            // 封面页面
+                    // 左右分屏区域
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        // 左侧：封面 + 控制按钮
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .padding(horizontal = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            // 封面
                             Box(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                // 使用Crossfade实现封面切换动画
                                 Crossfade(
                                     targetState = track?.imgUrl,
                                     animationSpec = tween(durationMillis = 500),
@@ -320,145 +328,343 @@ fun PlayerPage(
                                         modifier = Modifier
                                             .size(imageSize)
                                             .clip(RoundedCornerShape(16.dp)),
-                                        contentScale = ContentScale.Crop,
+                                        contentScale = ContentScale.Fit,
                                         error = painterResource(android.R.drawable.ic_menu_gallery)
                                     )
                                 }
                             }
-                        }
-                        1 -> {
-                            // 歌词页面
-                            LyricsView(
-                                lyrics = lyricState.lyrics,
-                                currentPosition = playerState.currentPosition,
-                                onSeekTo = onSeekTo,
-                                modifier = Modifier.fillMaxSize()
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // 播放进度条
+                            val progress = if (playerState.duration > 0) {
+                                playerState.currentPosition.toFloat() / playerState.duration.toFloat()
+                            } else {
+                                0f
+                            }
+
+                            Slider(
+                                value = progress,
+                                onValueChange = { newValue ->
+                                    val newPosition = (newValue * playerState.duration).toLong()
+                                    onSeekTo(newPosition)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 4.dp)
                             )
+
+                            // 时间显示和音质
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = formatDuration(playerState.currentPosition),
+                                    fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.6f)
+                                )
+                                Text(
+                                    text = getQualityText(playerState.bitrate),
+                                    fontSize = 12.sp,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = formatDuration(playerState.duration),
+                                    fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.6f)
+                                )
+                            }
+
+                            // 控制按钮
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                // 第一行：上一首、播放/暂停、下一首
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) {
+                                        Icon(
+                                            imageVector = MiuixIcons.ChevronBackward,
+                                            contentDescription = "上一首",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(24.dp))
+                                    IconButton(onClick = onTogglePlayPause, modifier = Modifier.size(72.dp)) {
+                                        Icon(
+                                            imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
+                                            contentDescription = if (playerState.isPlaying) "暂停" else "播放",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(40.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(24.dp))
+                                    IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) {
+                                        Icon(
+                                            imageVector = MiuixIcons.ChevronForward,
+                                            contentDescription = "下一首",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                    }
+                                }
+
+                                // 第二行：喜欢、播放列表
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = onLikeTrack, modifier = Modifier.size(48.dp)) {
+                                        Icon(
+                                            imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
+                                            contentDescription = if (isCurrentTrackLiked) "取消喜欢" else "喜欢",
+                                            tint = if (isCurrentTrackLiked) Color.Red else Color.White.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    IconButton(onClick = { showPlaylistSheet = true }, modifier = Modifier.size(48.dp)) {
+                                        Icon(
+                                            imageVector = MiuixIcons.ListView,
+                                            contentDescription = "播放列表",
+                                            tint = Color.White.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 右侧：歌词
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .padding(start = 16.dp, end = 24.dp)
+                        ) {
+                            if (isPureMusic) {
+                                // 纯音乐显示提示
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "纯音乐，请欣赏",
+                                        fontSize = 16.sp,
+                                        color = Color.White.copy(alpha = 0.5f)
+                                    )
+                                }
+                            } else {
+                                // 显示歌词
+                                LyricsView(
+                                    lyrics = lyricState.lyrics,
+                                    currentPosition = playerState.currentPosition,
+                                    onSeekTo = onSeekTo,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
                     }
                 }
-
-                // 播放进度条
-                val progress = if (playerState.duration > 0) {
-                    playerState.currentPosition.toFloat() / playerState.duration.toFloat()
-                } else {
-                    0f
-                }
-
-                Slider(
-                    value = progress,
-                    onValueChange = { newValue ->
-                        val newPosition = (newValue * playerState.duration).toLong()
-                        onSeekTo(newPosition)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 4.dp)
-                )
-
-                // 时间显示和音质
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = formatDuration(playerState.currentPosition),
-                        fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
-                    Text(
-                        text = getQualityText(playerState.bitrate),
-                        fontSize = 12.sp,
-                        color = Color.White
-                    )
-                    Text(
-                        text = formatDuration(playerState.duration),
-                        fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
-                }
-
-                // 控制器区域
+            } else {
+                // 手机布局：原有布局
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 48.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .padding(top = topPadding)
+                        .fillMaxSize()
+                        .padding(horizontal = 24.dp)
                 ) {
-                    // 第一行：上一首、播放/暂停、下一首
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
+                    // 歌曲标题和信息
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 16.dp)
                     ) {
-                        // 上一首按钮
-                        IconButton(
-                            onClick = onPrevious,
-                            modifier = Modifier.size(56.dp)
-                        ) {
-                            Icon(
-                                imageVector = MiuixIcons.ChevronBackward,
-                                contentDescription = "上一首",
-                                tint = Color.White,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
+                        Text(
+                            text = track?.title ?: "未知歌曲",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}",
+                            fontSize = 16.sp,
+                            color = Color.White.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
-                        // 播放/暂停按钮
-                        IconButton(
-                            onClick = onTogglePlayPause,
-                            modifier = Modifier.size(72.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
-                                contentDescription = if (playerState.isPlaying) "暂停" else "播放",
-                                tint = Color.White,
-                                modifier = Modifier.size(40.dp)
-                            )
-                        }
-
-                        // 下一首按钮
-                        IconButton(
-                            onClick = onNext,
-                            modifier = Modifier.size(56.dp)
-                        ) {
-                            Icon(
-                                imageVector = MiuixIcons.ChevronForward,
-                                contentDescription = "下一首",
-                                tint = Color.White,
-                                modifier = Modifier.size(32.dp)
-                            )
+                    // 水平翻页器（封面/歌词）
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) { page ->
+                        when (page) {
+                            0 -> {
+                                // 封面页面
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Crossfade(
+                                        targetState = track?.imgUrl,
+                                        animationSpec = tween(durationMillis = 500),
+                                        label = "cover_crossfade"
+                                    ) { imgUrl ->
+                                        AsyncImage(
+                                            model = imgUrl,
+                                            contentDescription = track?.title,
+                                            modifier = Modifier
+                                                .size(imageSize)
+                                                .clip(RoundedCornerShape(16.dp)),
+                                            contentScale = ContentScale.Fit,
+                                            error = painterResource(android.R.drawable.ic_menu_gallery)
+                                        )
+                                    }
+                                }
+                            }
+                            1 -> {
+                                // 歌词页面
+                                LyricsView(
+                                    lyrics = lyricState.lyrics,
+                                    currentPosition = playerState.currentPosition,
+                                    onSeekTo = onSeekTo,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    // 播放进度条
+                    val progress = if (playerState.duration > 0) {
+                        playerState.currentPosition.toFloat() / playerState.duration.toFloat()
+                    } else {
+                        0f
+                    }
 
-                    // 第二行：歌词/喜欢/播放列表
+                    Slider(
+                        value = progress,
+                        onValueChange = { newValue ->
+                            val newPosition = (newValue * playerState.duration).toLong()
+                            onSeekTo(newPosition)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp)
+                    )
+
+                    // 时间显示和音质
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        // 歌词按钮（纯音乐时隐藏）
-                        if (!isPureMusic) {
+                        Text(
+                            text = formatDuration(playerState.currentPosition),
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            text = getQualityText(playerState.bitrate),
+                            fontSize = 12.sp,
+                            color = Color.White
+                        )
+                        Text(
+                            text = formatDuration(playerState.duration),
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.6f)
+                        )
+                    }
+
+                    // 控制按钮
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // 第一行：上一首、播放/暂停、下一首
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) {
+                                Icon(
+                                    imageVector = MiuixIcons.ChevronBackward,
+                                    contentDescription = "上一首",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(24.dp))
+                            IconButton(onClick = onTogglePlayPause, modifier = Modifier.size(72.dp)) {
+                                Icon(
+                                    imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
+                                    contentDescription = if (playerState.isPlaying) "暂停" else "播放",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(24.dp))
+                            IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) {
+                                Icon(
+                                    imageVector = MiuixIcons.ChevronForward,
+                                    contentDescription = "下一首",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+
+                        // 第二行：歌词/喜欢/播放列表
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 歌词按钮（纯音乐时禁用）
                             IconButton(
                                 onClick = { 
-                                    coroutineScope.launch {
-                                        if (pagerState.currentPage == 0) {
-                                            pagerState.animateScrollToPage(1)
-                                        } else {
-                                            pagerState.animateScrollToPage(0)
+                                    if (!isPureMusic) {
+                                        coroutineScope.launch {
+                                            if (pagerState.currentPage == 0) {
+                                                pagerState.animateScrollToPage(1)
+                                            } else {
+                                                pagerState.animateScrollToPage(0)
+                                            }
                                         }
                                     }
                                 },
+                                enabled = !isPureMusic,
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
                                     imageVector = MiuixIcons.Notes,
                                     contentDescription = "歌词",
-                                    tint = if (pagerState.currentPage == 1) {
+                                    tint = if (isPureMusic) {
+                                        Color.White.copy(alpha = 0.2f)
+                                    } else if (pagerState.currentPage == 1) {
                                         Color.White
                                     } else {
                                         Color.White.copy(alpha = 0.6f)
@@ -466,35 +672,24 @@ fun PlayerPage(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
-                        } else {
-                            // 纯音乐时用空的Spacer占位
-                            Spacer(modifier = Modifier.size(48.dp))
-                        }
-
-                        // 喜欢按钮
-                        IconButton(
-                            onClick = onLikeTrack,
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
-                                contentDescription = if (isCurrentTrackLiked) "取消喜欢" else "喜欢",
-                                tint = if (isCurrentTrackLiked) Color.Red else Color.White.copy(alpha = 0.6f),
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-
-                        // 播放列表按钮
-                        IconButton(
-                            onClick = { showPlaylistSheet = true },
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(
-                                imageVector = MiuixIcons.ListView,
-                                contentDescription = "播放列表",
-                                tint = Color.White.copy(alpha = 0.6f),
-                                modifier = Modifier.size(24.dp)
-                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            IconButton(onClick = onLikeTrack, modifier = Modifier.size(48.dp)) {
+                                Icon(
+                                    imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
+                                    contentDescription = if (isCurrentTrackLiked) "取消喜欢" else "喜欢",
+                                    tint = if (isCurrentTrackLiked) Color.Red else Color.White.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            IconButton(onClick = { showPlaylistSheet = true }, modifier = Modifier.size(48.dp)) {
+                                Icon(
+                                    imageVector = MiuixIcons.ListView,
+                                    contentDescription = "播放列表",
+                                    tint = Color.White.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
                     }
                 }
