@@ -36,9 +36,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -138,7 +142,7 @@ fun PlayerPage(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MiuixTheme.colorScheme.surface)
+                    .background(Color.Transparent)
                     .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
                     .padding(horizontal = 8.dp, vertical = 8.dp)
             ) {
@@ -152,7 +156,7 @@ fun PlayerPage(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
-                            tint = MiuixTheme.colorScheme.onSurface
+                            tint = Color.White
                         )
                     }
 
@@ -165,7 +169,7 @@ fun PlayerPage(
                             Icon(
                                 imageVector = MiuixIcons.ScreenMirroring,
                                 contentDescription = "投屏",
-                                tint = MiuixTheme.colorScheme.onSurface
+                                tint = Color.White
                             )
                         }
                         
@@ -177,7 +181,7 @@ fun PlayerPage(
                                 Icon(
                                     imageVector = MiuixIcons.More,
                                     contentDescription = "更多",
-                                    tint = MiuixTheme.colorScheme.onSurface
+                                    tint = Color.White
                                 )
                             }
                         OverlayListPopup(
@@ -218,6 +222,30 @@ fun PlayerPage(
         val imageSize = minOf(availableHeight, screenWidth - 24.dp).coerceAtLeast(0.dp)
 
         Box(modifier = Modifier.fillMaxSize()) {
+            // 背景图片（封面放大铺满，模糊，压暗）
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .align(Alignment.BottomCenter)
+            ) {
+                // 封面背景图片
+                AsyncImage(
+                    model = track?.imgUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(radius = 100.dp),
+                    contentScale = ContentScale.Crop,
+                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                )
+                // 压暗层 #161616 25%不透明度
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0x40161616))
+                )
+            }
+            
             Column(
                 modifier = Modifier
                     .padding(top = topPadding)
@@ -235,7 +263,7 @@ fun PlayerPage(
                         text = track?.title ?: "未知歌曲",
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface,
+                        color = Color.White,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth()
@@ -247,7 +275,7 @@ fun PlayerPage(
                     Text(
                         text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}",
                         fontSize = 16.sp,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        color = Color.White.copy(alpha = 0.7f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth()
@@ -319,17 +347,17 @@ fun PlayerPage(
                     Text(
                         text = formatDuration(playerState.currentPosition),
                         fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = Color.White.copy(alpha = 0.6f)
                     )
                     Text(
                         text = getQualityText(playerState.bitrate),
                         fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.primary
+                        color = Color.White
                     )
                     Text(
                         text = formatDuration(playerState.duration),
                         fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = Color.White.copy(alpha = 0.6f)
                     )
                 }
 
@@ -359,9 +387,9 @@ fun PlayerPage(
                                 imageVector = MiuixIcons.Notes,
                                 contentDescription = "歌词",
                                 tint = if (pagerState.currentPage == 1) {
-                                    MiuixTheme.colorScheme.primary
+                                    Color.White
                                 } else {
-                                    MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    Color.White.copy(alpha = 0.6f)
                                 },
                                 modifier = Modifier.size(24.dp)
                             )
@@ -379,7 +407,7 @@ fun PlayerPage(
                         Icon(
                             imageVector = MiuixIcons.ChevronBackward,
                             contentDescription = "上一首",
-                            tint = MiuixTheme.colorScheme.onSurface,
+                            tint = Color.White,
                             modifier = Modifier.size(32.dp)
                         )
                     }
@@ -392,7 +420,7 @@ fun PlayerPage(
                         Icon(
                             imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
                             contentDescription = if (playerState.isPlaying) "暂停" else "播放",
-                            tint = MiuixTheme.colorScheme.primary,
+                            tint = Color.White,
                             modifier = Modifier.size(40.dp)
                         )
                     }
@@ -405,7 +433,7 @@ fun PlayerPage(
                         Icon(
                             imageVector = MiuixIcons.ChevronForward,
                             contentDescription = "下一首",
-                            tint = MiuixTheme.colorScheme.onSurface,
+                            tint = Color.White,
                             modifier = Modifier.size(32.dp)
                         )
                     }
@@ -418,7 +446,7 @@ fun PlayerPage(
                         Icon(
                             imageVector = MiuixIcons.ListView,
                             contentDescription = "播放列表",
-                            tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            tint = Color.White.copy(alpha = 0.6f),
                             modifier = Modifier.size(24.dp)
                         )
                     }
