@@ -46,6 +46,7 @@ fun PlayPageSettingsPage(
     var useRoundCover by remember { mutableStateOf(ThemeSettings.useRoundCover) }
     var coverRotationIndex by remember { mutableStateOf(ThemeSettings.coverRotationIndex) }
     var keepScreenOn by remember { mutableStateOf(ThemeSettings.keepScreenOn) }
+    var lyricCenter by remember { mutableStateOf(ThemeSettings.lyricCenter) }
 
     val coverRotationOptions = remember {
         listOf("静止", "播放时旋转", "始终旋转")
@@ -91,6 +92,24 @@ fun PlayPageSettingsPage(
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 12.dp)
                 ) {
+                    // 保持歌词居中
+                    BasicComponent(
+                        title = "保持歌词居中",
+                        endActions = {
+                            Switch(
+                                checked = lyricCenter,
+                                onCheckedChange = { newValue ->
+                                    lyricCenter = newValue
+                                    ThemeSettings.updateLyricCenter(newValue)
+                                }
+                            )
+                        },
+                        onClick = {
+                            lyricCenter = !lyricCenter
+                            ThemeSettings.updateLyricCenter(lyricCenter)
+                        }
+                    )
+
                     // 歌词文本大小
                     BasicComponent(
                         title = "歌词文本大小",

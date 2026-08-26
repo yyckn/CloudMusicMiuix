@@ -16,6 +16,7 @@ object ThemeSettings {
     private const val KEY_USE_ROUND_COVER = "use_round_cover"
     private const val KEY_COVER_ROTATION = "cover_rotation"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+    private const val KEY_LYRIC_CENTER = "lyric_center"
 
     // 0 = 浅色模式, 1 = 深色模式, 2 = 跟随系统
     var themeModeIndex by mutableIntStateOf(2)
@@ -43,6 +44,10 @@ object ThemeSettings {
     var keepScreenOn by mutableStateOf(false)
         private set
 
+    // 保持歌词居中
+    var lyricCenter by mutableStateOf(false)
+        private set
+
     private var prefs: SharedPreferences? = null
 
     fun init(context: Context) {
@@ -54,6 +59,7 @@ object ThemeSettings {
         useRoundCover = prefs?.getBoolean(KEY_USE_ROUND_COVER, false) ?: false
         coverRotationIndex = prefs?.getInt(KEY_COVER_ROTATION, 0) ?: 0
         keepScreenOn = prefs?.getBoolean(KEY_KEEP_SCREEN_ON, false) ?: false
+        lyricCenter = prefs?.getBoolean(KEY_LYRIC_CENTER, false) ?: false
     }
 
     fun updateThemeModeIndex(index: Int) {
@@ -89,5 +95,10 @@ object ThemeSettings {
     fun updateKeepScreenOn(value: Boolean) {
         keepScreenOn = value
         prefs?.edit()?.putBoolean(KEY_KEEP_SCREEN_ON, value)?.apply()
+    }
+
+    fun updateLyricCenter(value: Boolean) {
+        lyricCenter = value
+        prefs?.edit()?.putBoolean(KEY_LYRIC_CENTER, value)?.apply()
     }
 }

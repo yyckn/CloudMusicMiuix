@@ -1390,20 +1390,15 @@ object NeteaseApi {
                 parseLrc(lrcLyric, tLyric)
             }
             
-            // 判断是否为纯音乐：
-            // 1. 歌词为空
-            // 2. 歌词小于3行且包含"纯音乐"关键词
-            val isPureMusic = lyrics.lines.isEmpty() || 
-                (lyrics.lines.size < 3 && lyrics.lines.any { 
-                    it.text.contains("纯音乐") || it.text.contains("纯音乐，请欣赏") 
-                })
+            // 判断是否为纯音乐：刨去无用信息的歌词小于等于3行
+            val isPureMusic = lyrics.lines.size <= 3
             
             val result = if (isPureMusic) {
                 SongLyrics(lines = lyrics.lines, isPureMusic = true)
             } else if (songTitle.isNotEmpty() && songArtist.isNotEmpty() && lyrics.lines.isNotEmpty()) {
-                // 非纯音乐，在歌词开头添加"歌名 - 歌手"
+                // 非纯音乐，在歌词开头添加空行
                 val titleLine = LyricLine(
-                    text = "$songTitle - $songArtist",
+                    text = " ",
                     translation = "",
                     startAt = 0L
                 )
@@ -1442,8 +1437,9 @@ object NeteaseApi {
 
         // 解析原文歌词
         val lines = mutableListOf<LyricLine>()
-        var foundFirstNonColonLine = false
         
+        // 先收集所有歌词行及其时间
+        val rawLines = mutableListOf<Pair<Long, String>>()
         for (line in lrc.split("\n")) {
             val match = regex.find(line)
             if (match != null) {
@@ -1453,25 +1449,27 @@ object NeteaseApi {
                 val text = match.groupValues[3].trim()
                 
                 if (text.isNotEmpty()) {
-                    // 跳过开头连续的歌曲制作团队行（冒号后面有文字）
-                    if (!foundFirstNonColonLine) {
-                        if (isCreditLine(text)) {
-                            continue // 跳过开头的歌曲制作团队行
-                        } else {
-                            foundFirstNonColonLine = true // 找到第一个非歌曲制作团队行
-                        }
-                    }
-                    
-                    val translation = tlyricMap[time] ?: ""
-                    lines.add(LyricLine(text = text, translation = translation, startAt = time))
+                    rawLines.add(Pair(time, text))
                 }
             }
         }
+        
+        // 计算每行歌词的时长并过滤
+        for (i in rawLines.indices) {
+            val (time, text) = rawLines[i]
+            val duration = if (i < rawLines.size - 1) {
+                rawLines[i + 1].first - time
+            } else {
+                0L // 最后一行
+            }
+            
+            if (!isExcludedLyric(text, duration)) {
+                val translation = tlyricMap[time] ?: ""
+                lines.add(LyricLine(text = text, translation = translation, startAt = time))
+            }
+        }
 
-        // 过滤末尾的"歌曲制作团队"信息
-        val filteredLines = filterTailCredits(lines)
-
-        return SongLyrics(lines = filteredLines.sortedBy { it.startAt })
+        return SongLyrics(lines = lines.sortedBy { it.startAt })
     }
 
     /**
@@ -1501,7 +1499,6 @@ object NeteaseApi {
         }
 
         val lines = mutableListOf<LyricLine>()
-        var foundFirstNonColonLine = false
 
         for (line in yrc.split("\n")) {
             val header = headerRegex.find(line) ?: continue
@@ -1526,16 +1523,7 @@ object NeteaseApi {
             }
 
             val text = sb.toString().trim()
-            if (text.isNotEmpty()) {
-                // 跳过开头连续的歌曲制作团队行
-                if (!foundFirstNonColonLine) {
-                    if (isCreditLine(text)) {
-                        continue
-                    } else {
-                        foundFirstNonColonLine = true
-                    }
-                }
-
+            if (text.isNotEmpty() && !isExcludedLyric(text, dur)) {
                 // 查找翻译（使用开始时间匹配）
                 val translation = tlyricMap[start] ?: ""
                 
@@ -1549,98 +1537,57 @@ object NeteaseApi {
             }
         }
 
-        // 过滤末尾的"歌曲制作团队"信息
-        val filteredLines = filterTailCredits(lines)
-
-        return SongLyrics(lines = filteredLines.sortedBy { it.startAt })
+        return SongLyrics(lines = lines.sortedBy { it.startAt })
     }
 
-    /**
-     * 判断文本是否是有效的"歌曲制作团队"行
-     * 条件：包含冒号（中文或英文），且冒号后面有文字
-     * 例如：
-     * - "作词：xxx" → true
-     * - "薛之谦：" → false（冒号后面没有文字）
-     */
-    private fun isCreditLine(text: String): Boolean {
-        // 检查是否包含冒号
-        val colonIndex = text.indexOf("：")
-        val englishColonIndex = text.indexOf(":")
-        
-        val index = when {
-            colonIndex >= 0 && englishColonIndex >= 0 -> minOf(colonIndex, englishColonIndex)
-            colonIndex >= 0 -> colonIndex
-            englishColonIndex >= 0 -> englishColonIndex
-            else -> return false // 没有冒号
-        }
-        
-        // 获取冒号后面的文字
-        val afterColon = text.substring(index + 1).trim()
-        
-        // 冒号后面有文字才算有效的歌曲制作团队行
-        return afterColon.isNotEmpty()
-    }
+    private fun isExcludedLyric(text: String, duration: Long = 0): Boolean {
+        val colonKeywords = listOf(
+            "编曲", "母带", "OP", "SP", "出品", "贡献者", "调教", "编写", "改编", "和声", "吉他", "鼓", "混音", "剪辑", "MV", "曲绘", "后期", "推广", "出品人", "制作人", "监制", "统筹", "平面视觉", "感谢", "录音棚", "录音", "设计", "手风琴", "巴拉莱卡", "弦乐", "小提琴", "编辑", "录音室", "工程师", "导演", "造型师", "妆发", "文案", "企划", "宣传", "艺人经纪", "经纪人", "营销", "总监", "op", "sp", "pv", "PV", "OA", "OC", "oa", "oc", "制作", "署名", "策划", "表演", "词", "曲", "发行", "原唱", "打击乐", "贝斯", "钢琴", "键盘", "Program", "合音", "合唱", "演唱", "乐谱", "提琴", "和音", "鸣谢", "运营", "执行", "拍摄", "摄影", "花絮", "助理", "服装", "顾问", "版权", "翻译", "制片", "道具师", "灯光师", "调色", "合成", "承制", "艺人", "行销", "媒介", "有限公司", "资产", "技术支持", "合作伙伴", "视频平台", "口哨", "三弦", "长笛", "黑管", "童声", "缩混", "合作", "指导", "PGM", "编舞", "舞团", "宣发", "录混", "唢呐", "萨克斯", "笛子", "声明", "古筝", "箫", "人声", "配唱", "主唱", "封面", "A&R"
+        )
 
-    /**
-     * 过滤末尾的"歌曲制作团队"信息
-     * 1. 当末尾歌词有冒号且冒号后面有文字时，直接移除末尾这几句
-     * 2. 当末尾歌词没有冒号时，使用末尾的前一句歌词判断，
-     *    但需要有>=2句相连的有效歌词行才能判断为"歌曲制作团队"，
-     *    连同这几句和最后一句都要删掉
-     */
-    private fun filterTailCredits(lines: List<LyricLine>): List<LyricLine> {
-        if (lines.isEmpty()) return lines
-        
-        val result = lines.toMutableList()
-        
-        // 从末尾开始检查
-        while (result.isNotEmpty()) {
-            val lastLine = result.last()
-            
-            // 情况1：末尾歌词是有效的歌曲制作团队行
-            if (isCreditLine(lastLine.text)) {
-                result.removeAt(result.size - 1)
-                continue
-            }
-            
-            // 情况2：末尾歌词不是歌曲制作团队行，检查前一句
-            if (result.size >= 2) {
-                val secondLast = result[result.size - 2]
-                if (isCreditLine(secondLast.text)) {
-                    // 找到连续的有效歌词行
-                    var creditCount = 0
-                    for (i in result.size - 2 downTo 0) {
-                        if (isCreditLine(result[i].text)) {
-                            creditCount++
-                        } else {
-                            break
-                        }
-                    }
-                    
-                    // 如果有>=2句相连的有效歌词行，删除这些和最后一句
-                    if (creditCount >= 2) {
-                        // 删除最后一句（无用词）
-                        result.removeAt(result.size - 1)
-                        // 删除连续的有效歌词行
-                        for (i in 0 until creditCount) {
-                            if (result.isNotEmpty()) {
-                                result.removeAt(result.size - 1)
-                            }
-                        }
-                        continue
-                    }
+        val hasColon = text.contains("：") || text.contains(":")
+        if (hasColon) {
+            for (keyword in colonKeywords) {
+                if (text.contains(keyword)) {
+                    return true
                 }
             }
-            
-            // 无法匹配，退出循环
-            break
+        }
+
+        val plainKeywords = listOf(
+            "支持好歌曲，为歌曲留名",
+            "支持好音乐，为歌曲留名",
+            "网易云音乐ACG企划",
+            "纯音乐，请欣赏",
+            "未经著作权人许可",
+            "本作品经过词曲著作权利方授权"
+        )
+        
+        for (keyword in plainKeywords) {
+            if (text.contains(keyword)) {
+                return true
+            }
+        }
+        
+        // 不带冒号的关键词+时长小于500ms双重判定
+        val shortDurationKeywords = listOf(
+            "工作团队", "出品", "广播电视台", "故宫博物院", "音乐集团",
+            "联合出品", "文化传媒", "微博", "协办单位", "产业大会", "汪斯遥"
+        )
+        
+        if (duration in 1..499) {
+            for (keyword in shortDurationKeywords) {
+                if (text.contains(keyword)) {
+                    return true
+                }
+            }
         }
         
         // 过滤开头包含"未经著作权人书面许可"的歌词
-        while (result.isNotEmpty() && result.first().text.contains("未经著作权人书面许可")) {
-            result.removeAt(0)
+        if (text.contains("未经著作权人书面许可")) {
+            return true
         }
         
-        return result
+        return false
     }
 }

@@ -122,8 +122,8 @@ fun PlayerPage(
     var showPlaylistSheet by remember { mutableStateOf(false) }
     val playlistListState = rememberLazyListState()
     val isPureMusic = lyricState.lyrics?.isPureMusic == true
-    // 纯音乐只有1页（封面），非纯音乐有2页（封面+歌词）
-    val pageCount = if (isPureMusic) 1 else 2
+    // 始终有2页（封面+歌词），纯音乐时歌词页显示"纯音乐，请欣赏"
+    val pageCount = 2
     val pagerState = rememberPagerState(pageCount = { pageCount })
     val coroutineScope = rememberCoroutineScope()
 
@@ -612,12 +612,26 @@ fun PlayerPage(
                             }
                             1 -> {
                                 // 歌词页面
-                                LyricsView(
-                                    lyrics = lyricState.lyrics,
-                                    currentPosition = playerState.currentPosition,
-                                    onSeekTo = onSeekTo,
-                                    modifier = Modifier.fillMaxSize()
-                                )
+                                if (isPureMusic) {
+                                    // 纯音乐显示提示
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "纯音乐，请欣赏",
+                                            fontSize = 16.sp,
+                                            color = Color.White.copy(alpha = 0.5f)
+                                        )
+                                    }
+                                } else {
+                                    LyricsView(
+                                        lyrics = lyricState.lyrics,
+                                        currentPosition = playerState.currentPosition,
+                                        onSeekTo = onSeekTo,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
                             }
                         }
                     }
@@ -711,28 +725,23 @@ fun PlayerPage(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // 歌词按钮（纯音乐时禁用）
+                            // 歌词按钮
                             IconButton(
                                 onClick = { 
-                                    if (!isPureMusic) {
-                                        coroutineScope.launch {
-                                            if (pagerState.currentPage == 0) {
-                                                pagerState.animateScrollToPage(1)
-                                            } else {
-                                                pagerState.animateScrollToPage(0)
-                                            }
+                                    coroutineScope.launch {
+                                        if (pagerState.currentPage == 0) {
+                                            pagerState.animateScrollToPage(1)
+                                        } else {
+                                            pagerState.animateScrollToPage(0)
                                         }
                                     }
                                 },
-                                enabled = !isPureMusic,
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
                                     imageVector = MiuixIcons.Notes,
                                     contentDescription = "歌词",
-                                    tint = if (isPureMusic) {
-                                        Color.White.copy(alpha = 0.2f)
-                                    } else if (pagerState.currentPage == 1) {
+                                    tint = if (pagerState.currentPage == 1) {
                                         Color.White
                                     } else {
                                         Color.White.copy(alpha = 0.6f)

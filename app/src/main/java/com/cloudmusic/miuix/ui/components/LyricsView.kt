@@ -2,12 +2,15 @@ package com.cloudmusic.miuix.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -24,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -66,12 +70,28 @@ fun LyricsView(
     // 提前 animationDuration 开始切换，使动画完成时正好是歌词时间戳开始
     val currentIndex = lyrics.lines.indexOfLast { it.startAt <= currentPosition + animationDuration }
 
+    // 歌词区域高度和当前行高度（用于计算滚动偏移）
+    var lyricsAreaHeight by remember { mutableStateOf(0) }
+    var currentLineHeight by remember { mutableStateOf(0) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+
+    // 当歌词数据变化时（切换歌曲），滚动到顶部
+    LaunchedEffect(lyrics) {
+        listState.scrollToItem(0)
+        userScrolling = false
+    }
+
     // 自动滚动到当前歌词（只在非用户手动滚动时）
     LaunchedEffect(currentIndex) {
         if (currentIndex >= 0 && !userScrolling) {
+            // 滚动到当前行，使用偏移让它居中
+            // 由于顶部有空白区域，需要计算正确的偏移量
+            // index + 1 是因为顶部有一个空白item
+            val targetIndex = currentIndex + 1
+            // 使用animateScrollToItem并设置负的scrollOffset让当前行向下偏移
             listState.animateScrollToItem(
-                index = currentIndex,
-                scrollOffset = 0
+                index = targetIndex,
+                scrollOffset = -(lyricsAreaHeight / 2 - currentLineHeight / 2)
             )
         }
     }
@@ -83,9 +103,18 @@ fun LyricsView(
 
     LazyColumn(
         state = listState,
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .onGloballyPositioned { coordinates ->
+                lyricsAreaHeight = coordinates.size.height
+            },
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // 顶部空白，高度为歌词区域的一半
+        item {
+            Spacer(modifier = Modifier.height(with(density) { (lyricsAreaHeight / 2).toDp() }))
+        }
+        
         itemsIndexed(lyrics.lines) { index, line ->
             val isActive = index == currentIndex
             
@@ -116,8 +145,19 @@ fun LyricsView(
                 onClick = {
                     onSeekTo(line.startAt)
                 },
-                modifier = Modifier.padding(vertical = 0.dp, horizontal = 0.dp)
+                modifier = Modifier
+                    .padding(vertical = 0.dp, horizontal = 0.dp)
+                    .onGloballyPositioned { coordinates ->
+                        if (isActive) {
+                            currentLineHeight = coordinates.size.height
+                        }
+                    }
             )
+        }
+        
+        // 底部空白，高度为歌词区域的一半
+        item {
+            Spacer(modifier = Modifier.height(with(density) { (lyricsAreaHeight / 2).toDp() }))
         }
     }
 }
@@ -133,6 +173,8 @@ private fun LyricLineItem(
     val lyricFontSize = ThemeSettings.lyricFontSize
     val translationRatio = ThemeSettings.lyricTranslationRatio / 100f
     val translationFontSize = (lyricFontSize * translationRatio).toInt()
+    val lyricCenter = ThemeSettings.lyricCenter
+    val textAlign = if (lyricCenter) TextAlign.Center else TextAlign.Start
 
     Column(
         modifier = modifier
@@ -144,7 +186,7 @@ private fun LyricLineItem(
                 this.alpha = alpha
             }
             .padding(horizontal = 2.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.Start
+        horizontalAlignment = if (lyricCenter) Alignment.CenterHorizontally else Alignment.Start
     ) {
         // 原文歌词
         Text(
@@ -156,7 +198,7 @@ private fun LyricLineItem(
             } else {
                 Color.White.copy(alpha = 0.75f)
             },
-            textAlign = TextAlign.Start,
+            textAlign = textAlign,
             modifier = Modifier.fillMaxWidth()
         )
         
@@ -170,7 +212,7 @@ private fun LyricLineItem(
                 } else {
                     Color.White.copy(alpha = 0.5f)
                 },
-                textAlign = TextAlign.Start,
+                textAlign = textAlign,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp)

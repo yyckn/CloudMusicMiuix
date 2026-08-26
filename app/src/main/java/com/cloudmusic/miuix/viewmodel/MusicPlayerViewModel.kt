@@ -110,6 +110,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 prepareTrack(track)
                 pendingTrack = null
             }
+            
+            // 如果已有歌词，重新同步到Lyricon（处理APP重启后恢复播放的情况）
+            lyricState.lyrics?.let { lyrics ->
+                mediaPlaybackService?.updateLyrics(lyrics)
+                Log.d("MusicPlayerViewModel", "Synced existing lyrics to Lyricon on service connect: ${lyrics.lines.size} lines")
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -456,7 +462,16 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun togglePlayPause() {
         mediaPlaybackService?.let { service ->
             service.togglePlayPause()
-            playerState = playerState.copy(isPlaying = !playerState.isPlaying)
+            val newIsPlaying = !playerState.isPlaying
+            playerState = playerState.copy(isPlaying = newIsPlaying)
+            
+            // 开始播放时，确保歌词已同步到Lyricon
+            if (newIsPlaying) {
+                lyricState.lyrics?.let { lyrics ->
+                    service.updateLyrics(lyrics)
+                    Log.d("MusicPlayerViewModel", "Synced lyrics on play: ${lyrics.lines.size} lines")
+                }
+            }
         }
     }
 
