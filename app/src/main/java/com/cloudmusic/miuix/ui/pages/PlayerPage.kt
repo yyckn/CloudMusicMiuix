@@ -2,6 +2,10 @@ package com.cloudmusic.miuix.ui.pages
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,6 +48,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -56,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.cloudmusic.miuix.data.model.Track
 import com.cloudmusic.miuix.ui.components.LyricsView
+import com.cloudmusic.miuix.ui.theme.ThemeSettings
 import com.cloudmusic.miuix.viewmodel.LyricState
 import com.cloudmusic.miuix.viewmodel.PlayerState
 import kotlinx.coroutines.launch
@@ -120,6 +127,45 @@ fun PlayerPage(
     val pagerState = rememberPagerState(pageCount = { pageCount })
     val coroutineScope = rememberCoroutineScope()
 
+    // 封面旋转动画
+    val useRoundCover = ThemeSettings.useRoundCover
+    val coverRotationIndex = ThemeSettings.coverRotationIndex
+    val isPlaying = playerState.isPlaying
+    
+    // 计算封面旋转角度
+    val coverRotation = when {
+        !useRoundCover -> 0f
+        coverRotationIndex == 0 -> 0f // 静止
+        coverRotationIndex == 1 && isPlaying -> { // 播放时旋转
+            val infiniteTransition = rememberInfiniteTransition(label = "cover_rotation")
+            val rotation by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 8000, easing = LinearEasing)
+                ),
+                label = "rotation"
+            )
+            rotation
+        }
+        coverRotationIndex == 2 -> { // 始终旋转
+            val infiniteTransition = rememberInfiniteTransition(label = "cover_rotation")
+            val rotation by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 8000, easing = LinearEasing)
+                ),
+                label = "rotation"
+            )
+            rotation
+        }
+        else -> 0f
+    }
+
+    // 封面形状
+    val coverShape = if (useRoundCover) CircleShape else RoundedCornerShape(16.dp)
+
     // 打开播放列表时自动定位到当前歌曲
     LaunchedEffect(showPlaylistSheet) {
         if (showPlaylistSheet) {
@@ -136,6 +182,20 @@ fun PlayerPage(
     LaunchedEffect(playerState.currentTrack?.id) {
         if (playerState.currentTrack != null) {
             onLoadLyrics()
+        }
+    }
+
+    // 屏幕常亮设置 - 仅在播放页显示时生效
+    val context = LocalContext.current
+    androidx.compose.runtime.DisposableEffect(ThemeSettings.keepScreenOn) {
+        val activity = context as? android.app.Activity
+        val window = activity?.window
+        if (ThemeSettings.keepScreenOn) {
+            window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            // 离开播放页时移除屏幕常亮标志
+            window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 
@@ -327,8 +387,12 @@ fun PlayerPage(
                                         contentDescription = track?.title,
                                         modifier = Modifier
                                             .size(imageSize)
-                                            .clip(RoundedCornerShape(16.dp)),
-                                        contentScale = ContentScale.Fit,
+                                            .aspectRatio(1f)
+                                            .clip(coverShape)
+                                            .graphicsLayer {
+                                                rotationZ = coverRotation
+                                            },
+                                        contentScale = ContentScale.Crop,
                                         error = painterResource(android.R.drawable.ic_menu_gallery)
                                     )
                                 }
@@ -535,8 +599,12 @@ fun PlayerPage(
                                             contentDescription = track?.title,
                                             modifier = Modifier
                                                 .size(imageSize)
-                                                .clip(RoundedCornerShape(16.dp)),
-                                            contentScale = ContentScale.Fit,
+                                                .aspectRatio(1f)
+                                                .clip(coverShape)
+                                                .graphicsLayer {
+                                                    rotationZ = coverRotation
+                                                },
+                                            contentScale = ContentScale.Crop,
                                             error = painterResource(android.R.drawable.ic_menu_gallery)
                                         )
                                     }

@@ -50,6 +50,7 @@ fun SettingsPage(
     onLoginClick: () -> Unit,
     onProfileClick: () -> Unit,
     onThemeSettingsClick: () -> Unit,
+    onPlayPageSettingsClick: () -> Unit = {},
     onAboutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -166,7 +167,13 @@ fun SettingsPage(
                     ) {
                         ArrowPreference(
                             title = "主题设置",
+                            summary = "主题模式、底栏等",
                             onClick = onThemeSettingsClick
+                        )
+                        ArrowPreference(
+                            title = "播放页设置",
+                            summary = "歌词",
+                            onClick = onPlayPageSettingsClick
                         )
                     }
                 }

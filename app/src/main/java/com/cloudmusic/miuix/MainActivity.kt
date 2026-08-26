@@ -56,6 +56,7 @@ import com.cloudmusic.miuix.data.api.NeteaseApi
 import com.cloudmusic.miuix.ui.components.PlayerBar
 import com.cloudmusic.miuix.ui.pages.AboutPage
 import com.cloudmusic.miuix.ui.pages.LoginPage
+import com.cloudmusic.miuix.ui.pages.PlayPageSettingsPage
 import com.cloudmusic.miuix.ui.pages.PlayerPage
 import com.cloudmusic.miuix.ui.pages.PlaylistDetailPage
 import com.cloudmusic.miuix.ui.pages.PlaylistPage
@@ -102,6 +103,7 @@ sealed class Screen {
     object Login : Screen()
     object QrLogin : Screen()
     object ThemeSettings : Screen()
+    object PlayPageSettings : Screen()
     object About : Screen()
     object Profile : Screen()
 }
@@ -166,6 +168,10 @@ fun MainScreen(
                     initialState is Screen.Main && targetState is Screen.ThemeSettings ->
                         slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
                     initialState is Screen.ThemeSettings && targetState is Screen.Main ->
+                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                    initialState is Screen.Main && targetState is Screen.PlayPageSettings ->
+                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                    initialState is Screen.PlayPageSettings && targetState is Screen.Main ->
                         slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
                     initialState is Screen.Main && targetState is Screen.About ->
                         slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
@@ -348,6 +354,9 @@ fun MainScreen(
                                     },
                                     onThemeSettingsClick = {
                                         currentScreen = Screen.ThemeSettings
+                                    },
+                                    onPlayPageSettingsClick = {
+                                        currentScreen = Screen.PlayPageSettings
                                     },
                                     onAboutClick = {
                                         currentScreen = Screen.About
@@ -556,6 +565,9 @@ fun MainScreen(
                                     onThemeSettingsClick = {
                                         currentScreen = Screen.ThemeSettings
                                     },
+                                    onPlayPageSettingsClick = {
+                                        currentScreen = Screen.PlayPageSettings
+                                    },
                                     onAboutClick = {
                                         currentScreen = Screen.About
                                     },
@@ -743,6 +755,13 @@ fun MainScreen(
             }
             is Screen.ThemeSettings -> {
                 ThemeSettingsPage(
+                    onBackClick = {
+                        currentScreen = Screen.Main
+                    }
+                )
+            }
+            is Screen.PlayPageSettings -> {
+                PlayPageSettingsPage(
                     onBackClick = {
                         currentScreen = Screen.Main
                     }

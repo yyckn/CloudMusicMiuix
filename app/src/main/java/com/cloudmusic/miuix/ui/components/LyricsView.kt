@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cloudmusic.miuix.data.model.LyricLine
 import com.cloudmusic.miuix.data.model.SongLyrics
+import com.cloudmusic.miuix.ui.theme.ThemeSettings
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -128,6 +130,10 @@ private fun LyricLineItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val lyricFontSize = ThemeSettings.lyricFontSize
+    val translationRatio = ThemeSettings.lyricTranslationRatio / 100f
+    val translationFontSize = (lyricFontSize * translationRatio).toInt()
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -143,12 +149,12 @@ private fun LyricLineItem(
         // 原文歌词
         Text(
             text = line.text,
-            fontSize = 24.sp,
+            fontSize = lyricFontSize.sp,
             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
             color = if (isActive) {
-                MiuixTheme.colorScheme.onSurface
+                Color.White
             } else {
-                MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                Color.White.copy(alpha = 0.75f)
             },
             textAlign = TextAlign.Start,
             modifier = Modifier.fillMaxWidth()
@@ -158,11 +164,11 @@ private fun LyricLineItem(
         if (line.translation.isNotEmpty()) {
             Text(
                 text = line.translation,
-                fontSize = 18.sp,
+                fontSize = translationFontSize.sp,
                 color = if (isActive) {
-                    MiuixTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    Color.White.copy(alpha = 0.8f)
                 } else {
-                    MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    Color.White.copy(alpha = 0.5f)
                 },
                 textAlign = TextAlign.Start,
                 modifier = Modifier
