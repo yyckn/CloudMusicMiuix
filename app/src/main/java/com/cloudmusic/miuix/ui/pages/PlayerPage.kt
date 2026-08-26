@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -30,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +48,10 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.cloudmusic.miuix.data.model.Track
+import com.cloudmusic.miuix.ui.components.LyricsView
+import com.cloudmusic.miuix.viewmodel.LyricState
 import com.cloudmusic.miuix.viewmodel.PlayerState
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -72,12 +78,14 @@ import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Notes
 import top.yukonga.miuix.kmp.icon.extended.Pause
 import top.yukonga.miuix.kmp.icon.extended.Play
+import top.yukonga.miuix.kmp.icon.extended.ScreenMirroring
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 @Composable
 fun PlayerPage(
     playerState: PlayerState,
+    lyricState: LyricState,
     currentPlaylist: List<Track> = emptyList(),
     onBackClick: () -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -86,6 +94,8 @@ fun PlayerPage(
     onSeekTo: (Long) -> Unit,
     onDownload: () -> Unit = {},
     onPlayTrack: (Track) -> Unit = {},
+    onLoadLyrics: () -> Unit = {},
+    onOpenSystemUI: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -93,6 +103,8 @@ fun PlayerPage(
     var showMoreMenu by remember { mutableStateOf(false) }
     var showPlaylistSheet by remember { mutableStateOf(false) }
     val playlistListState = rememberLazyListState()
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    val coroutineScope = rememberCoroutineScope()
 
     // 打开播放列表时自动定位到当前歌曲
     LaunchedEffect(showPlaylistSheet) {
@@ -103,6 +115,13 @@ fun PlayerPage(
             if (currentIndex >= 0) {
                 playlistListState.scrollToItem(currentIndex)
             }
+        }
+    }
+
+    // 加载歌词
+    LaunchedEffect(playerState.currentTrack?.id) {
+        if (playerState.currentTrack != null) {
+            onLoadLyrics()
         }
     }
 
@@ -134,17 +153,30 @@ fun PlayerPage(
                         )
                     }
 
-                    // 更多按钮
-                    Box {
-                        IconButton(
-                            onClick = { showMoreMenu = true }
-                        ) {
+                    // 更多按钮区域
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 投屏按钮
+                        IconButton(onClick = onOpenSystemUI) {
                             Icon(
-                                imageVector = MiuixIcons.More,
-                                contentDescription = "更多",
+                                imageVector = MiuixIcons.ScreenMirroring,
+                                contentDescription = "投屏",
                                 tint = MiuixTheme.colorScheme.onSurface
                             )
                         }
+                        
+                        // 更多按钮
+                        Box {
+                            IconButton(
+                                onClick = { showMoreMenu = true }
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.More,
+                                    contentDescription = "更多",
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
                         OverlayListPopup(
                             show = showMoreMenu,
                             alignment = PopupPositionProvider.Align.TopEnd,
@@ -164,6 +196,7 @@ fun PlayerPage(
                                 )
                             }
                         }
+                    }
                     }
                 }
             }
@@ -218,22 +251,41 @@ fun PlayerPage(
                     )
                 }
 
-                // 封面图片（居中显示）
-                Box(
+                // 水平翻页器（封面/歌词）
+                HorizontalPager(
+                    state = pagerState,
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AsyncImage(
-                        model = track?.imgUrl,
-                        contentDescription = track?.title,
-                        modifier = Modifier
-                            .size(imageSize)
-                            .clip(RoundedCornerShape(16.dp)),
-                        contentScale = ContentScale.Crop,
-                        error = painterResource(android.R.drawable.ic_menu_gallery)
-                    )
+                        .fillMaxWidth()
+                ) { page ->
+                    when (page) {
+                        0 -> {
+                            // 封面页面
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AsyncImage(
+                                    model = track?.imgUrl,
+                                    contentDescription = track?.title,
+                                    modifier = Modifier
+                                        .size(imageSize)
+                                        .clip(RoundedCornerShape(16.dp)),
+                                    contentScale = ContentScale.Crop,
+                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                )
+                            }
+                        }
+                        1 -> {
+                            // 歌词页面
+                            LyricsView(
+                                lyrics = lyricState.lyrics,
+                                currentPosition = playerState.currentPosition,
+                                onSeekTo = onSeekTo,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
                 }
 
                 // 播放进度条
@@ -288,13 +340,25 @@ fun PlayerPage(
                 ) {
                     // 歌词按钮
                     IconButton(
-                        onClick = { /* 暂不实现 */ },
+                        onClick = { 
+                            coroutineScope.launch {
+                                if (pagerState.currentPage == 0) {
+                                    pagerState.animateScrollToPage(1)
+                                } else {
+                                    pagerState.animateScrollToPage(0)
+                                }
+                            }
+                        },
                         modifier = Modifier.size(56.dp)
                     ) {
                         Icon(
                             imageVector = MiuixIcons.Notes,
                             contentDescription = "歌词",
-                            tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            tint = if (pagerState.currentPage == 1) {
+                                MiuixTheme.colorScheme.primary
+                            } else {
+                                MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            },
                             modifier = Modifier.size(24.dp)
                         )
                     }

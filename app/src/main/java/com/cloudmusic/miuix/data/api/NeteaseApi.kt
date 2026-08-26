@@ -1,8 +1,10 @@
 package com.cloudmusic.miuix.data.api
 
+import com.cloudmusic.miuix.data.model.LyricLine
 import com.cloudmusic.miuix.data.model.Playlist
 import com.cloudmusic.miuix.data.model.PlaylistDetail
 import com.cloudmusic.miuix.data.model.RecommendPlaylist
+import com.cloudmusic.miuix.data.model.SongLyrics
 import com.cloudmusic.miuix.data.model.Track
 import com.cloudmusic.miuix.data.model.UserProfile
 import com.google.gson.Gson
@@ -1211,5 +1213,121 @@ object NeteaseApi {
             android.util.Log.e("NeteaseApi", "getCloudDiskSongs error: ${e.message}")
             Result.failure(e)
         }
+    }
+
+    suspend fun getSongLyric(songId: String): Result<SongLyrics> = withContext(Dispatchers.IO) {
+        try {
+            ensureCookie()
+            val id = songId.removePrefix("netrack_")
+            val url = "https://music.163.com/weapi/song/lyric?csrf_token="
+            val reqData = """{"id":$id,"lv":-1,"tv":-1,"csrf_token":""}"""
+            val encrypted = NeteaseCrypto.weapi(reqData)
+
+            android.util.Log.d("NeteaseApi", "getSongLyric - songId: $songId, id: $id")
+
+            val body = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Cookie", cookies)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                android.util.Log.e("NeteaseApi", "getSongLyric - HTTP error: ${response.code}")
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            if (responseBody.isNullOrEmpty()) {
+                android.util.Log.e("NeteaseApi", "getSongLyric - Empty response")
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+
+            android.util.Log.d("NeteaseApi", "getSongLyric - response length: ${responseBody.length}")
+            android.util.Log.d("NeteaseApi", "getSongLyric - response body: ${responseBody.take(500)}")
+
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            val lrcLyric = if (json.has("lrc") && !json.get("lrc").isJsonNull) {
+                val lrc = json.getAsJsonObject("lrc")
+                if (lrc.has("lyric") && !lrc.get("lyric").isJsonNull) lrc.get("lyric").asString else ""
+            } else ""
+
+            val tLyric = if (json.has("tlyric") && !json.get("tlyric").isJsonNull) {
+                val tlyric = json.getAsJsonObject("tlyric")
+                if (tlyric.has("lyric") && !tlyric.get("lyric").isJsonNull)
+                    tlyric.get("lyric").asString else ""
+            } else ""
+
+            android.util.Log.d("NeteaseApi", "getSongLyric - lrc length: ${lrcLyric.length}")
+            android.util.Log.d("NeteaseApi", "getSongLyric - lrc content: ${lrcLyric.take(300)}")
+            android.util.Log.d("NeteaseApi", "getSongLyric - tlyric length: ${tLyric.length}")
+
+            val lyrics = parseLrc(lrcLyric, tLyric)
+            android.util.Log.d("NeteaseApi", "getSongLyric - parsed ${lyrics.lines.size} lyric lines")
+            Result.success(lyrics)
+        } catch (e: Exception) {
+            android.util.Log.e("NeteaseApi", "getSongLyric error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    private fun parseLrc(lrc: String, tlyric: String): SongLyrics {
+        val regex = Regex("""\[(\d+):(\d+\.\d+)](.*)""")
+        val tlyricMap = mutableMapOf<Long, String>()
+        
+        // 解析翻译歌词
+        if (tlyric.isNotEmpty()) {
+            for (line in tlyric.split("\n")) {
+                val match = regex.find(line)
+                if (match != null) {
+                    val min = match.groupValues[1].toLong()
+                    val sec = (match.groupValues[2].toDouble() * 1000).toLong()
+                    val time = min * 60 * 1000 + sec
+                    val text = match.groupValues[3].trim()
+                    if (text.isNotEmpty()) {
+                        tlyricMap[time] = text
+                    }
+                }
+            }
+        }
+
+        // 解析原文歌词
+        val lines = mutableListOf<LyricLine>()
+        var foundFirstNonColonLine = false
+        
+        for (line in lrc.split("\n")) {
+            val match = regex.find(line)
+            if (match != null) {
+                val min = match.groupValues[1].toLong()
+                val sec = (match.groupValues[2].toDouble() * 1000).toLong()
+                val time = min * 60 * 1000 + sec
+                val text = match.groupValues[3].trim()
+                
+                if (text.isNotEmpty()) {
+                    // 跳过开头连续的冒号行（如"作词:xxx"、"作曲:xxx"）
+                    if (!foundFirstNonColonLine) {
+                        if (text.contains(":") || text.contains("：")) {
+                            continue // 跳过开头的冒号行
+                        } else {
+                            foundFirstNonColonLine = true // 找到第一个非冒号行
+                        }
+                    }
+                    
+                    val translation = tlyricMap[time] ?: ""
+                    lines.add(LyricLine(text = text, translation = translation, startAt = time))
+                }
+            }
+        }
+
+        return SongLyrics(lines = lines.sortedBy { it.startAt })
     }
 }

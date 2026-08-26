@@ -1,5 +1,6 @@
 package com.cloudmusic.miuix
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -43,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -778,8 +780,10 @@ fun MainScreen(
             onShow = { showPlayerPage = true },
             onDismiss = { showPlayerPage = false }
         ) {
+            val context = LocalContext.current
             PlayerPage(
                 playerState = viewModel.playerState,
+                lyricState = viewModel.lyricState,
                 currentPlaylist = viewModel.currentPlaylist,
                 onBackClick = { showPlayerPage = false },
                 onTogglePlayPause = { viewModel.togglePlayPause() },
@@ -787,7 +791,17 @@ fun MainScreen(
                 onNext = { viewModel.playNext() },
                 onSeekTo = { position -> viewModel.seekTo(position) },
                 onDownload = { viewModel.downloadCurrentTrack() },
-                onPlayTrack = { track -> viewModel.playTrack(track) }
+                onPlayTrack = { track -> viewModel.playTrack(track) },
+                onLoadLyrics = { viewModel.loadLyrics() },
+                onOpenSystemUI = {
+                    try {
+                        val intent = Intent("miui.intent.action.ACTIVITY_MIPLAY_DETAIL")
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        android.util.Log.e("MainActivity", "Failed to open SystemUI: ${e.message}")
+                    }
+                }
             )
         }
     }

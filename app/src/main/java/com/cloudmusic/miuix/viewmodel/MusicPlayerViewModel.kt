@@ -15,6 +15,7 @@ import com.cloudmusic.miuix.data.api.NeteaseApi
 import com.cloudmusic.miuix.data.model.Playlist
 import com.cloudmusic.miuix.data.model.PlaylistDetail
 import com.cloudmusic.miuix.data.model.RecommendPlaylist
+import com.cloudmusic.miuix.data.model.SongLyrics
 import com.cloudmusic.miuix.data.model.Track
 import com.cloudmusic.miuix.service.MediaPlaybackService
 import com.google.gson.Gson
@@ -51,6 +52,12 @@ data class SearchState(
     val error: String? = null
 )
 
+data class LyricState(
+    val lyrics: SongLyrics? = null,
+    val isLoading: Boolean = false,
+    val error: String? = null
+)
+
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
     var playerState by mutableStateOf(PlayerState())
@@ -63,6 +70,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         private set
 
     var searchState by mutableStateOf(SearchState())
+        private set
+
+    var lyricState by mutableStateOf(LyricState())
         private set
 
     var currentPlaylist by mutableStateOf<List<Track>>(emptyList())
@@ -79,6 +89,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             val binder = service as MediaPlaybackService.LocalBinder
             mediaPlaybackService = binder.getService()
             isBound = true
+            
+            // 设置回调，处理系统控制器的上一首/下一首
+            mediaPlaybackService?.onTrackChangedListener = object : MediaPlaybackService.OnTrackChangedListener {
+                override fun onNextTrack() {
+                    playNext()
+                }
+                override fun onPreviousTrack() {
+                    playPrevious()
+                }
+            }
+            
             // 如果有待播放的歌曲，准备播放
             pendingTrack?.let { track ->
                 prepareTrack(track)
@@ -87,6 +108,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
+            mediaPlaybackService?.onTrackChangedListener = null
             mediaPlaybackService = null
             isBound = false
         }
@@ -454,6 +476,22 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 },
                 onFailure = { e ->
                     android.util.Log.e("MusicPlayerViewModel", "Failed to get download URL: ${e.message}")
+                }
+            )
+        }
+    }
+
+    fun loadLyrics() {
+        val track = playerState.currentTrack ?: return
+        lyricState = lyricState.copy(isLoading = true, error = null)
+        viewModelScope.launch {
+            NeteaseApi.getSongLyric(track.id).fold(
+                onSuccess = { lyrics ->
+                    lyricState = lyricState.copy(lyrics = lyrics, isLoading = false)
+                },
+                onFailure = { e ->
+                    lyricState = lyricState.copy(isLoading = false, error = e.message)
+                    android.util.Log.e("MusicPlayerViewModel", "Failed to load lyrics: ${e.message}")
                 }
             )
         }

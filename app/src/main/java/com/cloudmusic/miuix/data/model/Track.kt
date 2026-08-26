@@ -56,3 +56,13 @@ data class UserProfile(
     val expertTags: List<String> = emptyList(),
     val createTime: Long = 0 // 注册时间戳（毫秒）
 )
+
+data class LyricLine(
+    val text: String,
+    val translation: String = "",
+    val startAt: Long // 毫秒
+)
+
+data class SongLyrics(
+    val lines: List<LyricLine> = emptyList()
+)

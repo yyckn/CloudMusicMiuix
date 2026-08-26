@@ -40,11 +40,19 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     private var isPlaying = false
     private var playbackPosition = 0L
     private var currentBitmap: Bitmap? = null
+    
+    // 回调接口，用于通知ViewModel歌曲切换
+    var onTrackChangedListener: OnTrackChangedListener? = null
 
     private val binder = LocalBinder()
 
     inner class LocalBinder : Binder() {
         fun getService(): MediaPlaybackService = this@MediaPlaybackService
+    }
+
+    interface OnTrackChangedListener {
+        fun onNextTrack()
+        fun onPreviousTrack()
     }
 
     companion object {
@@ -257,20 +265,14 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
 
     private fun playNext() {
         Log.d(TAG, "playNext")
-        val current = currentTrack ?: return
-        val index = playlist.indexOfFirst { it.id == current.id }
-        if (index >= 0 && index < playlist.size - 1) {
-            playTrack(playlist[index + 1])
-        }
+        // 通知ViewModel处理下一首
+        onTrackChangedListener?.onNextTrack()
     }
 
     private fun playPrevious() {
         Log.d(TAG, "playPrevious")
-        val current = currentTrack ?: return
-        val index = playlist.indexOfFirst { it.id == current.id }
-        if (index > 0) {
-            playTrack(playlist[index - 1])
-        }
+        // 通知ViewModel处理上一首
+        onTrackChangedListener?.onPreviousTrack()
     }
 
     private fun stopPlayback() {
@@ -285,11 +287,18 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     fun seekTo(position: Long) {
-        mediaPlayer?.seekTo(position.toInt())
-        playbackPosition = position
-        updatePlaybackState(
-            if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
-        )
+        Log.d(TAG, "seekTo: position=$position, isPlaying=$isPlaying")
+        mediaPlayer?.let { player ->
+            try {
+                player.seekTo(position.toInt())
+                playbackPosition = position
+                updatePlaybackState(
+                    if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "seekTo failed: ${e.message}")
+            }
+        }
     }
 
     private fun requestAudioFocus(): Boolean {

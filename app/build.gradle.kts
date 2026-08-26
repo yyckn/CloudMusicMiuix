@@ -65,6 +65,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.foundation:foundation:1.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.1")
     implementation("androidx.media:media:1.7.0")
     implementation("androidx.media2:media2-session:1.3.0")
