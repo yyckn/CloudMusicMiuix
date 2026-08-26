@@ -358,6 +358,19 @@ object NeteaseApi {
         }
     }
 
+    /**
+     * 格式化歌手名称
+     * - 4个及以上歌手显示为"群星"
+     * - 否则用"/"分隔
+     */
+    private fun formatArtistNames(artists: List<String>): String {
+        return when {
+            artists.isEmpty() -> "Unknown"
+            artists.size >= 4 -> "群星"
+            else -> artists.joinToString("/")
+        }
+    }
+
     suspend fun getTracksByIds(trackIds: List<Long>): Result<List<Track>> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()
@@ -411,7 +424,14 @@ object NeteaseApi {
             for (i in 0 until songsArray.size()) {
                 val song = songsArray.get(i).asJsonObject
                 val artists = song.getAsJsonArray("ar")
-                val artistName = if (artists.size() > 0) artists.get(0).asJsonObject.get("name").asString else "Unknown"
+                val artistNames = mutableListOf<String>()
+                for (j in 0 until artists.size()) {
+                    val artist = artists.get(j).asJsonObject
+                    if (artist.has("name") && !artist.get("name").isJsonNull) {
+                        artistNames.add(artist.get("name").asString)
+                    }
+                }
+                val artistName = formatArtistNames(artistNames)
                 val artistId = if (artists.size() > 0) artists.get(0).asJsonObject.get("id").asLong else 0L
                 val album = song.getAsJsonObject("al")
 
@@ -425,7 +445,8 @@ object NeteaseApi {
                         albumId = "nealbum_${album.get("id").asLong}",
                         sourceUrl = "https://music.163.com/#/song?id=${song.get("id").asLong}",
                         imgUrl = album.get("picUrl").asString,
-                        duration = if (song.has("dt")) song.get("dt").asLong else 0L
+                        duration = if (song.has("dt")) song.get("dt").asLong else 0L,
+                        artistNames = artistNames
                     )
                 )
             }
@@ -555,7 +576,14 @@ object NeteaseApi {
             for (i in 0 until songsArray.size()) {
                 val song = songsArray.get(i).asJsonObject
                 val artists = song.getAsJsonArray("artists")
-                val artistName = if (artists.size() > 0) artists.get(0).asJsonObject.get("name").asString else "Unknown"
+                val artistNames = mutableListOf<String>()
+                for (j in 0 until artists.size()) {
+                    val artist = artists.get(j).asJsonObject
+                    if (artist.has("name") && !artist.get("name").isJsonNull) {
+                        artistNames.add(artist.get("name").asString)
+                    }
+                }
+                val artistName = formatArtistNames(artistNames)
                 val artistId = if (artists.size() > 0) artists.get(0).asJsonObject.get("id").asLong else 0L
                 val album = song.getAsJsonObject("album")
 
@@ -570,7 +598,8 @@ object NeteaseApi {
                         sourceUrl = "https://music.163.com/#/song?id=${song.get("id").asLong}",
                         imgUrl = album.get("picUrl").asString,
                         duration = if (song.has("duration")) song.get("duration").asLong else 0L,
-                        isVip = if (song.has("fee")) song.get("fee").asInt == 1 else false
+                        isVip = if (song.has("fee")) song.get("fee").asInt == 1 else false,
+                        artistNames = artistNames
                     )
                 )
             }
@@ -1078,7 +1107,14 @@ object NeteaseApi {
                 try {
                     val song = songsArray.get(i).asJsonObject
                     val artists = song.getAsJsonArray("ar")
-                    val artistName = if (artists.size() > 0) artists.get(0).asJsonObject.get("name").asString else "Unknown"
+                    val artistNames = mutableListOf<String>()
+                    for (j in 0 until artists.size()) {
+                        val artist = artists.get(j).asJsonObject
+                        if (artist.has("name") && !artist.get("name").isJsonNull) {
+                            artistNames.add(artist.get("name").asString)
+                        }
+                    }
+                    val artistName = formatArtistNames(artistNames)
                     val artistId = if (artists.size() > 0) artists.get(0).asJsonObject.get("id").asLong else 0L
                     val album = song.getAsJsonObject("al")
 
@@ -1093,7 +1129,8 @@ object NeteaseApi {
                             sourceUrl = "https://music.163.com/#/song?id=${song.get("id").asLong}",
                             imgUrl = album.get("picUrl").asString,
                             duration = if (song.has("dt")) song.get("dt").asLong else 0L,
-                            isVip = if (song.has("fee")) song.get("fee").asInt == 1 else false
+                            isVip = if (song.has("fee")) song.get("fee").asInt == 1 else false,
+                            artistNames = artistNames
                         )
                     )
                 } catch (e: Exception) {
@@ -1165,14 +1202,16 @@ object NeteaseApi {
                     val songName = if (song.has("name") && !song.get("name").isJsonNull) song.get("name").asString else ""
                     
                     var artistName = "Unknown"
+                    var artistNames = mutableListOf<String>()
                     if (song.has("ar") && song.get("ar").isJsonArray) {
                         val artists = song.getAsJsonArray("ar")
-                        if (artists.size() > 0) {
-                            val artist = artists.get(0).asJsonObject
+                        for (j in 0 until artists.size()) {
+                            val artist = artists.get(j).asJsonObject
                             if (artist.has("name") && !artist.get("name").isJsonNull) {
-                                artistName = artist.get("name").asString
+                                artistNames.add(artist.get("name").asString)
                             }
                         }
+                        artistName = formatArtistNames(artistNames)
                     } else if (song.has("artist") && !song.get("artist").isJsonNull) {
                         artistName = song.get("artist").asString
                     }
@@ -1200,7 +1239,8 @@ object NeteaseApi {
                             sourceUrl = "https://music.163.com/#/song?id=$songId",
                             imgUrl = "",
                             duration = duration,
-                            isVip = false
+                            isVip = false,
+                            artistNames = artistNames
                         )
                     )
                 } catch (e: Exception) {
@@ -1321,7 +1361,7 @@ object NeteaseApi {
         }
     }
 
-    suspend fun getSongLyric(songId: String, songTitle: String = "", songArtist: String = "", songDuration: Long = 0): Result<SongLyrics> = withContext(Dispatchers.IO) {
+    suspend fun getSongLyric(songId: String, songTitle: String = "", songArtist: String = "", songDuration: Long = 0, artistNames: List<String> = emptyList()): Result<SongLyrics> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()
             val id = songId.removePrefix("netrack_")
@@ -1384,10 +1424,16 @@ object NeteaseApi {
             android.util.Log.d("NeteaseApi", "getSongLyric - yrc length: ${yrcLyric.length}")
 
             // 优先使用YRC逐字歌词，否则使用LRC
-            val lyrics = if (yrcLyric.isNotEmpty()) {
-                parseYrc(yrcLyric, tLyric)
+            // 使用传入的artistNames，如果没有则从songArtist分割
+            val effectiveArtistNames = if (artistNames.isNotEmpty()) {
+                artistNames
             } else {
-                parseLrc(lrcLyric, tLyric)
+                songArtist.split("/", "、", " ").map { it.trim() }.filter { it.isNotEmpty() }
+            }
+            val lyrics = if (yrcLyric.isNotEmpty()) {
+                parseYrc(yrcLyric, tLyric, effectiveArtistNames)
+            } else {
+                parseLrc(lrcLyric, tLyric, effectiveArtistNames)
             }
             
             // 判断是否为纯音乐：刨去无用信息的歌词小于等于3行
@@ -1415,7 +1461,7 @@ object NeteaseApi {
         }
     }
 
-    private fun parseLrc(lrc: String, tlyric: String): SongLyrics {
+    private fun parseLrc(lrc: String, tlyric: String, artistNames: List<String> = emptyList()): SongLyrics {
         val regex = Regex("""\[(\d+):(\d+\.\d+)](.*)""")
         val tlyricMap = mutableMapOf<Long, String>()
         
@@ -1465,7 +1511,8 @@ object NeteaseApi {
             
             if (!isExcludedLyric(text, duration)) {
                 val translation = tlyricMap[time] ?: ""
-                lines.add(LyricLine(text = text, translation = translation, startAt = time))
+                val isArtist = isArtistLine(text, artistNames)
+                lines.add(LyricLine(text = text, translation = translation, startAt = time, isArtistLine = isArtist))
             }
         }
 
@@ -1476,7 +1523,7 @@ object NeteaseApi {
      * 解析YRC逐字歌词格式
      * 格式示例: [12580,3470](12580,250,0)难(12830,300,0)忘
      */
-    private fun parseYrc(yrc: String, tlyric: String): SongLyrics {
+    private fun parseYrc(yrc: String, tlyric: String, artistNames: List<String> = emptyList()): SongLyrics {
         val headerRegex = Regex("""\[(\d{1,19}),\s*(\d{1,19})]""")
         val segRegex = Regex("""\((\d{1,19}),\s*(\d{1,19}),\s*[-\d]{1,20}\)([^()\n\r]*)""")
         val tlyricRegex = Regex("""\[(\d+):(\d+\.\d+)](.*)""")
@@ -1526,13 +1573,15 @@ object NeteaseApi {
             if (text.isNotEmpty() && !isExcludedLyric(text, dur)) {
                 // 查找翻译（使用开始时间匹配）
                 val translation = tlyricMap[start] ?: ""
+                val isArtist = isArtistLine(text, artistNames)
                 
                 lines.add(LyricLine(
                     text = text,
                     translation = translation,
                     startAt = start,
                     endAt = end,
-                    words = words.takeIf { it.isNotEmpty() }
+                    words = words.takeIf { it.isNotEmpty() },
+                    isArtistLine = isArtist
                 ))
             }
         }
@@ -1542,7 +1591,7 @@ object NeteaseApi {
 
     private fun isExcludedLyric(text: String, duration: Long = 0): Boolean {
         val colonKeywords = listOf(
-            "编曲", "母带", "OP", "SP", "出品", "贡献者", "调教", "编写", "改编", "和声", "吉他", "鼓", "混音", "剪辑", "MV", "曲绘", "后期", "推广", "出品人", "制作人", "监制", "统筹", "平面视觉", "感谢", "录音棚", "录音", "设计", "手风琴", "巴拉莱卡", "弦乐", "小提琴", "编辑", "录音室", "工程师", "导演", "造型师", "妆发", "文案", "企划", "宣传", "艺人经纪", "经纪人", "营销", "总监", "op", "sp", "pv", "PV", "OA", "OC", "oa", "oc", "制作", "署名", "策划", "表演", "词", "曲", "发行", "原唱", "打击乐", "贝斯", "钢琴", "键盘", "Program", "合音", "合唱", "演唱", "乐谱", "提琴", "和音", "鸣谢", "运营", "执行", "拍摄", "摄影", "花絮", "助理", "服装", "顾问", "版权", "翻译", "制片", "道具师", "灯光师", "调色", "合成", "承制", "艺人", "行销", "媒介", "有限公司", "资产", "技术支持", "合作伙伴", "视频平台", "口哨", "三弦", "长笛", "黑管", "童声", "缩混", "合作", "指导", "PGM", "编舞", "舞团", "宣发", "录混", "唢呐", "萨克斯", "笛子", "声明", "古筝", "箫", "人声", "配唱", "主唱", "封面", "A&R"
+            "编曲", "母带", "OP", "SP", "出品", "贡献者", "调教", "编写", "改编", "和声", "吉他", "鼓", "混音", "剪辑", "MV", "曲绘", "后期", "推广", "出品人", "制作人", "监制", "统筹", "平面视觉", "感谢", "录音棚", "录音", "设计", "手风琴", "巴拉莱卡", "弦乐", "小提琴", "编辑", "录音室", "工程师", "导演", "造型师", "妆发", "文案", "企划", "宣传", "艺人经纪", "经纪人", "营销", "总监", "op", "sp", "pv", "PV", "OA", "OC", "oa", "oc", "制作", "署名", "策划", "表演", "词", "曲", "发行", "原唱", "打击乐", "贝斯", "钢琴", "键盘", "Program", "合音", "合唱", "演唱", "乐谱", "提琴", "和音", "鸣谢", "运营", "执行", "拍摄", "摄影", "花絮", "助理", "服装", "顾问", "版权", "翻译", "制片", "道具师", "灯光师", "调色", "合成", "承制", "艺人", "行销", "媒介", "有限公司", "资产", "技术支持", "合作伙伴", "视频平台", "口哨", "三弦", "长笛", "黑管", "童声", "缩混", "合作", "指导", "PGM", "编舞", "舞团", "宣发", "录混", "唢呐", "萨克斯", "笛子", "声明", "古筝", "箫", "人声", "配唱", "主唱", "封面", "A&R", "乐队", "队长", "女生", "项目支持", "曼陀林", "指挥", "单簧管", "独奏", "乐团", "协力", "项目", "rap"
         )
 
         val hasColon = text.contains("：") || text.contains(":")
@@ -1560,7 +1609,14 @@ object NeteaseApi {
             "网易云音乐ACG企划",
             "纯音乐，请欣赏",
             "未经著作权人许可",
-            "本作品经过词曲著作权利方授权"
+            "本作品经过词曲著作权利方授权",
+            "Co.",
+            "Ltd.",
+            "发布会现场",
+            "萨克斯管/",
+            "小号/",
+            "长号",
+            "@牛班NEWBAND"
         )
         
         for (keyword in plainKeywords) {
@@ -1569,13 +1625,13 @@ object NeteaseApi {
             }
         }
         
-        // 不带冒号的关键词+时长小于500ms双重判定
+        // 不带冒号的关键词+时长小于1000ms双重判定
         val shortDurationKeywords = listOf(
             "工作团队", "出品", "广播电视台", "故宫博物院", "音乐集团",
-            "联合出品", "文化传媒", "微博", "协办单位", "产业大会", "汪斯遥"
+            "联合出品", "文化传媒", "微博", "协办单位", "产业大会", "汪斯遥", "Zhang"
         )
         
-        if (duration in 1..499) {
+        if (duration in 1..1999) {
             for (keyword in shortDurationKeywords) {
                 if (text.contains(keyword)) {
                     return true
@@ -1586,6 +1642,78 @@ object NeteaseApi {
         // 过滤开头包含"未经著作权人书面许可"的歌词
         if (text.contains("未经著作权人书面许可")) {
             return true
+        }
+        
+        return false
+    }
+
+    /**
+     * 判断是否为歌手行
+     * 规则：
+     * 1. 先进行歌手关键字识别
+     * 2. 如果包含冒号，则将冒号前后分成两行，冒号前算作作者行
+     * 3. 如果没有冒号，只要识别到有歌手关键词即可算作歌手行
+     * 4. 特殊情况：如果该行只有一个"合"或"童声"，算作特殊的歌手行
+     */
+    private fun isArtistLine(text: String, artistNames: List<String>): Boolean {
+        val trimmedText = text.trim()
+        
+        // 特殊关键词完全匹配：合、童声
+        val specialKeywords = listOf("合", "童声")
+        if (trimmedText in specialKeywords) {
+            return true
+        }
+        
+        // 去掉括号，检查内容
+        val contentWithoutBrackets = trimmedText
+            .removeSurrounding("（", "）")
+            .removeSurrounding("(", ")")
+            .removeSurrounding("【", "】")
+            .trim()
+        
+        // 特殊关键词完全匹配（去掉括号后）
+        if (contentWithoutBrackets in specialKeywords) {
+            return true
+        }
+        
+        // 额外的关键词列表
+        val extraKeywords = listOf("何炅")
+        
+        // 检查额外关键词
+        for (keyword in extraKeywords) {
+            if (contentWithoutBrackets.contains(keyword)) {
+                // 检查是否包含冒号
+                if (contentWithoutBrackets.contains("：") || contentWithoutBrackets.contains(":")) {
+                    val beforeColon = contentWithoutBrackets.substringBefore(":").substringBefore("：").trim()
+                    if (beforeColon.contains(keyword)) {
+                        return true
+                    }
+                } else {
+                    return true
+                }
+            }
+        }
+        
+        // 检查是否匹配歌手名称
+        for (artist in artistNames) {
+            // 检查是否完全匹配（可能有多个歌手用/、顿号或空格分隔）
+            val artistParts = artist.split("/", "、", " ")
+            for (part in artistParts) {
+                val trimmedPart = part.trim()
+                if (trimmedPart.isNotEmpty() && contentWithoutBrackets.contains(trimmedPart)) {
+                    // 检查是否包含冒号
+                    if (contentWithoutBrackets.contains("：") || contentWithoutBrackets.contains(":")) {
+                        // 冒号前的部分是作者行
+                        val beforeColon = contentWithoutBrackets.substringBefore(":").substringBefore("：").trim()
+                        if (beforeColon.contains(trimmedPart)) {
+                            return true
+                        }
+                    } else {
+                        // 没有冒号，直接匹配
+                        return true
+                    }
+                }
+            }
         }
         
         return false

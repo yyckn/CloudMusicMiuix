@@ -105,6 +105,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
             }
             
+            // 设置回调，同步播放状态（处理音频焦点丢失等情况）
+            mediaPlaybackService?.onPlaybackStateChanged = { isPlaying ->
+                playerState = playerState.copy(isPlaying = isPlaying)
+            }
+            
             // 如果有待播放的歌曲，准备播放
             pendingTrack?.let { track ->
                 prepareTrack(track)
@@ -120,6 +125,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         override fun onServiceDisconnected(name: ComponentName?) {
             mediaPlaybackService?.onTrackChangedListener = null
+            mediaPlaybackService?.onPlaybackStateChanged = null
             mediaPlaybackService = null
             isBound = false
         }
@@ -462,11 +468,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun togglePlayPause() {
         mediaPlaybackService?.let { service ->
             service.togglePlayPause()
-            val newIsPlaying = !playerState.isPlaying
-            playerState = playerState.copy(isPlaying = newIsPlaying)
+            // 查询实际的播放状态，而不是简单反转
+            val actualIsPlaying = service.isPlaying()
+            playerState = playerState.copy(isPlaying = actualIsPlaying)
             
             // 开始播放时，确保歌词已同步到Lyricon
-            if (newIsPlaying) {
+            if (actualIsPlaying) {
                 lyricState.lyrics?.let { lyrics ->
                     service.updateLyrics(lyrics)
                     Log.d("MusicPlayerViewModel", "Synced lyrics on play: ${lyrics.lines.size} lines")
@@ -518,7 +525,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         lyricsLoadJob?.cancel() // 取消之前的歌词加载任务
         lyricState = lyricState.copy(isLoading = true, error = null)
         lyricsLoadJob = viewModelScope.launch {
-            NeteaseApi.getSongLyric(track.id, track.title, track.artist, track.duration).fold(
+            NeteaseApi.getSongLyric(track.id, track.title, track.artist, track.duration, track.artistNames).fold(
                 onSuccess = { lyrics ->
                     // 检查歌曲是否已切换
                     if (playerState.currentTrack?.id == track.id) {
@@ -555,7 +562,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun likeCurrentTrack() {
+    fun likeCurrentTrack(onResult: ((Boolean) -> Unit)? = null) {
         val track = playerState.currentTrack ?: return
         viewModelScope.launch {
             val newLikeState = !isCurrentTrackLiked
@@ -564,6 +571,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     if (success) {
                         isCurrentTrackLiked = newLikeState
                         Log.d("MusicPlayerViewModel", "Track ${if (newLikeState) "liked" else "unliked"}: ${track.title}")
+                        onResult?.invoke(newLikeState)
                     }
                 },
                 onFailure = { e ->

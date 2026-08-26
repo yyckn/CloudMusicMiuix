@@ -26,6 +26,7 @@ fun SwipeablePlayerSheet(
     isVisible: Boolean,
     onShow: () -> Unit,
     onDismiss: () -> Unit,
+    enableSwipeToDismiss: Boolean = true,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
@@ -61,8 +62,8 @@ fun SwipeablePlayerSheet(
                 translationY = offsetY.value
                 alpha = 1f - (offsetY.value / screenHeight).coerceIn(0f, 1f)
             }
-            .pointerInput(isVisible) {
-                if (isVisible) {
+            .pointerInput(isVisible, enableSwipeToDismiss) {
+                if (isVisible && enableSwipeToDismiss) {
                     detectVerticalDragGestures(
                         onDragEnd = {
                             scope.launch {

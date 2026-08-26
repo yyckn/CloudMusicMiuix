@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -285,11 +286,16 @@ fun MainScreen(
                                         LazyColumn(
                                             state = listState,
                                             modifier = Modifier.fillMaxWidth(),
-                                            contentPadding = PaddingValues(vertical = 8.dp)
+                                            contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)
                                         ) {
                                             items(viewModel.currentPlaylist) { track ->
                                                 Card(
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(vertical = 4.dp),
+                                                    colors = CardDefaults.defaultColors(
+                                                        color = MiuixTheme.colorScheme.secondaryContainer
+                                                    ),
                                                     pressFeedbackType = PressFeedbackType.Tilt,
                                                     showIndication = true,
                                                     onClick = {
@@ -495,11 +501,16 @@ fun MainScreen(
                                     LazyColumn(
                                         state = listState,
                                         modifier = Modifier.fillMaxWidth(),
-                                        contentPadding = PaddingValues(vertical = 8.dp)
+                                        contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)
                                     ) {
                                         items(viewModel.currentPlaylist) { track ->
                                             Card(
-                                                modifier = Modifier.fillMaxWidth(),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp),
+                                                colors = CardDefaults.defaultColors(
+                                                    color = MiuixTheme.colorScheme.secondaryContainer
+                                                ),
                                                 pressFeedbackType = PressFeedbackType.Tilt,
                                                 showIndication = true,
                                                 onClick = {
@@ -666,11 +677,16 @@ fun MainScreen(
                                 LazyColumn(
                                     state = listState,
                                     modifier = Modifier.fillMaxWidth(),
-                                    contentPadding = PaddingValues(vertical = 8.dp)
+                                    contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)
                                 ) {
                                     items(viewModel.currentPlaylist) { track ->
                                         Card(
-                                            modifier = Modifier.fillMaxWidth(),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp),
+                                            colors = CardDefaults.defaultColors(
+                                                color = MiuixTheme.colorScheme.secondaryContainer
+                                            ),
                                             pressFeedbackType = PressFeedbackType.Tilt,
                                             showIndication = true,
                                             onClick = {
@@ -794,10 +810,12 @@ fun MainScreen(
         }
 
         // 播放器页面覆盖层 - 使用可滑动的底部弹出层
+        var isPlayerDrawerOpen by remember { mutableStateOf(false) }
         SwipeablePlayerSheet(
             isVisible = showPlayerPage,
             onShow = { showPlayerPage = true },
-            onDismiss = { showPlayerPage = false }
+            onDismiss = { showPlayerPage = false },
+            enableSwipeToDismiss = !isPlayerDrawerOpen
         ) {
             val context = LocalContext.current
             PlayerPage(
@@ -811,6 +829,38 @@ fun MainScreen(
                 onNext = { viewModel.playNext() },
                 onSeekTo = { position -> viewModel.seekTo(position) },
                 onDownload = { viewModel.downloadCurrentTrack() },
+                onDownloadCover = {
+                    val coverUrl = viewModel.playerState.currentTrack?.imgUrl
+                    if (!coverUrl.isNullOrEmpty()) {
+                        try {
+                            val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+                            val fileName = "${viewModel.playerState.currentTrack?.title ?: "cover"}.jpg"
+                            val request = android.app.DownloadManager.Request(android.net.Uri.parse(coverUrl))
+                                .setTitle("下载封面图片")
+                                .setDescription("正在下载封面图片")
+                                .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_PICTURES, "CloudMusic/$fileName")
+                            downloadManager.enqueue(request)
+                            android.widget.Toast.makeText(context, "已保存到 /Pictures/CloudMusic/ 目录", android.widget.Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            android.util.Log.e("MainActivity", "Failed to download cover: ${e.message}")
+                        }
+                    }
+                },
+                onShare = {
+                    val track = viewModel.playerState.currentTrack
+                    if (track != null) {
+                        val songId = track.id.removePrefix("netrack_")
+                        val shareText = "【网易云音乐】分享来自 @${track.artist} 的单曲《${track.title}》: https://music.163.com/#/song?id=$songId"
+                        val sendIntent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            putExtra(Intent.EXTRA_TEXT, shareText)
+                            type = "text/plain"
+                        }
+                        val shareIntent = Intent.createChooser(sendIntent, null)
+                        context.startActivity(shareIntent)
+                    }
+                },
                 onPlayTrack = { track -> viewModel.playTrack(track) },
                 onLoadLyrics = { viewModel.loadLyrics() },
                 onOpenSystemUI = {
@@ -822,9 +872,15 @@ fun MainScreen(
                         android.util.Log.e("MainActivity", "Failed to open SystemUI: ${e.message}")
                     }
                 },
-                onLikeTrack = { viewModel.likeCurrentTrack() }
+                onLikeTrack = {
+                    viewModel.likeCurrentTrack { isLiked ->
+                        val message = if (isLiked) "已收藏" else "已取消收藏"
+                        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onDrawerStateChanged = { isOpen -> isPlayerDrawerOpen = isOpen }
             )
         }
     }
-    }
+}
 }

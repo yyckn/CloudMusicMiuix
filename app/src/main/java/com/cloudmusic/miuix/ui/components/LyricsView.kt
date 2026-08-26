@@ -7,11 +7,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -37,6 +40,9 @@ import com.cloudmusic.miuix.data.model.SongLyrics
 import com.cloudmusic.miuix.ui.theme.ThemeSettings
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ContactsCircle
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -127,7 +133,7 @@ fun LyricsView(
             val alpha by animateFloatAsState(
                 targetValue = targetAlpha,
                 animationSpec = tween(
-                    durationMillis = 300,
+                    durationMillis = 600,
                     delayMillis = delayMs
                 ),
                 label = "lyric_alpha"
@@ -176,6 +182,29 @@ private fun LyricLineItem(
     val lyricCenter = ThemeSettings.lyricCenter
     val textAlign = if (lyricCenter) TextAlign.Center else TextAlign.Start
 
+    // 特殊情况：只有一个"合"或"童声"
+    val specialKeywords = listOf("合", "童声")
+    val trimmedText = line.text.trim()
+    val contentWithoutBrackets = trimmedText
+        .removeSurrounding("（", "）")
+        .removeSurrounding("(", ")")
+        .removeSurrounding("【", "】")
+        .trim()
+    val isSpecialArtistLine = line.isArtistLine && contentWithoutBrackets in specialKeywords
+
+    // 判断是否为歌手行
+    val isArtist = line.isArtistLine
+
+    // 歌手行使用翻译字体大小
+    val displayFontSize = if (isArtist) translationFontSize.sp else lyricFontSize.sp
+
+    // 文字颜色
+    val textColor = if (isActive) {
+        Color.White
+    } else {
+        Color.White.copy(alpha = 0.75f)
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -188,22 +217,55 @@ private fun LyricLineItem(
             .padding(horizontal = 2.dp, vertical = 8.dp),
         horizontalAlignment = if (lyricCenter) Alignment.CenterHorizontally else Alignment.Start
     ) {
-        // 原文歌词
-        Text(
-            text = line.text,
-            fontSize = lyricFontSize.sp,
-            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-            color = if (isActive) {
-                Color.White
-            } else {
-                Color.White.copy(alpha = 0.75f)
-            },
-            textAlign = textAlign,
-            modifier = Modifier.fillMaxWidth()
-        )
+        // 歌词内容
+        if (isSpecialArtistLine) {
+            // 特殊歌手行：统一成"（合）"或"（童声）"，不加图标
+            val displayText = "（$contentWithoutBrackets）"
+            Text(
+                text = displayText,
+                fontSize = displayFontSize,
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                color = textColor,
+                textAlign = textAlign,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else if (isArtist) {
+            // 歌手行：在括号内前面加图标
+            val displayText = formatArtistLineText(line.text)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.ContactsCircle,
+                    contentDescription = null,
+                    tint = textColor,
+                    modifier = Modifier.size((displayFontSize.value * 1.2).dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = displayText,
+                    fontSize = displayFontSize,
+                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                    color = textColor,
+                    textAlign = textAlign,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        } else {
+            // 普通行
+            Text(
+                text = line.text,
+                fontSize = displayFontSize,
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                color = textColor,
+                textAlign = textAlign,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         
         // 翻译歌词（在原文下方，不重叠）
-        if (line.translation.isNotEmpty()) {
+        if (line.translation.isNotEmpty() && !isArtist) {
             Text(
                 text = line.translation,
                 fontSize = translationFontSize.sp,
@@ -219,4 +281,15 @@ private fun LyricLineItem(
             )
         }
     }
+}
+
+/**
+ * 格式化歌手行文字，统一括号为中文括号
+ */
+private fun formatArtistLineText(text: String): String {
+    var result = text.trim()
+    // 统一括号为中文括号
+    result = result.replace("(", "（").replace(")", "）")
+    result = result.replace("[", "【").replace("]", "】")
+    return result
 }

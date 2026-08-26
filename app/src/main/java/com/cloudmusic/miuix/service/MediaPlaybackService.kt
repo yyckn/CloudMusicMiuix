@@ -44,6 +44,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     // 回调接口，用于通知ViewModel歌曲切换
     var onTrackChangedListener: OnTrackChangedListener? = null
     
+    // 回调接口，用于通知ViewModel播放状态变化
+    var onPlaybackStateChanged: ((Boolean) -> Unit)? = null
+    
     // Lyricon词幕管理器
     var lyriconManager: LyriconProviderManager? = null
         private set
@@ -250,6 +253,10 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         return mediaPlayer?.duration?.toLong() ?: 0L
     }
 
+    fun isPlaying(): Boolean {
+        return mediaPlayer?.isPlaying ?: false
+    }
+
     private fun resumePlayback() {
         Log.d(TAG, "resumePlayback")
         mediaPlayer?.let { player ->
@@ -258,6 +265,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 isPlaying = true
                 updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
                 showNotification()
+                
+                // 通知ViewModel播放状态变化
+                onPlaybackStateChanged?.invoke(true)
                 
                 // 同步播放状态到Lyricon
                 lyriconManager?.setPlaybackState(true)
@@ -274,6 +284,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 isPlaying = false
                 updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
                 showNotification()
+                
+                // 通知ViewModel播放状态变化
+                onPlaybackStateChanged?.invoke(false)
                 
                 // 同步播放状态到Lyricon
                 lyriconManager?.setPlaybackState(false)

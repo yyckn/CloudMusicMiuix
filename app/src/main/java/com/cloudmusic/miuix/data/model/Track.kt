@@ -12,7 +12,8 @@ data class Track(
     val imgUrl: String,
     val url: String? = null,
     val duration: Long = 0,
-    val isVip: Boolean = false
+    val isVip: Boolean = false,
+    val artistNames: List<String> = emptyList() // 原始歌手名称列表
 )
 
 data class Playlist(
@@ -62,7 +63,8 @@ data class LyricLine(
     val translation: String = "",
     val startAt: Long, // 毫秒
     val endAt: Long = 0, // 毫秒
-    val words: List<LyricWord>? = null // 逐字歌词
+    val words: List<LyricWord>? = null, // 逐字歌词
+    val isArtistLine: Boolean = false // 是否为歌手行
 )
 
 data class LyricWord(
