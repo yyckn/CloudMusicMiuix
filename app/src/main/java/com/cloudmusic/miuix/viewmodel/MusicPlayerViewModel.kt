@@ -497,7 +497,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         lyricsLoadJob?.cancel() // 取消之前的歌词加载任务
         lyricState = lyricState.copy(isLoading = true, error = null)
         lyricsLoadJob = viewModelScope.launch {
-            NeteaseApi.getSongLyric(track.id).fold(
+            NeteaseApi.getSongLyric(track.id, track.title, track.artist, track.duration).fold(
                 onSuccess = { lyrics ->
                     // 检查歌曲是否已切换
                     if (playerState.currentTrack?.id == track.id) {

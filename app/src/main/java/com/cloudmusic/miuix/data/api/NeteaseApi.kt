@@ -1215,7 +1215,7 @@ object NeteaseApi {
         }
     }
 
-    suspend fun getSongLyric(songId: String): Result<SongLyrics> = withContext(Dispatchers.IO) {
+    suspend fun getSongLyric(songId: String, songTitle: String = "", songArtist: String = "", songDuration: Long = 0): Result<SongLyrics> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()
             val id = songId.removePrefix("netrack_")
@@ -1284,13 +1284,24 @@ object NeteaseApi {
                 parseLrc(lrcLyric, tLyric)
             }
             
-            // 判断是否为纯音乐：歌词小于3行且包含"纯音乐"关键词
-            val isPureMusic = lyrics.lines.size < 3 && lyrics.lines.any { 
-                it.text.contains("纯音乐") || it.text.contains("纯音乐，请欣赏") 
-            }
+            // 判断是否为纯音乐：
+            // 1. 歌词为空
+            // 2. 歌词小于3行且包含"纯音乐"关键词
+            val isPureMusic = lyrics.lines.isEmpty() || 
+                (lyrics.lines.size < 3 && lyrics.lines.any { 
+                    it.text.contains("纯音乐") || it.text.contains("纯音乐，请欣赏") 
+                })
             
             val result = if (isPureMusic) {
                 SongLyrics(lines = lyrics.lines, isPureMusic = true)
+            } else if (songTitle.isNotEmpty() && songArtist.isNotEmpty() && lyrics.lines.isNotEmpty()) {
+                // 非纯音乐，在歌词开头添加"歌名 - 歌手"
+                val titleLine = LyricLine(
+                    text = "$songTitle - $songArtist",
+                    translation = "",
+                    startAt = 0L
+                )
+                SongLyrics(lines = listOf(titleLine) + lyrics.lines, isPureMusic = false)
             } else {
                 lyrics
             }
@@ -1351,7 +1362,10 @@ object NeteaseApi {
             }
         }
 
-        return SongLyrics(lines = lines.sortedBy { it.startAt })
+        // 过滤末尾的"歌曲制作团队"信息
+        val filteredLines = filterTailCredits(lines)
+
+        return SongLyrics(lines = filteredLines.sortedBy { it.startAt })
     }
 
     /**
@@ -1429,6 +1443,72 @@ object NeteaseApi {
             }
         }
 
-        return SongLyrics(lines = lines.sortedBy { it.startAt })
+        // 过滤末尾的"歌曲制作团队"信息
+        val filteredLines = filterTailCredits(lines)
+
+        return SongLyrics(lines = filteredLines.sortedBy { it.startAt })
+    }
+
+    /**
+     * 过滤末尾的"歌曲制作团队"信息
+     * 1. 当末尾歌词有冒号时，直接移除末尾这几句带有冒号的歌词
+     * 2. 当末尾歌词没有冒号时，使用末尾的前一句歌词判断，
+     *    但需要有>=2句相连的带有冒号的歌词才能判断为"歌曲制作团队"，
+     *    连同这几句和最后一句都要删掉
+     */
+    private fun filterTailCredits(lines: List<LyricLine>): List<LyricLine> {
+        if (lines.isEmpty()) return lines
+        
+        val result = lines.toMutableList()
+        
+        // 从末尾开始检查
+        while (result.isNotEmpty()) {
+            val lastLine = result.last()
+            
+            // 情况1：末尾歌词有冒号（中文或英文）
+            if (lastLine.text.contains("：") || lastLine.text.contains(":")) {
+                result.removeAt(result.size - 1)
+                continue
+            }
+            
+            // 情况2：末尾歌词没有冒号，检查前一句
+            if (result.size >= 2) {
+                val secondLast = result[result.size - 2]
+                if (secondLast.text.contains("：") || secondLast.text.contains(":")) {
+                    // 找到连续的冒号行
+                    var colonCount = 0
+                    for (i in result.size - 2 downTo 0) {
+                        if (result[i].text.contains("：") || result[i].text.contains(":")) {
+                            colonCount++
+                        } else {
+                            break
+                        }
+                    }
+                    
+                    // 如果有>=2句相连的带有冒号的歌词，删除这些和最后一句
+                    if (colonCount >= 2) {
+                        // 删除最后一句（无用词）
+                        result.removeAt(result.size - 1)
+                        // 删除连续的冒号行
+                        for (i in 0 until colonCount) {
+                            if (result.isNotEmpty()) {
+                                result.removeAt(result.size - 1)
+                            }
+                        }
+                        continue
+                    }
+                }
+            }
+            
+            // 无法匹配，退出循环
+            break
+        }
+        
+        // 过滤开头包含"未经著作权人书面许可"的歌词
+        while (result.isNotEmpty() && result.first().text.contains("未经著作权人书面许可")) {
+            result.removeAt(0)
+        }
+        
+        return result
     }
 }

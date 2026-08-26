@@ -1,6 +1,8 @@
 package com.cloudmusic.miuix.ui.pages
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -228,16 +230,22 @@ fun PlayerPage(
                     .fillMaxSize()
                     .align(Alignment.BottomCenter)
             ) {
-                // 封面背景图片
-                AsyncImage(
-                    model = track?.imgUrl,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .blur(radius = 100.dp),
-                    contentScale = ContentScale.Crop,
-                    error = painterResource(android.R.drawable.ic_menu_gallery)
-                )
+                // 封面背景图片（使用Crossfade实现切换动画）
+                Crossfade(
+                    targetState = track?.imgUrl,
+                    animationSpec = tween(durationMillis = 500),
+                    label = "bg_cover_crossfade"
+                ) { imgUrl ->
+                    AsyncImage(
+                        model = imgUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .blur(radius = 100.dp),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(android.R.drawable.ic_menu_gallery)
+                    )
+                }
                 // 压暗层 #161616 25%不透明度
                 Box(
                     modifier = Modifier
@@ -296,15 +304,22 @@ fun PlayerPage(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                AsyncImage(
-                                    model = track?.imgUrl,
-                                    contentDescription = track?.title,
-                                    modifier = Modifier
-                                        .size(imageSize)
-                                        .clip(RoundedCornerShape(16.dp)),
-                                    contentScale = ContentScale.Crop,
-                                    error = painterResource(android.R.drawable.ic_menu_gallery)
-                                )
+                                // 使用Crossfade实现封面切换动画
+                                Crossfade(
+                                    targetState = track?.imgUrl,
+                                    animationSpec = tween(durationMillis = 500),
+                                    label = "cover_crossfade"
+                                ) { imgUrl ->
+                                    AsyncImage(
+                                        model = imgUrl,
+                                        contentDescription = track?.title,
+                                        modifier = Modifier
+                                            .size(imageSize)
+                                            .clip(RoundedCornerShape(16.dp)),
+                                        contentScale = ContentScale.Crop,
+                                        error = painterResource(android.R.drawable.ic_menu_gallery)
+                                    )
+                                }
                             }
                         }
                         1 -> {
