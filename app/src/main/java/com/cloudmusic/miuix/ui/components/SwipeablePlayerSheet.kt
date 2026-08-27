@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -33,13 +34,15 @@ fun SwipeablePlayerSheet(
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val offsetY = remember { Animatable(0f) }
-    val screenHeight = with(density) { 800.dp.toPx() }
+    val configuration = LocalConfiguration.current
+    val screenHeight = with(density) { configuration.screenHeightDp.dp.toPx() }
 
     // 处理系统返回手势 - 优先级高于其他BackHandler
     BackHandler(enabled = isVisible) {
         scope.launch {
             offsetY.animateTo(screenHeight, tween(300))
             onDismiss()
+            offsetY.snapTo(0f)
         }
     }
 
@@ -50,49 +53,54 @@ fun SwipeablePlayerSheet(
             offsetY.snapTo(screenHeight)
             offsetY.animateTo(0f, tween(300))
         } else {
-            // 滑出到屏幕下方
+            // 滑出到屏幕下方，完成后重置偏移以便从布局树移除
             offsetY.animateTo(screenHeight, tween(300))
+            offsetY.snapTo(0f)
         }
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                translationY = offsetY.value
-                alpha = 1f - (offsetY.value / screenHeight).coerceIn(0f, 1f)
-            }
-            .pointerInput(isVisible, enableSwipeToDismiss) {
-                if (isVisible && enableSwipeToDismiss) {
-                    detectVerticalDragGestures(
-                        onDragEnd = {
-                            scope.launch {
-                                if (offsetY.value > screenHeight * 0.15f) {
-                                    // 滑动超过15%，关闭
-                                    offsetY.animateTo(screenHeight, tween(300))
-                                    onDismiss()
-                                } else {
-                                    // 滑动不足15%，弹回
+    // 仅在可见或关闭动画进行中时加入布局树，避免全屏透明层残留干扰触摸
+    if (isVisible || offsetY.value > 0f) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationY = offsetY.value
+                    alpha = 1f - (offsetY.value / screenHeight).coerceIn(0f, 1f)
+                }
+                .pointerInput(isVisible, enableSwipeToDismiss) {
+                    if (isVisible && enableSwipeToDismiss) {
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                scope.launch {
+                                    if (offsetY.value > screenHeight * 0.15f) {
+                                        // 滑动超过15%，关闭
+                                        offsetY.animateTo(screenHeight, tween(300))
+                                        onDismiss()
+                                        offsetY.snapTo(0f)
+                                    } else {
+                                        // 滑动不足15%，弹回
+                                        offsetY.animateTo(0f, tween(300))
+                                    }
+                                }
+                            },
+                            onDragCancel = {
+                                scope.launch {
                                     offsetY.animateTo(0f, tween(300))
                                 }
+                            },
+                            onVerticalDrag = { change, dragAmount ->
+                                change.consume()
+                                scope.launch {
+                                    val newOffset = (offsetY.value + dragAmount).coerceIn(0f, screenHeight)
+                                    offsetY.snapTo(newOffset)
+                                }
                             }
-                        },
-                        onDragCancel = {
-                            scope.launch {
-                                offsetY.animateTo(0f, tween(300))
-                            }
-                        },
-                        onVerticalDrag = { change, dragAmount ->
-                            change.consume()
-                            scope.launch {
-                                val newOffset = (offsetY.value + dragAmount).coerceIn(0f, screenHeight)
-                                offsetY.snapTo(newOffset)
-                            }
-                        }
-                    )
+                        )
+                    }
                 }
-            }
-    ) {
-        content()
+        ) {
+            content()
+        }
     }
 }

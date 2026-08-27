@@ -1589,7 +1589,7 @@ object NeteaseApi {
         // 歌手名称（拆分/、顿号、空格）
         keywords.addAll(artistNames.flatMap { it.split("/", "、", " ") }.map { it.trim() }.filter { it.isNotEmpty() })
         // 额外关键词
-        keywords.addAll(listOf("童声", "合", "何炅", "万妮达", "袁娅维"))
+        keywords.addAll(listOf("童声", "合", "何炅", "万妮达", "袁娅维", "时代少年团宋亚轩"))
         
         // 3. 检查是否包含冒号（中英文都算）
         val hasChineseColon = contentWithoutBrackets.contains("：")
@@ -1647,6 +1647,35 @@ object NeteaseApi {
             for (keyword in keywords) {
                 if (contentWithoutBrackets == keyword) {
                     return Pair(true, null)
+                }
+            }
+            // 多位歌手情况：识别空格、顿号、斜杠、反斜杠
+            if (contentWithoutBrackets.contains(" ") || contentWithoutBrackets.contains("、") ||
+                contentWithoutBrackets.contains("/") || contentWithoutBrackets.contains("\\")) {
+                // 拆分多位歌手
+                val artists = contentWithoutBrackets.split(" ", "、", "/", "\\")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                // 检查所有歌手是否都符合至少一种情况
+                if (artists.isNotEmpty()) {
+                    var allMatch = true
+                    for (artist in artists) {
+                        var artistMatch = false
+                        for (keyword in keywords) {
+                            // 3种情况：歌手和关键字相同/歌手包含关键字/关键字包含歌手
+                            if (artist == keyword || artist.contains(keyword) || keyword.contains(artist)) {
+                                artistMatch = true
+                                break
+                            }
+                        }
+                        if (!artistMatch) {
+                            allMatch = false
+                            break
+                        }
+                    }
+                    if (allMatch) {
+                        return Pair(true, null)
+                    }
                 }
             }
         }
@@ -1756,7 +1785,7 @@ object NeteaseApi {
 
     private fun isExcludedLyric(text: String, duration: Long = 0): Boolean {
         val colonKeywords = listOf(
-            "编曲", "母带", "OP", "SP", "出品", "贡献者", "调教", "编写", "改编", "和声", "吉他", "鼓", "混音", "剪辑", "MV", "曲绘", "后期", "推广", "出品人", "制作人", "监制", "统筹", "平面视觉", "感谢", "录音棚", "录音", "设计", "手风琴", "巴拉莱卡", "弦乐", "小提琴", "编辑", "录音室", "工程师", "导演", "造型师", "妆发", "文案", "企划", "宣传", "艺人经纪", "经纪人", "营销", "总监", "op", "sp", "pv", "PV", "OA", "OC", "oa", "oc", "制作", "署名", "策划", "表演", "词", "曲", "发行", "原唱", "打击乐", "贝斯", "钢琴", "键盘", "Program", "合音", "合唱", "演唱", "乐谱", "提琴", "和音", "鸣谢", "运营", "执行", "拍摄", "摄影", "花絮", "助理", "服装", "顾问", "版权", "翻译", "制片", "道具师", "灯光师", "调色", "合成", "承制", "艺人", "行销", "媒介", "有限公司", "资产", "技术支持", "合作伙伴", "视频平台", "口哨", "三弦", "长笛", "黑管", "童声", "缩混", "合作", "指导", "PGM", "编舞", "舞团", "宣发", "录混", "唢呐", "萨克斯", "笛子", "声明", "古筝", "箫", "人声", "配唱", "主唱", "封面", "A&R", "乐队", "队长", "女生", "项目支持", "曼陀林", "指挥", "单簧管", "独奏", "乐团", "协力", "项目", "rap", "友情客串", "二胡", "帮帮团", "Guitar", "旋律创作"
+            "编曲", "母带", "OP", "SP", "出品", "贡献者", "调教", "编写", "改编", "和声", "吉他", "鼓", "混音", "剪辑", "MV", "曲绘", "后期", "推广", "出品人", "制作人", "监制", "统筹", "平面视觉", "感谢", "录音棚", "录音", "设计", "手风琴", "巴拉莱卡", "弦乐", "小提琴", "编辑", "录音室", "工程师", "导演", "造型师", "妆发", "文案", "企划", "宣传", "艺人经纪", "经纪人", "营销", "总监", "op", "sp", "pv", "PV", "OA", "OC", "oa", "oc", "制作", "署名", "策划", "表演", "词", "曲", "发行", "原唱", "打击乐", "贝斯", "钢琴", "键盘", "Program", "合音", "合唱", "演唱", "乐谱", "提琴", "和音", "鸣谢", "运营", "执行", "拍摄", "摄影", "花絮", "助理", "服装", "顾问", "版权", "翻译", "制片", "道具师", "灯光师", "调色", "合成", "承制", "艺人", "行销", "媒介", "有限公司", "资产", "技术支持", "合作伙伴", "视频平台", "口哨", "三弦", "长笛", "黑管", "童声", "缩混", "合作", "指导", "PGM", "编舞", "舞团", "宣发", "录混", "唢呐", "萨克斯", "笛子", "声明", "古筝", "箫", "人声", "配唱", "主唱", "封面", "A&R", "乐队", "队长", "女生", "项目支持", "曼陀林", "指挥", "单簧管", "独奏", "乐团", "协力", "项目", "rap", "友情客串", "二胡", "帮帮团", "Guitar", "旋律创作", "陶笛"
         )
 
         val hasColon = text.contains("：") || text.contains(":")

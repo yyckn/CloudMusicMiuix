@@ -1,10 +1,11 @@
-package com.cloudmusic.miuix
+﻿package com.cloudmusic.miuix
 
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionLayout
@@ -121,7 +122,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         NeteaseApi.init(applicationContext)
         ThemeSettings.init(applicationContext)
-        enableEdgeToEdge()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         setContent {
             CloudMusicMiuixTheme {
                 val windowSizeClass = calculateWindowSizeClass(this)

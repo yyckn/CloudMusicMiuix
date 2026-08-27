@@ -186,7 +186,7 @@ fun SettingsPage(
                     ) {
                         ArrowPreference(
                             title = "关于",
-                            summary = "CloudMusic Miuix v0.2.3",
+                            summary = "CloudMusic Miuix v0.5.1-dev",
                             onClick = onAboutClick
                         )
                     }
