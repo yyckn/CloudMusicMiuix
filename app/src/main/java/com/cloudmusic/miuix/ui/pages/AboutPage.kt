@@ -110,7 +110,7 @@ fun AboutPage(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "v0.2.3",
+                            text = "v0.5.0-dev",
                             fontSize = 14.sp,
                             color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )

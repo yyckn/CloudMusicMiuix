@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -69,6 +70,10 @@ fun QrLoginPage(
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var statusText by remember { mutableStateOf("正在获取二维码...") }
     var statusCode by remember { mutableIntStateOf(0) }
+
+    // 判断是否是横向布局（高度小于宽度）
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val isLandscape = configuration.screenHeightDp < configuration.screenWidthDp
 
     BackHandler {
         onBackClick()
@@ -146,143 +151,285 @@ fun QrLoginPage(
             )
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .padding(top = paddingValues.calculateTopPadding())
-                .fillMaxSize()
-                .padding(horizontal = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "网易云音乐扫码登录",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = MiuixTheme.colorScheme.onSurface
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // 二维码
-            Box(
+        if (isLandscape) {
+            // 横向布局：左右分屏
+            Row(
                 modifier = Modifier
-                    .size(240.dp)
-                    .padding(8.dp),
-                contentAlignment = Alignment.Center
+                    .padding(top = paddingValues.calculateTopPadding())
+                    .fillMaxSize()
+                    .padding(horizontal = 32.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                qrBitmap?.let { bitmap ->
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = "登录二维码",
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } ?: run {
+                // 左侧：标题和二维码
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    // 二维码
+                    Box(
+                        modifier = Modifier
+                            .size(280.dp)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        qrBitmap?.let { bitmap ->
+                            Image(
+                                bitmap = bitmap.asImageBitmap(),
+                                contentDescription = "登录二维码",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } ?: run {
+                            Text(
+                                text = "加载中...",
+                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                }
+
+                // 右侧：状态和按钮
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
                     Text(
-                        text = "加载中...",
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        text = statusText,
+                        fontSize = 16.sp,
+                        color = when (statusCode) {
+                            803 -> MiuixTheme.colorScheme.primary
+                            800 -> MiuixTheme.colorScheme.error
+                            else -> MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    // 保存二维码到相册按钮
+                    Button(
+                        onClick = {
+                            qrBitmap?.let { bitmap ->
+                                val saved = saveBitmapToGallery(context, bitmap, "qrcode_${System.currentTimeMillis()}")
+                                if (saved) {
+                                    Toast.makeText(context, "保存成功", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "保存失败", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Download,
+                            contentDescription = "Download"
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "保存二维码到相册")
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 刷新登录状态按钮
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                try {
+                                    if (statusCode == 800 || statusCode == 8821) {
+                                        // 二维码过期，重新获取
+                                        statusCode = 0
+                                        statusText = "正在获取二维码..."
+                                        NeteaseApi.getLoginQrKey().fold(
+                                            onSuccess = { key ->
+                                                qrKey = key
+                                                qrBitmap = generateQrCode(NeteaseApi.getQrCodeUrl(key))
+                                                statusText = "请使用网易云音乐APP扫描二维码"
+                                                statusCode = 801
+                                            },
+                                            onFailure = { e ->
+                                                statusText = "获取二维码失败: ${e.message}"
+                                            }
+                                        )
+                                    } else if (qrKey.isNotEmpty()) {
+                                        // 手动刷新登录状态
+                                        statusText = "正在检查登录状态..."
+                                        val result = NeteaseApi.checkQrLoginStatus(qrKey)
+                                        result.fold(
+                                            onSuccess = { code ->
+                                                statusCode = code
+                                                statusText = when (code) {
+                                                    800, 8821 -> "二维码已过期，请刷新"
+                                                    801 -> "请使用网易云音乐APP扫描二维码"
+                                                    802 -> "请在手机上确认登录"
+                                                    803 -> {
+                                                        // 登录成功，获取用户信息
+                                                        NeteaseApi.getUserInfo().fold(
+                                                            onSuccess = { nickname -> onLoginSuccess(nickname) },
+                                                            onFailure = { onLoginSuccess("") }
+                                                        )
+                                                        "登录成功"
+                                                    }
+                                                    else -> "未知状态: $code"
+                                                }
+                                            },
+                                            onFailure = { e ->
+                                                statusText = "检查登录状态失败: ${e.message}"
+                                            }
+                                        )
+                                    } else {
+                                        statusText = "请先获取二维码"
+                                    }
+                                } catch (e: Exception) {
+                                    statusText = "操作失败: ${e.message}"
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = if (statusCode == 800 || statusCode == 8821) "刷新二维码" else "刷新登录状态",
+                            color = MiuixTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+            }
+        } else {
+            // 手机布局：上下排列
+            Column(
+                modifier = Modifier
+                    .padding(top = paddingValues.calculateTopPadding())
+                    .fillMaxSize()
+                    .padding(horizontal = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                // 二维码
+                Box(
+                    modifier = Modifier
+                        .size(240.dp)
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    qrBitmap?.let { bitmap ->
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "登录二维码",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } ?: run {
+                        Text(
+                            text = "加载中...",
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = statusText,
+                    fontSize = 14.sp,
+                    color = when (statusCode) {
+                        803 -> MiuixTheme.colorScheme.primary
+                        800 -> MiuixTheme.colorScheme.error
+                        else -> MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 保存二维码到相册按钮
+                Button(
+                    onClick = {
+                        qrBitmap?.let { bitmap ->
+                            val saved = saveBitmapToGallery(context, bitmap, "qrcode_${System.currentTimeMillis()}")
+                            if (saved) {
+                                Toast.makeText(context, "保存成功", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "保存失败", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Download,
+                        contentDescription = "Download"
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "保存二维码到相册")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 刷新登录状态按钮
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            try {
+                                if (statusCode == 800 || statusCode == 8821) {
+                                    // 二维码过期，重新获取
+                                    statusCode = 0
+                                    statusText = "正在获取二维码..."
+                                    NeteaseApi.getLoginQrKey().fold(
+                                        onSuccess = { key ->
+                                            qrKey = key
+                                            qrBitmap = generateQrCode(NeteaseApi.getQrCodeUrl(key))
+                                            statusText = "请使用网易云音乐APP扫描二维码"
+                                            statusCode = 801
+                                        },
+                                        onFailure = { e ->
+                                            statusText = "获取二维码失败: ${e.message}"
+                                        }
+                                    )
+                                } else if (qrKey.isNotEmpty()) {
+                                    // 手动刷新登录状态
+                                    statusText = "正在检查登录状态..."
+                                    val result = NeteaseApi.checkQrLoginStatus(qrKey)
+                                    result.fold(
+                                        onSuccess = { code ->
+                                            statusCode = code
+                                            statusText = when (code) {
+                                                800, 8821 -> "二维码已过期，请刷新"
+                                                801 -> "请使用网易云音乐APP扫描二维码"
+                                                802 -> "请在手机上确认登录"
+                                                803 -> {
+                                                    // 登录成功，获取用户信息
+                                                    NeteaseApi.getUserInfo().fold(
+                                                        onSuccess = { nickname -> onLoginSuccess(nickname) },
+                                                        onFailure = { onLoginSuccess("") }
+                                                    )
+                                                    "登录成功"
+                                                }
+                                                else -> "未知状态: $code"
+                                            }
+                                        },
+                                        onFailure = { e ->
+                                            statusText = "检查登录状态失败: ${e.message}"
+                                        }
+                                    )
+                                } else {
+                                    statusText = "请先获取二维码"
+                                }
+                            } catch (e: Exception) {
+                                statusText = "操作失败: ${e.message}"
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = if (statusCode == 800 || statusCode == 8821) "刷新二维码" else "刷新登录状态",
+                        color = MiuixTheme.colorScheme.onPrimary
                     )
                 }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = statusText,
-                fontSize = 14.sp,
-                color = when (statusCode) {
-                    803 -> MiuixTheme.colorScheme.primary
-                    800 -> MiuixTheme.colorScheme.error
-                    else -> MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 保存二维码到相册按钮
-            Button(
-                onClick = {
-                    qrBitmap?.let { bitmap ->
-                        val saved = saveBitmapToGallery(context, bitmap, "qrcode_${System.currentTimeMillis()}")
-                        if (saved) {
-                            Toast.makeText(context, "保存成功", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, "保存失败", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = MiuixIcons.Download,
-                    contentDescription = "Download"
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "保存二维码到相册")
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 刷新登录状态按钮
-            Button(
-                onClick = {
-                    coroutineScope.launch {
-                        try {
-                            if (statusCode == 800 || statusCode == 8821) {
-                                // 二维码过期，重新获取
-                                statusCode = 0
-                                statusText = "正在获取二维码..."
-                                NeteaseApi.getLoginQrKey().fold(
-                                    onSuccess = { key ->
-                                        qrKey = key
-                                        qrBitmap = generateQrCode(NeteaseApi.getQrCodeUrl(key))
-                                        statusText = "请使用网易云音乐APP扫描二维码"
-                                        statusCode = 801
-                                    },
-                                    onFailure = { e ->
-                                        statusText = "获取二维码失败: ${e.message}"
-                                    }
-                                )
-                            } else if (qrKey.isNotEmpty()) {
-                                // 手动刷新登录状态
-                                statusText = "正在检查登录状态..."
-                                val result = NeteaseApi.checkQrLoginStatus(qrKey)
-                                result.fold(
-                                    onSuccess = { code ->
-                                        statusCode = code
-                                        statusText = when (code) {
-                                            800, 8821 -> "二维码已过期，请刷新"
-                                            801 -> "请使用网易云音乐APP扫描二维码"
-                                            802 -> "请在手机上确认登录"
-                                            803 -> {
-                                                // 登录成功，获取用户信息
-                                                NeteaseApi.getUserInfo().fold(
-                                                    onSuccess = { nickname -> onLoginSuccess(nickname) },
-                                                    onFailure = { onLoginSuccess("") }
-                                                )
-                                                "登录成功"
-                                            }
-                                            else -> "未知状态: $code"
-                                        }
-                                    },
-                                    onFailure = { e ->
-                                        statusText = "检查登录状态失败: ${e.message}"
-                                    }
-                                )
-                            } else {
-                                statusText = "请先获取二维码"
-                            }
-                        } catch (e: Exception) {
-                            statusText = "操作失败: ${e.message}"
-                        }
-                    }
-                },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = if (statusCode == 800 || statusCode == 8821) "刷新二维码" else "刷新登录状态",
-                    color = MiuixTheme.colorScheme.onPrimary
-                )
             }
         }
     }

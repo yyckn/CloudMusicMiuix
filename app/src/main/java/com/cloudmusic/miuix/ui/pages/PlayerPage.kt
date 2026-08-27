@@ -67,6 +67,7 @@ import com.cloudmusic.miuix.viewmodel.LyricState
 import com.cloudmusic.miuix.viewmodel.PlayerState
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
@@ -76,12 +77,14 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -124,6 +127,8 @@ fun PlayerPage(
     onOpenSystemUI: () -> Unit = {},
     onLikeTrack: () -> Unit = {},
     onDrawerStateChanged: (Boolean) -> Unit = {},
+    onNavigateToArtist: (String) -> Unit = {},
+    onNavigateToAlbum: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -131,8 +136,36 @@ fun PlayerPage(
     var showMoreMenu by remember { mutableStateOf(false) }
     var showPlaylistSheet by remember { mutableStateOf(false) }
     var showMoreSheet by remember { mutableStateOf(false) }
+    var showUnlikeDialog by remember { mutableStateOf(false) }
     val playlistListState = rememberLazyListState()
     val isPureMusic = lyricState.lyrics?.isPureMusic == true
+    var albumArtist by remember { mutableStateOf<String?>(null) }
+    var albumArtistId by remember { mutableStateOf<Long?>(null) }
+
+    // 获取专辑歌手信息
+    LaunchedEffect(track?.albumId) {
+        if (track?.albumId?.isNotEmpty() == true) {
+            val albumIdStr = track.albumId.removePrefix("nealbum_")
+            val albumId = albumIdStr.toLongOrNull()
+            if (albumId != null) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    com.cloudmusic.miuix.data.api.NeteaseApi.getAlbumDetail(albumId.toString()).fold(
+                        onSuccess = { (albumInfo, _) ->
+                            albumArtist = albumInfo.artist.ifEmpty { null }
+                            albumArtistId = if (albumInfo.artistId > 0) albumInfo.artistId else null
+                        },
+                        onFailure = {
+                            albumArtist = null
+                            albumArtistId = null
+                        }
+                    )
+                }
+            }
+        } else {
+            albumArtist = null
+            albumArtistId = null
+        }
+    }
 
     // 通知外部抽屉状态变化
     LaunchedEffect(showPlaylistSheet, showMoreSheet) {
@@ -264,16 +297,20 @@ fun PlayerPage(
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxSize()
+                            .graphicsLayer(
+                                scaleX = 1.15f,
+                                scaleY = 1.15f
+                            )
                             .blur(radius = 100.dp),
                         contentScale = ContentScale.Crop,
                         error = painterResource(android.R.drawable.ic_menu_gallery)
                     )
                 }
-                // 压暗层 #161616 25%不透明度
+                // 压暗层 #000000 25%不透明度
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color(0x40161616))
+                        .background(Color(0x40000000))
                 )
             }
             
@@ -317,8 +354,8 @@ fun PlayerPage(
                             ) {
                                 Text(
                                     text = track?.title ?: "未知歌曲",
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Medium,
                                     color = Color.White,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
@@ -327,7 +364,7 @@ fun PlayerPage(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}",
-                                    fontSize = 16.sp,
+                                    fontSize = 14.sp,
                                     color = Color.White.copy(alpha = 0.7f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
@@ -488,7 +525,13 @@ fun PlayerPage(
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(16.dp))
-                                    IconButton(onClick = onLikeTrack, modifier = Modifier.size(48.dp)) {
+                                    IconButton(onClick = {
+                                        if (isCurrentTrackLiked) {
+                                            showUnlikeDialog = true
+                                        } else {
+                                            onLikeTrack()
+                                        }
+                                    }, modifier = Modifier.size(48.dp)) {
                                         Icon(
                                             imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
                                             contentDescription = if (isCurrentTrackLiked) "取消喜欢" else "喜欢",
@@ -569,8 +612,8 @@ fun PlayerPage(
                         ) {
                             Text(
                                 text = track?.title ?: "未知歌曲",
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Medium,
                                 color = Color.White,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -579,7 +622,7 @@ fun PlayerPage(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}",
-                                fontSize = 16.sp,
+                                fontSize = 14.sp,
                                 color = Color.White.copy(alpha = 0.7f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -828,7 +871,13 @@ fun PlayerPage(
                                 )
                             }
                             Spacer(modifier = Modifier.width(16.dp))
-                            IconButton(onClick = onLikeTrack, modifier = Modifier.size(48.dp)) {
+                            IconButton(onClick = {
+                                if (isCurrentTrackLiked) {
+                                    showUnlikeDialog = true
+                                } else {
+                                    onLikeTrack()
+                                }
+                            }, modifier = Modifier.size(48.dp)) {
                                 Icon(
                                     imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
                                     contentDescription = if (isCurrentTrackLiked) "取消喜欢" else "喜欢",
@@ -1053,29 +1102,93 @@ fun PlayerPage(
                         ) {
                             // 显示所有歌手
                             val artistNames = track?.artistNames ?: emptyList()
+                            val artistIds = track?.artistIds ?: emptyList()
+                            android.util.Log.d("PlayerPage", "artistNames: $artistNames, artistIds: $artistIds")
                             if (artistNames.isNotEmpty()) {
-                                artistNames.forEach { artistName ->
+                                artistNames.forEachIndexed { index, artistName ->
+                                    val artistId = if (index < artistIds.size) artistIds[index] else ""
                                     ArrowPreference(
                                         title = "歌手：$artistName",
-                                        onClick = { /* 暂不实现 */ }
+                                        onClick = {
+                                            android.util.Log.d("PlayerPage", "Clicked artist: $artistName, id: $artistId")
+                                            showMoreSheet = false
+                                            if (artistId.isNotEmpty()) {
+                                                onNavigateToArtist(artistId)
+                                            }
+                                        }
                                     )
                                 }
                             } else {
                                 ArrowPreference(
                                     title = "歌手：${track?.artist ?: "未知"}",
-                                    onClick = { /* 暂不实现 */ }
+                                    onClick = {
+                                        showMoreSheet = false
+                                        if (track?.artistId?.isNotEmpty() == true) {
+                                            onNavigateToArtist(track.artistId)
+                                        }
+                                    }
                                 )
                             }
                             // 显示专辑
                             ArrowPreference(
                                 title = "专辑：${track?.album ?: "未知"}",
-                                onClick = { /* 暂不实现 */ }
+                                onClick = {
+                                    showMoreSheet = false
+                                    if (track?.albumId?.isNotEmpty() == true) {
+                                        val albumIdStr = track.albumId.removePrefix("nealbum_")
+                                        val albumId = albumIdStr.toLongOrNull()
+                                        if (albumId != null) {
+                                            onNavigateToAlbum(albumId)
+                                        }
+                                    }
+                                }
                             )
+                            // 显示专辑歌手
+                            if (albumArtist != null) {
+                                ArrowPreference(
+                                    title = "专辑歌手：$albumArtist",
+                                    onClick = {
+                                        showMoreSheet = false
+                                        if (albumArtistId != null) {
+                                            onNavigateToArtist("neartist_$albumArtistId")
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+
+        // 取消收藏确认对话框
+        OverlayDialog(
+            show = showUnlikeDialog,
+            title = "取消收藏",
+            summary = "确定要取消收藏这首歌曲吗？",
+            onDismissRequest = { showUnlikeDialog = false },
+            content = {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    TextButton(
+                        text = "取消",
+                        onClick = { showUnlikeDialog = false },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(20.dp))
+                    TextButton(
+                        text = "确定",
+                        onClick = {
+                            showUnlikeDialog = false
+                            onLikeTrack()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                    )
+                }
+            },
+        )
     }
 }
 

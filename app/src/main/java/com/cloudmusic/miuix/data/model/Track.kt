@@ -13,7 +13,8 @@ data class Track(
     val url: String? = null,
     val duration: Long = 0,
     val isVip: Boolean = false,
-    val artistNames: List<String> = emptyList() // 原始歌手名称列表
+    val artistNames: List<String> = emptyList(), // 原始歌手名称列表
+    val artistIds: List<String> = emptyList() // 原始歌手ID列表
 )
 
 data class Playlist(
@@ -76,4 +77,24 @@ data class LyricWord(
 data class SongLyrics(
     val lines: List<LyricLine> = emptyList(),
     val isPureMusic: Boolean = false
+)
+
+data class ArtistInfo(
+    val id: Long = 0,
+    val name: String = "",
+    val picUrl: String = "",
+    val albumSize: Int = 0,
+    val mvSize: Int = 0,
+    val musicSize: Int = 0,
+    val briefDesc: String = ""
+)
+
+data class AlbumInfo(
+    val id: Long = 0,
+    val name: String = "",
+    val picUrl: String = "",
+    val size: Int = 0,
+    val publishTime: Long = 0,
+    val artist: String = "",
+    val artistId: Long = 0
 )

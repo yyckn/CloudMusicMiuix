@@ -12,6 +12,7 @@ import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -56,6 +58,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cloudmusic.miuix.data.api.NeteaseApi
 import com.cloudmusic.miuix.ui.components.PlayerBar
 import com.cloudmusic.miuix.ui.pages.AboutPage
+import com.cloudmusic.miuix.ui.pages.AlbumPage
+import com.cloudmusic.miuix.ui.pages.ArtistPage
 import com.cloudmusic.miuix.ui.pages.LoginPage
 import com.cloudmusic.miuix.ui.pages.PlayPageSettingsPage
 import com.cloudmusic.miuix.ui.pages.PlayerPage
@@ -107,6 +111,8 @@ sealed class Screen {
     object PlayPageSettings : Screen()
     object About : Screen()
     object Profile : Screen()
+    data class Artist(val artistId: String) : Screen()
+    data class Album(val albumId: Long) : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -132,14 +138,37 @@ fun MainScreen(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Main) }
+    var screenStack by remember { mutableStateOf<List<Screen>>(emptyList()) }
     var isLoggedIn by remember { mutableStateOf(NeteaseApi.isLoggedIn()) }
     var profileVersion by remember { mutableIntStateOf(0) } // 用于触发UI刷新
     var showPlaylistSheet by remember { mutableStateOf(false) }
     var showPlayerPage by remember { mutableStateOf(false) }
+    var isNavigatingBack by remember { mutableStateOf(false) }
     val tabs = listOf("推荐", "歌单", "设置")
     val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Settings)
     val railState = rememberNavigationRailState(initialValue = NavigationRailValue.Expanded)
-    val useNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact
+    
+    // 使用实时屏幕尺寸判断，避免窗口变化时不同步
+    val configuration = LocalConfiguration.current
+    val useNavigationRail = configuration.screenWidthDp > 600
+
+    // 导航到新页面的函数
+    fun navigateTo(screen: Screen) {
+        isNavigatingBack = false
+        screenStack = screenStack + currentScreen
+        currentScreen = screen
+    }
+
+    // 返回上一页的函数
+    fun navigateBack(): Boolean {
+        if (screenStack.isNotEmpty()) {
+            isNavigatingBack = true
+            currentScreen = screenStack.last()
+            screenStack = screenStack.dropLast(1)
+            return true
+        }
+        return false
+    }
 
     // 设置用户信息变化监听器
     LaunchedEffect(Unit) {
@@ -149,36 +178,19 @@ fun MainScreen(
     }
 
     SharedTransitionLayout {
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier
+        .fillMaxSize()
+        .clickable(enabled = false) {} // 确保点击事件正确传递
+    ) {
         AnimatedContent(
             targetState = currentScreen,
             transitionSpec = {
-                when {
-                    initialState is Screen.Main && targetState is Screen.PlaylistDetail ->
-                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                    initialState is Screen.PlaylistDetail && targetState is Screen.Main ->
-                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                    initialState is Screen.Main && targetState is Screen.Login ->
-                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                    initialState is Screen.Login && targetState is Screen.Main ->
-                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                    initialState is Screen.Main && targetState is Screen.QrLogin ->
-                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                    initialState is Screen.QrLogin && targetState is Screen.Main ->
-                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                    initialState is Screen.Main && targetState is Screen.ThemeSettings ->
-                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                    initialState is Screen.ThemeSettings && targetState is Screen.Main ->
-                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                    initialState is Screen.Main && targetState is Screen.PlayPageSettings ->
-                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                    initialState is Screen.PlayPageSettings && targetState is Screen.Main ->
-                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                    initialState is Screen.Main && targetState is Screen.About ->
-                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                    initialState is Screen.About && targetState is Screen.Main ->
-                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                    else -> slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
+                if (isNavigatingBack) {
+                    // 返回动画：当前页面从左侧滑出，上一个页面从左侧滑入
+                    slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
+                } else {
+                    // 前进动画：新页面从右侧滑入，当前页面向左滑出
+                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
                 }
             },
             label = "screen_transition"
@@ -353,7 +365,7 @@ fun MainScreen(
                                 2 -> SettingsPage(
                                     isLoggedIn = isLoggedIn,
                                     onLoginClick = {
-                                        currentScreen = Screen.Login
+                                        currentScreen = Screen.QrLogin
                                     },
                                     onProfileClick = {
                                         currentScreen = Screen.Profile
@@ -719,7 +731,9 @@ fun MainScreen(
                             onLoadMore = { viewModel.loadMoreCloudDiskSongs() },
                             onBackClick = {
                                 viewModel.clearPlaylistDetail()
-                                currentScreen = Screen.Main
+                                if (!navigateBack()) {
+                                    currentScreen = Screen.Main
+                                }
                             },
                             onTrackClick = { track ->
                                 // 点击歌曲时替换播放列表
@@ -806,6 +820,79 @@ fun MainScreen(
                     profileVersion = profileVersion
                 )
             }
+            is Screen.Artist -> {
+                Scaffold(
+                    bottomBar = {
+                        PlayerBar(
+                            playerState = viewModel.playerState,
+                            onTogglePlayPause = { viewModel.togglePlayPause() },
+                            onPlayerBarClick = { showPlayerPage = true },
+                            onSwipeUp = { showPlayerPage = true },
+                            onPlaylistClick = { showPlaylistSheet = true },
+                            sharedTransitionScope = this@SharedTransitionLayout,
+                            animatedVisibilityScope = this@AnimatedContent,
+                            hasBottomBar = false
+                        )
+                    }
+                ) { padding ->
+                    ArtistPage(
+                        artistId = screen.artistId,
+                        onBackClick = {
+                            if (!navigateBack()) {
+                                currentScreen = Screen.Main
+                            }
+                        },
+                        onTrackClick = { track, tracks ->
+                            viewModel.currentPlaylist = tracks
+                            viewModel.playTrack(track)
+                        },
+                        onAlbumClick = { albumId ->
+                            navigateTo(Screen.Album(albumId))
+                        },
+                        currentTrack = viewModel.playerState.currentTrack,
+                        isBackHandlerEnabled = !showPlayerPage,
+                        modifier = Modifier.padding(padding)
+                    )
+                }
+            }
+            is Screen.Album -> {
+                Scaffold(
+                    bottomBar = {
+                        PlayerBar(
+                            playerState = viewModel.playerState,
+                            onTogglePlayPause = { viewModel.togglePlayPause() },
+                            onPlayerBarClick = { showPlayerPage = true },
+                            onSwipeUp = { showPlayerPage = true },
+                            onPlaylistClick = { showPlaylistSheet = true },
+                            sharedTransitionScope = this@SharedTransitionLayout,
+                            animatedVisibilityScope = this@AnimatedContent,
+                            hasBottomBar = false
+                        )
+                    }
+                ) { padding ->
+                    AlbumPage(
+                        albumId = screen.albumId,
+                        onBackClick = {
+                            if (!navigateBack()) {
+                                currentScreen = Screen.Main
+                            }
+                        },
+                        onTrackClick = { track, tracks ->
+                            viewModel.currentPlaylist = tracks
+                            viewModel.playTrack(track)
+                        },
+                        onPlayAllClick = { tracks ->
+                            viewModel.currentPlaylist = tracks
+                            if (tracks.isNotEmpty()) {
+                                viewModel.playTrack(tracks.first())
+                            }
+                        },
+                        currentTrack = viewModel.playerState.currentTrack,
+                        isBackHandlerEnabled = !showPlayerPage,
+                        modifier = Modifier.padding(padding)
+                    )
+                }
+            }
         }
         }
 
@@ -878,7 +965,15 @@ fun MainScreen(
                         android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
                     }
                 },
-                onDrawerStateChanged = { isOpen -> isPlayerDrawerOpen = isOpen }
+                onDrawerStateChanged = { isOpen -> isPlayerDrawerOpen = isOpen },
+                onNavigateToArtist = { artistId ->
+                    showPlayerPage = false
+                    navigateTo(Screen.Artist(artistId))
+                },
+                onNavigateToAlbum = { albumId ->
+                    showPlayerPage = false
+                    navigateTo(Screen.Album(albumId))
+                }
             )
         }
     }

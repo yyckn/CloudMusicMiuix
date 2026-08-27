@@ -25,9 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.theme.LocalContentColor
@@ -54,13 +53,11 @@ fun LiquidGlassNavigationBar(
             Row(
                 modifier = Modifier
                     .width(240.dp)
-                    .dropShadow(
+                    .shadow(
+                        elevation = 8.dp,
                         shape = pillShape,
-                        shadow = Shadow(
-                            radius = 10.dp,
-                            color = Color.Black,
-                            alpha = 0.15f,
-                        )
+                        ambientColor = Color.Black.copy(alpha = 0.15f),
+                        spotColor = Color.Black.copy(alpha = 0.15f)
                     )
                     .background(containerColor, pillShape)
                     .height(64.dp)
