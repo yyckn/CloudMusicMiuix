@@ -80,6 +80,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         private set
 
     var currentPlaylist by mutableStateOf<List<Track>>(emptyList())
+    
+    // 用户信息
+    var userId by mutableStateOf<String?>(null)
+        private set
+    var userNickname by mutableStateOf<String?>(null)
+        private set
+    var userAvatarUrl by mutableStateOf<String?>(null)
+        private set
+    
+    // 多账号切换
+    var playbackAccountIndex by mutableStateOf(0)
+        private set
+    var dataAccountIndex by mutableStateOf(0)
+        private set
+
+    // 播放模式：0=顺序播放，1=乱序播放，2=单曲循环
+    var playMode by mutableStateOf(0)
+        private set
+    private var originalPlaylist: List<Track> = emptyList()
 
     private var mediaPlaybackService: MediaPlaybackService? = null
     private var isBound = false
@@ -98,7 +117,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             // 设置回调，处理系统控制器的上一首/下一首
             mediaPlaybackService?.onTrackChangedListener = object : MediaPlaybackService.OnTrackChangedListener {
                 override fun onNextTrack() {
-                    playNext()
+                    onTrackCompleted()
                 }
                 override fun onPreviousTrack() {
                     playPrevious()
@@ -132,6 +151,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     init {
+        // 加载保存的账号索引
+        playbackAccountIndex = prefs.getInt("playback_account_index", 0)
+        dataAccountIndex = prefs.getInt("data_account_index", 0)
+        // 加载保存的播放模式
+        playMode = prefs.getInt("play_mode", 0)
+        
         loadLastPlayedTrack()
         loadLastPlaylist()
         loadRecommendPlaylists()
@@ -289,6 +314,115 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun loadUserInfo() {
+        viewModelScope.launch {
+            val currentUserId = NeteaseApi.getCurrentUserId()
+            if (currentUserId != null) {
+                userId = currentUserId.toString()
+                NeteaseApi.getUserProfile().fold(
+                    onSuccess = { profile ->
+                        userNickname = profile.nickname
+                        userAvatarUrl = profile.avatarUrl
+                    },
+                    onFailure = {
+                        userNickname = "未知用户"
+                        userAvatarUrl = ""
+                    }
+                )
+            } else {
+                userId = null
+                userNickname = null
+                userAvatarUrl = null
+            }
+        }
+    }
+
+    fun updatePlaybackAccountIndex(index: Int) {
+        playbackAccountIndex = index
+        // 保存到SharedPreferences
+        prefs.edit().putInt("playback_account_index", index).apply()
+    }
+
+    fun updateDataAccountIndex(index: Int) {
+        dataAccountIndex = index
+        // 保存到SharedPreferences
+        prefs.edit().putInt("data_account_index", index).apply()
+        // 切换数据账号的Cookie
+        val accounts = NeteaseApi.getAccounts()
+        if (index < accounts.size) {
+            NeteaseApi.switchToAccount(accounts[index].userId)
+        }
+    }
+
+    fun switchPlayMode() {
+        val oldMode = playMode
+        playMode = (playMode + 1) % 3
+        
+        when {
+            // 切换到顺序播放：恢复原始播放列表
+            playMode == 0 && oldMode == 1 -> {
+                if (originalPlaylist.isNotEmpty()) {
+                    currentPlaylist = originalPlaylist
+                    originalPlaylist = emptyList()
+                }
+            }
+            // 切换到乱序播放：打乱播放列表
+            playMode == 1 -> {
+                if (originalPlaylist.isEmpty()) {
+                    originalPlaylist = currentPlaylist.toList()
+                }
+                val currentTrack = playerState.currentTrack
+                val shuffled = currentPlaylist.toMutableList()
+                shuffled.shuffle()
+                // 保持当前播放歌曲在第一位
+                if (currentTrack != null) {
+                    shuffled.remove(currentTrack)
+                    shuffled.add(0, currentTrack)
+                }
+                currentPlaylist = shuffled
+            }
+            // 切换到单曲循环：恢复原始播放列表（如果有）
+            playMode == 2 && oldMode == 1 -> {
+                if (originalPlaylist.isNotEmpty()) {
+                    currentPlaylist = originalPlaylist
+                    originalPlaylist = emptyList()
+                }
+            }
+        }
+        // 保存到SharedPreferences
+        prefs.edit().putInt("play_mode", playMode).apply()
+    }
+
+    fun onTrackCompleted() {
+        when (playMode) {
+            0, 1 -> playNext() // 顺序播放和乱序播放都播放下一首
+            2 -> {
+                // 单曲循环：重新播放当前歌曲
+                playerState.currentTrack?.let { playTrack(it) }
+            }
+        }
+    }
+
+    /**
+     * 播放歌曲并根据播放模式处理播放列表
+     * 当乱序模式下点击歌曲时，打乱播放列表
+     */
+    fun playTrackWithMode(track: Track, playlist: List<Track>) {
+        if (playMode == 1) {
+            // 乱序播放：打乱播放列表，保持当前歌曲在第一位
+            originalPlaylist = playlist.toList()
+            val shuffled = playlist.toMutableList()
+            shuffled.shuffle()
+            shuffled.remove(track)
+            shuffled.add(0, track)
+            currentPlaylist = shuffled
+        } else {
+            // 顺序播放或单曲循环：按原顺序加载
+            currentPlaylist = playlist
+        }
+        playTrack(track)
+    }
+
     fun loadPlaylistDetail(playlistId: String) {
         viewModelScope.launch {
             playlistDetailState = playlistDetailState.copy(isLoading = true, error = null)
@@ -319,12 +453,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     onSuccess = { result ->
                         cloudDiskOffset = result.tracks.size
                         cloudDiskHasMore = result.hasMore
+                        // 使用第一首歌的封面作为歌单封面
+                        val coverUrl = result.tracks.firstOrNull()?.imgUrl ?: ""
                         playlistDetailState = playlistDetailState.copy(
                             detail = PlaylistDetail(
                                 info = Playlist(
                                     id = "cloud_disk",
                                     title = "云盘",
-                                    coverImgUrl = "",
+                                    coverImgUrl = coverUrl,
                                     sourceUrl = "",
                                     trackCount = result.tracks.size,
                                     description = ""
@@ -363,7 +499,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     // 云盘分段加载相关变量
     private var cloudDiskOffset = 0
     private var cloudDiskHasMore = true
-    private val cloudDiskLimit = 100
+    private val cloudDiskLimit = 10
     var isCloudDiskLoadingMore by mutableStateOf(false)
         private set
 
@@ -436,9 +572,28 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             loadLyrics()
             checkIfCurrentTrackLiked()
 
-            NeteaseApi.getSongUrl(track.id).fold(
+            // 切换到播放账号的Cookie
+            val accounts = NeteaseApi.getAccounts()
+            val playbackUserId = if (playbackAccountIndex < accounts.size) accounts[playbackAccountIndex].userId else null
+            val currentCookieBackup = NeteaseApi.getCookie()
+            if (playbackUserId != null) {
+                NeteaseApi.switchToAccount(playbackUserId)
+            }
+
+            // 获取用户选择的音质
+            val qualityBitrates = listOf(999000, 999000, 740000, 320000, 128000)
+            val qualityIndex = prefs.getInt("audio_quality_index", 0)
+            val selectedBitrate = if (qualityIndex < qualityBitrates.size) qualityBitrates[qualityIndex] else 999000
+
+            NeteaseApi.getSongUrl(track.id, selectedBitrate).fold(
                 onSuccess = { (url, bitrate, _) ->
                     try {
+                        // 切换回数据账号的Cookie
+                        val dataUserId = if (dataAccountIndex < accounts.size) accounts[dataAccountIndex].userId else null
+                        if (dataUserId != null) {
+                            NeteaseApi.switchToAccount(dataUserId)
+                        }
+                        
                         mediaPlaybackService?.let { service ->
                             service.setPlaylist(currentPlaylist)
                             service.playTrackWithUrl(track, url)
@@ -456,6 +611,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 },
                 onFailure = { e ->
+                    // 切换回数据账号的Cookie
+                    val dataUserId = if (dataAccountIndex < accounts.size) accounts[dataAccountIndex].userId else null
+                    if (dataUserId != null) {
+                        NeteaseApi.switchToAccount(dataUserId)
+                    }
                     playerState = playerState.copy(
                         isLoading = false,
                         error = e.message

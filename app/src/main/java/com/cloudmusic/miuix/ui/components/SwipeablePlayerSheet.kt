@@ -33,16 +33,16 @@ fun SwipeablePlayerSheet(
 ) {
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
-    val offsetY = remember { Animatable(0f) }
     val configuration = LocalConfiguration.current
     val screenHeight = with(density) { configuration.screenHeightDp.dp.toPx() }
+    // 初始值为屏幕高度，避免组件显示在屏幕中间
+    val offsetY = remember { Animatable(screenHeight) }
 
     // 处理系统返回手势 - 优先级高于其他BackHandler
     BackHandler(enabled = isVisible) {
         scope.launch {
             offsetY.animateTo(screenHeight, tween(300))
             onDismiss()
-            offsetY.snapTo(0f)
         }
     }
 
@@ -53,14 +53,13 @@ fun SwipeablePlayerSheet(
             offsetY.snapTo(screenHeight)
             offsetY.animateTo(0f, tween(300))
         } else {
-            // 滑出到屏幕下方，完成后重置偏移以便从布局树移除
+            // 滑出到屏幕下方
             offsetY.animateTo(screenHeight, tween(300))
-            offsetY.snapTo(0f)
         }
     }
 
-    // 仅在可见或关闭动画进行中时加入布局树，避免全屏透明层残留干扰触摸
-    if (isVisible || offsetY.value > 0f) {
+    // 仅在可见或关闭动画进行中时加入布局树
+    if (isVisible || offsetY.value < screenHeight) {
         Box(
             modifier = modifier
                 .fillMaxSize()
@@ -77,7 +76,6 @@ fun SwipeablePlayerSheet(
                                         // 滑动超过15%，关闭
                                         offsetY.animateTo(screenHeight, tween(300))
                                         onDismiss()
-                                        offsetY.snapTo(0f)
                                     } else {
                                         // 滑动不足15%，弹回
                                         offsetY.animateTo(0f, tween(300))

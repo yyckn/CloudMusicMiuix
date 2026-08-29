@@ -87,6 +87,7 @@ import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -98,15 +99,19 @@ import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.FavoritesFill
 import top.yukonga.miuix.kmp.icon.extended.ListView
 import top.yukonga.miuix.kmp.icon.extended.Location
+import top.yukonga.miuix.kmp.icon.extended.Merge
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Notes
 import top.yukonga.miuix.kmp.icon.extended.NotesFill
 import top.yukonga.miuix.kmp.icon.extended.Pause
 import top.yukonga.miuix.kmp.icon.extended.Play
+import top.yukonga.miuix.kmp.icon.extended.Replace
 import top.yukonga.miuix.kmp.icon.extended.ScreenMirroring
 import top.yukonga.miuix.kmp.icon.extended.Share
+import top.yukonga.miuix.kmp.icon.extended.Sort
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Comment
 
 @Composable
 fun PlayerPage(
@@ -129,6 +134,9 @@ fun PlayerPage(
     onDrawerStateChanged: (Boolean) -> Unit = {},
     onNavigateToArtist: (String) -> Unit = {},
     onNavigateToAlbum: (Long) -> Unit = {},
+    onNavigateToComment: (String, String) -> Unit = { _, _ -> },
+    playMode: Int = 0,
+    onSwitchPlayMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -141,6 +149,23 @@ fun PlayerPage(
     val isPureMusic = lyricState.lyrics?.isPureMusic == true
     var albumArtist by remember { mutableStateOf<String?>(null) }
     var albumArtistId by remember { mutableStateOf<Long?>(null) }
+    val context = LocalContext.current
+    
+    // 音质选择
+    val qualityOptions = listOf(
+        "Hi-Res 无损",
+        "无损",
+        "高品质",
+        "标准品质",
+        "低品质"
+    )
+    val qualityBitrates = listOf(999000, 999000, 740000, 320000, 128000)
+    var selectedQualityIndex by remember { 
+        mutableStateOf(
+            context.getSharedPreferences("player_prefs", android.content.Context.MODE_PRIVATE)
+                .getInt("audio_quality_index", 0)
+        ) 
+    }
 
     // 获取专辑歌手信息
     LaunchedEffect(track?.albumId) {
@@ -235,7 +260,6 @@ fun PlayerPage(
     }
 
     // 屏幕常亮设置 - 仅在播放页显示时生效
-    val context = LocalContext.current
     androidx.compose.runtime.DisposableEffect(ThemeSettings.keepScreenOn) {
         val activity = context as? android.app.Activity
         val window = activity?.window
@@ -357,7 +381,7 @@ fun PlayerPage(
                                     fontSize = 24.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = Color.White,
-                                    maxLines = 2,
+                                    maxLines = if (isTablet) 1 else 2,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -510,7 +534,7 @@ fun PlayerPage(
                                     }
                                 }
 
-                                // 第二行：关闭、喜欢、播放列表、更多
+                                // 第二行：关闭、播放模式、播放列表、更多
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.Center,
@@ -525,17 +549,21 @@ fun PlayerPage(
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(16.dp))
-                                    IconButton(onClick = {
-                                        if (isCurrentTrackLiked) {
-                                            showUnlikeDialog = true
-                                        } else {
-                                            onLikeTrack()
-                                        }
-                                    }, modifier = Modifier.size(48.dp)) {
+                                    IconButton(onClick = onSwitchPlayMode, modifier = Modifier.size(48.dp)) {
                                         Icon(
-                                            imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
-                                            contentDescription = if (isCurrentTrackLiked) "取消喜欢" else "喜欢",
-                                            tint = if (isCurrentTrackLiked) Color.White else Color.White.copy(alpha = 0.6f),
+                                            imageVector = when (playMode) {
+                                                0 -> MiuixIcons.Sort
+                                                1 -> MiuixIcons.Merge
+                                                2 -> MiuixIcons.Replace
+                                                else -> MiuixIcons.Sort
+                                            },
+                                            contentDescription = when (playMode) {
+                                                0 -> "顺序播放"
+                                                1 -> "乱序播放"
+                                                2 -> "单曲循环"
+                                                else -> "顺序播放"
+                                            },
+                                            tint = Color.White.copy(alpha = 0.6f),
                                             modifier = Modifier.size(24.dp)
                                         )
                                     }
@@ -615,7 +643,7 @@ fun PlayerPage(
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.White,
-                                maxLines = 2,
+                                maxLines = if (isTablet) 1 else 2,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -827,9 +855,11 @@ fun PlayerPage(
                             }
                         }
 
-                        // 第二行：关闭/歌词/喜欢/播放列表
+                        // 第二行：关闭/播放模式/歌词/播放列表
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -841,6 +871,29 @@ fun PlayerPage(
                                 Icon(
                                     imageVector = MiuixIcons.Close,
                                     contentDescription = "关闭",
+                                    tint = Color.White.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            // 播放模式按钮
+                            IconButton(
+                                onClick = onSwitchPlayMode,
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = when (playMode) {
+                                        0 -> MiuixIcons.Sort
+                                        1 -> MiuixIcons.Merge
+                                        2 -> MiuixIcons.Replace
+                                        else -> MiuixIcons.Sort
+                                    },
+                                    contentDescription = when (playMode) {
+                                        0 -> "顺序播放"
+                                        1 -> "乱序播放"
+                                        2 -> "单曲循环"
+                                        else -> "顺序播放"
+                                    },
                                     tint = Color.White.copy(alpha = 0.6f),
                                     modifier = Modifier.size(24.dp)
                                 )
@@ -867,21 +920,6 @@ fun PlayerPage(
                                     } else {
                                         Color.White.copy(alpha = 0.6f)
                                     },
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            IconButton(onClick = {
-                                if (isCurrentTrackLiked) {
-                                    showUnlikeDialog = true
-                                } else {
-                                    onLikeTrack()
-                                }
-                            }, modifier = Modifier.size(48.dp)) {
-                                Icon(
-                                    imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
-                                    contentDescription = if (isCurrentTrackLiked) "取消喜欢" else "喜欢",
-                                    tint = if (isCurrentTrackLiked) Color.White else Color.White.copy(alpha = 0.6f),
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
@@ -1020,7 +1058,33 @@ fun PlayerPage(
                 LazyColumn(
                     modifier = Modifier.padding(bottom = 32.dp)
                 ) {
-                    // 分享选项
+                    // 歌曲区域
+                    item { SmallTitle("歌曲") }
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp)
+                                .padding(bottom = 12.dp),
+                            colors = CardDefaults.defaultColors(
+                                color = MiuixTheme.colorScheme.secondaryContainer
+                            )
+                        ) {
+                            WindowDropdownPreference(
+                                title = "音质",
+                                summary = "*选择的音质仅代表可获取的最高音质，实际音频音质可能因歌曲质量而不同",
+                                items = qualityOptions,
+                                selectedIndex = selectedQualityIndex,
+                                onSelectedIndexChange = { newIndex ->
+                                    selectedQualityIndex = newIndex
+                                    // 保存到SharedPreferences
+                                    context.getSharedPreferences("player_prefs", android.content.Context.MODE_PRIVATE)
+                                        .edit()
+                                        .putInt("audio_quality_index", newIndex)
+                                        .apply()
+                                }
+                            )
+                        }
+                    }
                     item {
                         Card(
                             modifier = Modifier
@@ -1042,6 +1106,41 @@ fun PlayerPage(
                                 onClick = {
                                     showMoreSheet = false
                                     onShare()
+                                }
+                            )
+                            ArrowPreference(
+                                title = if (isCurrentTrackLiked) "取消收藏" else "收藏",
+                                startAction = {
+                                    Icon(
+                                        imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = if (isCurrentTrackLiked) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface
+                                    )
+                                },
+                                onClick = {
+                                    showMoreSheet = false
+                                    if (isCurrentTrackLiked) {
+                                        showUnlikeDialog = true
+                                    } else {
+                                        onLikeTrack()
+                                    }
+                                }
+                            )
+                            ArrowPreference(
+                                title = "评论",
+                                startAction = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Comment,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMoreSheet = false
+                                    track?.let { t ->
+                                        onNavigateToComment(t.id, t.title)
+                                    }
                                 }
                             )
                         }

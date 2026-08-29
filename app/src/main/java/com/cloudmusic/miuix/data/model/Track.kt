@@ -98,3 +98,20 @@ data class AlbumInfo(
     val artist: String = "",
     val artistId: Long = 0
 )
+
+data class Comment(
+    val commentId: Long = 0,
+    val userId: Long = 0,
+    val nickname: String = "",
+    val avatarUrl: String = "",
+    val content: String = "",
+    val time: Long = 0, // 评论时间戳
+    val likedCount: Int = 0,
+    val replies: List<Comment> = emptyList()
+)
+
+data class CommentResult(
+    val comments: List<Comment> = emptyList(),
+    val total: Int = 0,
+    val hasMore: Boolean = false
+)

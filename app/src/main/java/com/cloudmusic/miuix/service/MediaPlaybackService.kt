@@ -40,6 +40,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     private var isPlaying = false
     private var playbackPosition = 0L
     private var currentBitmap: Bitmap? = null
+    private var currentLyrics: com.cloudmusic.miuix.data.model.SongLyrics? = null
     
     // 回调接口，用于通知ViewModel歌曲切换
     var onTrackChangedListener: OnTrackChangedListener? = null
@@ -182,13 +183,28 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                     mediaPlayer?.release()
                     mediaPlayer = MediaPlayer().apply {
                         setDataSource(url)
+                        setAudioAttributes(
+                            android.media.AudioAttributes.Builder()
+                                .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                                .build()
+                        )
                         setOnPreparedListener {
                             start()
                             this@MediaPlaybackService.isPlaying = true
                             updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
                         }
                         setOnCompletionListener {
-                            playNext()
+                            val duration = this.duration.toLong()
+                            val position = this.currentPosition.toLong()
+                            // 只有当播放位置接近总时长时才认为是正常完成
+                            // 避免因流媒体问题导致的误触发
+                            if (duration > 0 && position >= duration * 0.9) {
+                                Log.d(TAG, "Track completed normally: position=$position, duration=$duration")
+                                playNext()
+                            } else {
+                                Log.d(TAG, "Track completion ignored: position=$position, duration=$duration")
+                            }
                         }
                         setOnErrorListener { _, _, _ ->
                             this@MediaPlaybackService.isPlaying = false
@@ -215,12 +231,26 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 mediaPlayer?.release()
                 mediaPlayer = MediaPlayer().apply {
                     setDataSource(url)
+                    setAudioAttributes(
+                        android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
                     setOnPreparedListener {
                         // 准备完成，但不自动播放
                         updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
                     }
                     setOnCompletionListener {
-                        playNext()
+                        val duration = this.duration.toLong()
+                        val position = this.currentPosition.toLong()
+                        // 只有当播放位置接近总时长时才认为是正常完成
+                        if (duration > 0 && position >= duration * 0.9) {
+                            Log.d(TAG, "Track completed normally: position=$position, duration=$duration")
+                            playNext()
+                        } else {
+                            Log.d(TAG, "Track completion ignored: position=$position, duration=$duration")
+                        }
                     }
                     setOnErrorListener { _, _, _ ->
                         this@MediaPlaybackService.isPlaying = false
@@ -339,8 +369,17 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         val track = currentTrack ?: return
         // 只有当歌曲未切换时才更新歌词
         if (lyriconManager?.isCurrentTrack(track.id) == true) {
+            // 更新当前歌词
+            currentLyrics = lyrics
             lyriconManager?.setTrack(track, lyrics)
             Log.d(TAG, "Updated lyrics for track: ${track.title}, lines: ${lyrics?.lines?.size ?: 0}")
+            
+            // 重新更新metadata以包含歌词信息
+            serviceScope.launch {
+                withContext(Dispatchers.Main) {
+                    updateMetadata(track)
+                }
+            }
         } else {
             Log.d(TAG, "Skipped lyrics update - track changed")
         }
@@ -437,7 +476,50 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
             metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bitmap)
         }
 
+        // 添加歌词信息到extras
+        val lyricJson = buildLyricJson(track)
+        if (lyricJson.isNotEmpty()) {
+            // 使用反射或直接设置extras
+            try {
+                val extras = Bundle()
+                extras.putString("lyricInfo", lyricJson)
+                val field = MediaMetadataCompat.Builder::class.java.getDeclaredField("mBundle")
+                field.isAccessible = true
+                val bundle = field.get(metadataBuilder) as Bundle
+                bundle.putBundle("android.media.metadata.EXTRAS", extras)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to add lyrics to metadata extras: ${e.message}")
+            }
+        }
+
         mediaSession.setMetadata(metadataBuilder.build())
+    }
+
+    /**
+     * 构建歌词JSON字符串
+     */
+    private fun buildLyricJson(track: Track): String {
+        val lyrics = currentLyrics ?: return ""
+        if (lyrics.lines.isEmpty()) return ""
+
+        // 构建LRC格式歌词
+        val lrcBuilder = StringBuilder()
+        for (line in lyrics.lines) {
+            val minutes = line.startAt / 60000
+            val seconds = (line.startAt % 60000) / 1000
+            val milliseconds = (line.startAt % 1000) / 10
+            lrcBuilder.append("[%02d:%02d.%02d]%s\n".format(minutes, seconds, milliseconds, line.text))
+        }
+
+        // 构建JSON
+        val escapedLyric = lrcBuilder.toString()
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+
+        return """{"lyric":"$escapedLyric","songName":"${track.title}","artist":"${track.artist}"}"""
     }
 
     private fun showNotification() {

@@ -59,9 +59,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cloudmusic.miuix.data.api.NeteaseApi
 import com.cloudmusic.miuix.ui.components.PlayerBar
 import com.cloudmusic.miuix.ui.pages.AboutPage
+import com.cloudmusic.miuix.ui.pages.AccountInfo
 import com.cloudmusic.miuix.ui.pages.AlbumPage
 import com.cloudmusic.miuix.ui.pages.ArtistPage
+import com.cloudmusic.miuix.ui.pages.CommentPage
 import com.cloudmusic.miuix.ui.pages.LoginPage
+import com.cloudmusic.miuix.ui.pages.LyriconAdapterPage
+import com.cloudmusic.miuix.ui.pages.ManageAccountsPage
 import com.cloudmusic.miuix.ui.pages.PlayPageSettingsPage
 import com.cloudmusic.miuix.ui.pages.PlayerPage
 import com.cloudmusic.miuix.ui.pages.PlaylistDetailPage
@@ -114,6 +118,9 @@ sealed class Screen {
     object Profile : Screen()
     data class Artist(val artistId: String) : Screen()
     data class Album(val albumId: Long) : Screen()
+    object LyriconAdapter : Screen()
+    object ManageAccounts : Screen()
+    data class Comment(val songId: String, val songTitle: String) : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -177,6 +184,10 @@ fun MainScreen(
     LaunchedEffect(Unit) {
         NeteaseApi.setOnProfileChangedListener {
             profileVersion++
+        }
+        // 如果已登录，加载用户信息
+        if (isLoggedIn) {
+            viewModel.loadUserInfo()
         }
     }
 
@@ -347,7 +358,7 @@ fun MainScreen(
                                         recommendState = viewModel.recommendState,
                                         onPlaylistClick = { playlistId, coverUrl, title ->
                                             viewModel.loadPlaylistDetail(playlistId)
-                                            currentScreen = Screen.PlaylistDetail(coverUrl, title)
+                                            navigateTo(Screen.PlaylistDetail(coverUrl, title))
                                         },
                                         viewModel = viewModel,
                                         isLoggedIn = isLoggedIn,
@@ -359,7 +370,7 @@ fun MainScreen(
                                             recommendState = viewModel.recommendState,
                                             onPlaylistClick = { playlistId, coverUrl, title ->
                                                 viewModel.loadPlaylistDetail(playlistId)
-                                                currentScreen = Screen.PlaylistDetail(coverUrl, title)
+                                                navigateTo(Screen.PlaylistDetail(coverUrl, title))
                                             },
                                             onRefresh = { viewModel.loadUserPlaylists() },
                                             isLoggedIn = isLoggedIn,
@@ -368,19 +379,25 @@ fun MainScreen(
                                 2 -> SettingsPage(
                                     isLoggedIn = isLoggedIn,
                                     onLoginClick = {
-                                        currentScreen = Screen.QrLogin
+                                        navigateTo(Screen.QrLogin)
                                     },
                                     onProfileClick = {
-                                        currentScreen = Screen.Profile
+                                        navigateTo(Screen.Profile)
                                     },
                                     onThemeSettingsClick = {
-                                        currentScreen = Screen.ThemeSettings
+                                        navigateTo(Screen.ThemeSettings)
                                     },
                                     onPlayPageSettingsClick = {
-                                        currentScreen = Screen.PlayPageSettings
+                                        navigateTo(Screen.PlayPageSettings)
                                     },
                                     onAboutClick = {
-                                        currentScreen = Screen.About
+                                        navigateTo(Screen.About)
+                                    },
+                                    onLyriconAdapterClick = {
+                                        navigateTo(Screen.LyriconAdapter)
+                                    },
+                                    onManageAccountsClick = {
+                                        navigateTo(Screen.ManageAccounts)
                                     },
                                     modifier = Modifier.padding(padding)
                                 )
@@ -562,7 +579,7 @@ fun MainScreen(
                                     recommendState = viewModel.recommendState,
                                     onPlaylistClick = { playlistId, coverUrl, title ->
                                         viewModel.loadPlaylistDetail(playlistId)
-                                        currentScreen = Screen.PlaylistDetail(coverUrl, title)
+                                        navigateTo(Screen.PlaylistDetail(coverUrl, title))
                                     },
                                     viewModel = viewModel,
                                     isLoggedIn = isLoggedIn,
@@ -574,7 +591,7 @@ fun MainScreen(
                                             recommendState = viewModel.recommendState,
                                             onPlaylistClick = { playlistId, coverUrl, title ->
                                                 viewModel.loadPlaylistDetail(playlistId)
-                                                currentScreen = Screen.PlaylistDetail(coverUrl, title)
+                                                navigateTo(Screen.PlaylistDetail(coverUrl, title))
                                             },
                                             onRefresh = { viewModel.loadUserPlaylists() },
                                             isLoggedIn = isLoggedIn,
@@ -583,19 +600,25 @@ fun MainScreen(
                                 2 -> SettingsPage(
                                     isLoggedIn = isLoggedIn,
                                     onLoginClick = {
-                                        currentScreen = Screen.QrLogin
+                                        navigateTo(Screen.QrLogin)
                                     },
                                     onProfileClick = {
-                                        currentScreen = Screen.Profile
+                                        navigateTo(Screen.Profile)
                                     },
                                     onThemeSettingsClick = {
-                                        currentScreen = Screen.ThemeSettings
+                                        navigateTo(Screen.ThemeSettings)
                                     },
                                     onPlayPageSettingsClick = {
-                                        currentScreen = Screen.PlayPageSettings
+                                        navigateTo(Screen.PlayPageSettings)
                                     },
                                     onAboutClick = {
-                                        currentScreen = Screen.About
+                                        navigateTo(Screen.About)
+                                    },
+                                    onLyriconAdapterClick = {
+                                        navigateTo(Screen.LyriconAdapter)
+                                    },
+                                    onManageAccountsClick = {
+                                        navigateTo(Screen.ManageAccounts)
                                     },
                                     modifier = Modifier.padding(padding)
                                 )
@@ -722,11 +745,13 @@ fun MainScreen(
                                 }
                             }
                         }
+                        val context = LocalContext.current
                         PlaylistDetailPage(
                             playlistDetail = viewModel.playlistDetailState.detail,
                             isLoading = viewModel.playlistDetailState.isLoading,
                             error = viewModel.playlistDetailState.error,
                             currentTrack = viewModel.playerState.currentTrack,
+                            isCurrentTrackLiked = viewModel.isCurrentTrackLiked,
                             initialCoverUrl = screen.coverUrl,
                             initialTitle = screen.title,
                             isCloudDisk = viewModel.playlistDetailState.detail?.info?.id == "cloud_disk",
@@ -742,15 +767,59 @@ fun MainScreen(
                                 // 点击歌曲时替换播放列表
                                 val tracks = viewModel.playlistDetailState.detail?.tracks
                                 if (tracks != null) {
-                                    viewModel.currentPlaylist = tracks
+                                    viewModel.playTrackWithMode(track, tracks)
+                                } else {
+                                    viewModel.playTrack(track)
                                 }
-                                viewModel.playTrack(track)
                             },
                             onPlayAllClick = { tracks ->
                                 if (tracks.isNotEmpty()) {
-                                    viewModel.currentPlaylist = tracks
-                                    viewModel.playTrack(tracks.first())
+                                    viewModel.playTrackWithMode(tracks.first(), tracks)
                                 }
+                            },
+                            onShare = {
+                                val track = viewModel.playerState.currentTrack
+                                if (track != null) {
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, "${track.title} - ${track.artist}\n${track.sourceUrl}")
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
+                                }
+                            },
+                            onLikeTrack = {
+                                viewModel.likeCurrentTrack { isLiked ->
+                                    val message = if (isLiked) "已收藏" else "已取消收藏"
+                                    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onDownload = { viewModel.downloadCurrentTrack() },
+                            onDownloadCover = {
+                                val coverUrl = viewModel.playerState.currentTrack?.imgUrl
+                                if (!coverUrl.isNullOrEmpty()) {
+                                    try {
+                                        val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+                                        val fileName = "${viewModel.playerState.currentTrack?.title ?: "cover"}.jpg"
+                                        val request = android.app.DownloadManager.Request(android.net.Uri.parse(coverUrl))
+                                            .setTitle("下载封面图片")
+                                            .setDescription("正在下载封面图片")
+                                            .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                            .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_PICTURES, "CloudMusic/$fileName")
+                                        downloadManager.enqueue(request)
+                                        android.widget.Toast.makeText(context, "已保存到 /Pictures/CloudMusic/ 目录", android.widget.Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "保存失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            onNavigateToArtist = { artistId ->
+                                navigateTo(Screen.Artist(artistId))
+                            },
+                            onNavigateToAlbum = { albumId ->
+                                navigateTo(Screen.Album(albumId))
+                            },
+                            onNavigateToComment = { songId, songTitle ->
+                                navigateTo(Screen.Comment(songId, songTitle))
                             },
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
@@ -762,12 +831,15 @@ fun MainScreen(
             is Screen.Login -> {
                 LoginPage(
                     onBackClick = {
-                        currentScreen = Screen.Main
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
                     },
                     onLoginSuccess = { cookies ->
                         NeteaseApi.setCookie(cookies)
                         isLoggedIn = true
                         currentScreen = Screen.Main
+                        screenStack = emptyList()
                         viewModel.loadRecommendPlaylists()
                     }
                 )
@@ -775,13 +847,19 @@ fun MainScreen(
             is Screen.QrLogin -> {
                 QrLoginPage(
                     onBackClick = {
-                        currentScreen = Screen.Main
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
                     },
                     onLoginSuccess = { nickname ->
                         isLoggedIn = true
                         currentScreen = Screen.Main
+                        screenStack = emptyList()
                         viewModel.loadRecommendPlaylists()
                         viewModel.loadUserPlaylists()
+                        viewModel.loadUserInfo()
+                        // 保存当前账号到账号列表
+                        NeteaseApi.saveCurrentAccount()
                     },
                     context = androidx.compose.ui.platform.LocalContext.current
                 )
@@ -789,31 +867,88 @@ fun MainScreen(
             is Screen.ThemeSettings -> {
                 ThemeSettingsPage(
                     onBackClick = {
-                        currentScreen = Screen.Main
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
                     }
                 )
             }
             is Screen.PlayPageSettings -> {
                 PlayPageSettingsPage(
                     onBackClick = {
-                        currentScreen = Screen.Main
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
                     }
                 )
             }
             is Screen.About -> {
                 AboutPage(
                     onBackClick = {
-                        currentScreen = Screen.Main
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
                     },
                     onOpenSourceClick = {
                         // TODO: 实现开放源代码许可页面
                     }
                 )
             }
+            is Screen.LyriconAdapter -> {
+                LyriconAdapterPage(
+                    onBackClick = {
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
+                    }
+                )
+            }
+            is Screen.ManageAccounts -> {
+                ManageAccountsPage(
+                    accounts = NeteaseApi.getAccounts().map { account ->
+                        AccountInfo(
+                            userId = account.userId,
+                            nickname = account.nickname,
+                            avatarUrl = account.avatarUrl
+                        )
+                    },
+                    onBackClick = {
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
+                    },
+                    onAccountClick = { userId ->
+                        // 切换到选中的账号
+                        if (NeteaseApi.switchToAccount(userId)) {
+                            isLoggedIn = true
+                            viewModel.loadUserInfo()
+                            viewModel.loadUserPlaylists()
+                            // 跳转到资料页
+                            navigateTo(Screen.Profile)
+                        }
+                    },
+                    onLoginNewAccount = {
+                        // 保存当前账号的Cookie
+                        NeteaseApi.saveCurrentAccount()
+                        // 登录新账号
+                        navigateTo(Screen.QrLogin)
+                    },
+                    playbackAccountIndex = viewModel.playbackAccountIndex,
+                    dataAccountIndex = viewModel.dataAccountIndex,
+                    onPlaybackAccountChange = { index ->
+                        viewModel.updatePlaybackAccountIndex(index)
+                    },
+                    onDataAccountChange = { index ->
+                        viewModel.updateDataAccountIndex(index)
+                    }
+                )
+            }
             is Screen.Profile -> {
                 ProfilePage(
                     onBackClick = {
-                        currentScreen = Screen.Main
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
                     },
                     onLogout = {
                         isLoggedIn = false
@@ -838,6 +973,108 @@ fun MainScreen(
                         )
                     }
                 ) { padding ->
+                    val context = LocalContext.current
+                    // 播放列表抽屉
+                    val artistPlaylistListState = rememberLazyListState()
+                    var artistShouldScrollToCurrent by remember { mutableStateOf(false) }
+                    
+                    LaunchedEffect(artistShouldScrollToCurrent) {
+                        if (artistShouldScrollToCurrent) {
+                            val currentIndex = viewModel.currentPlaylist.indexOfFirst { 
+                                it.id == viewModel.playerState.currentTrack?.id 
+                            }
+                            if (currentIndex >= 0) {
+                                artistPlaylistListState.animateScrollToItem(currentIndex)
+                            }
+                            artistShouldScrollToCurrent = false
+                        }
+                    }
+                    
+                    LaunchedEffect(showPlaylistSheet) {
+                        if (showPlaylistSheet) {
+                            val currentIndex = viewModel.currentPlaylist.indexOfFirst { 
+                                it.id == viewModel.playerState.currentTrack?.id 
+                            }
+                            if (currentIndex >= 0) {
+                                artistPlaylistListState.scrollToItem(currentIndex)
+                            }
+                        }
+                    }
+                    
+                    OverlayBottomSheet(
+                        show = showPlaylistSheet,
+                        title = "播放列表",
+                        insideMargin = DpSize(12.dp, 0.dp),
+                        startAction = {
+                            IconButton(
+                                onClick = { artistShouldScrollToCurrent = true }
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.Location,
+                                    contentDescription = "定位到当前歌曲",
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                        },
+                        endAction = {
+                            IconButton(
+                                onClick = { showPlaylistSheet = false }
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.Close,
+                                    contentDescription = "关闭",
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                        },
+                        onDismissRequest = { showPlaylistSheet = false }
+                    ) {
+                        if (viewModel.currentPlaylist.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "暂无歌曲",
+                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                state = artistPlaylistListState,
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)
+                            ) {
+                                items(viewModel.currentPlaylist) { track ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        colors = CardDefaults.defaultColors(
+                                            color = MiuixTheme.colorScheme.secondaryContainer
+                                        ),
+                                        pressFeedbackType = PressFeedbackType.Tilt,
+                                        showIndication = true,
+                                        onClick = {
+                                            viewModel.playTrack(track)
+                                            showPlaylistSheet = false
+                                        }
+                                    ) {
+                                        TrackItem(
+                                            track = track,
+                                            isPlaying = track.id == viewModel.playerState.currentTrack?.id,
+                                            onClick = {
+                                                viewModel.playTrack(track)
+                                                showPlaylistSheet = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                     ArtistPage(
                         artistId = screen.artistId,
                         onBackClick = {
@@ -846,13 +1083,61 @@ fun MainScreen(
                             }
                         },
                         onTrackClick = { track, tracks ->
-                            viewModel.currentPlaylist = tracks
-                            viewModel.playTrack(track)
+                            viewModel.playTrackWithMode(track, tracks)
                         },
                         onAlbumClick = { albumId ->
                             navigateTo(Screen.Album(albumId))
                         },
                         currentTrack = viewModel.playerState.currentTrack,
+                        currentPlaylist = viewModel.currentPlaylist,
+                        isCurrentTrackLiked = viewModel.isCurrentTrackLiked,
+                        onShare = {
+                            val track = viewModel.playerState.currentTrack
+                            if (track != null) {
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, "${track.title} - ${track.artist}\n${track.sourceUrl}")
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
+                            }
+                        },
+                        onLikeTrack = {
+                            viewModel.likeCurrentTrack { isLiked ->
+                                val message = if (isLiked) "已收藏" else "已取消收藏"
+                                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onDownload = { viewModel.downloadCurrentTrack() },
+                        onDownloadCover = {
+                            val coverUrl = viewModel.playerState.currentTrack?.imgUrl
+                            if (!coverUrl.isNullOrEmpty()) {
+                                try {
+                                    val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+                                    val fileName = "${viewModel.playerState.currentTrack?.title ?: "cover"}.jpg"
+                                    val request = android.app.DownloadManager.Request(android.net.Uri.parse(coverUrl))
+                                        .setTitle("下载封面图片")
+                                        .setDescription("正在下载封面图片")
+                                        .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                        .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_PICTURES, "CloudMusic/$fileName")
+                                    downloadManager.enqueue(request)
+                                    android.widget.Toast.makeText(context, "已保存到 /Pictures/CloudMusic/ 目录", android.widget.Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "保存失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onNavigateToArtist = { artistId ->
+                            navigateTo(Screen.Artist(artistId))
+                        },
+                        onNavigateToAlbum = { albumId ->
+                            navigateTo(Screen.Album(albumId))
+                        },
+                        onNavigateToComment = { songId, songTitle ->
+                            navigateTo(Screen.Comment(songId, songTitle))
+                        },
+                        onPlayTrack = { track ->
+                            viewModel.playTrack(track)
+                        },
                         isBackHandlerEnabled = !showPlayerPage,
                         modifier = Modifier.padding(padding)
                     )
@@ -873,6 +1158,108 @@ fun MainScreen(
                         )
                     }
                 ) { padding ->
+                    val context = LocalContext.current
+                    // 播放列表抽屉
+                    val albumPlaylistListState = rememberLazyListState()
+                    var albumShouldScrollToCurrent by remember { mutableStateOf(false) }
+                    
+                    LaunchedEffect(albumShouldScrollToCurrent) {
+                        if (albumShouldScrollToCurrent) {
+                            val currentIndex = viewModel.currentPlaylist.indexOfFirst { 
+                                it.id == viewModel.playerState.currentTrack?.id 
+                            }
+                            if (currentIndex >= 0) {
+                                albumPlaylistListState.animateScrollToItem(currentIndex)
+                            }
+                            albumShouldScrollToCurrent = false
+                        }
+                    }
+                    
+                    LaunchedEffect(showPlaylistSheet) {
+                        if (showPlaylistSheet) {
+                            val currentIndex = viewModel.currentPlaylist.indexOfFirst { 
+                                it.id == viewModel.playerState.currentTrack?.id 
+                            }
+                            if (currentIndex >= 0) {
+                                albumPlaylistListState.scrollToItem(currentIndex)
+                            }
+                        }
+                    }
+                    
+                    OverlayBottomSheet(
+                        show = showPlaylistSheet,
+                        title = "播放列表",
+                        insideMargin = DpSize(12.dp, 0.dp),
+                        startAction = {
+                            IconButton(
+                                onClick = { albumShouldScrollToCurrent = true }
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.Location,
+                                    contentDescription = "定位到当前歌曲",
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                        },
+                        endAction = {
+                            IconButton(
+                                onClick = { showPlaylistSheet = false }
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.Close,
+                                    contentDescription = "关闭",
+                                    tint = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                        },
+                        onDismissRequest = { showPlaylistSheet = false }
+                    ) {
+                        if (viewModel.currentPlaylist.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "暂无歌曲",
+                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                state = albumPlaylistListState,
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)
+                            ) {
+                                items(viewModel.currentPlaylist) { track ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        colors = CardDefaults.defaultColors(
+                                            color = MiuixTheme.colorScheme.secondaryContainer
+                                        ),
+                                        pressFeedbackType = PressFeedbackType.Tilt,
+                                        showIndication = true,
+                                        onClick = {
+                                            viewModel.playTrack(track)
+                                            showPlaylistSheet = false
+                                        }
+                                    ) {
+                                        TrackItem(
+                                            track = track,
+                                            isPlaying = track.id == viewModel.playerState.currentTrack?.id,
+                                            onClick = {
+                                                viewModel.playTrack(track)
+                                                showPlaylistSheet = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                     AlbumPage(
                         albumId = screen.albumId,
                         onBackClick = {
@@ -881,20 +1268,75 @@ fun MainScreen(
                             }
                         },
                         onTrackClick = { track, tracks ->
-                            viewModel.currentPlaylist = tracks
-                            viewModel.playTrack(track)
+                            viewModel.playTrackWithMode(track, tracks)
                         },
                         onPlayAllClick = { tracks ->
-                            viewModel.currentPlaylist = tracks
                             if (tracks.isNotEmpty()) {
-                                viewModel.playTrack(tracks.first())
+                                viewModel.playTrackWithMode(tracks.first(), tracks)
                             }
                         },
                         currentTrack = viewModel.playerState.currentTrack,
+                        currentPlaylist = viewModel.currentPlaylist,
+                        isCurrentTrackLiked = viewModel.isCurrentTrackLiked,
+                        onShare = {
+                            val track = viewModel.playerState.currentTrack
+                            if (track != null) {
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, "${track.title} - ${track.artist}\n${track.sourceUrl}")
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
+                            }
+                        },
+                        onLikeTrack = {
+                            viewModel.likeCurrentTrack { isLiked ->
+                                val message = if (isLiked) "已收藏" else "已取消收藏"
+                                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onDownload = { viewModel.downloadCurrentTrack() },
+                        onDownloadCover = {
+                            val coverUrl = viewModel.playerState.currentTrack?.imgUrl
+                            if (!coverUrl.isNullOrEmpty()) {
+                                try {
+                                    val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+                                    val fileName = "${viewModel.playerState.currentTrack?.title ?: "cover"}.jpg"
+                                    val request = android.app.DownloadManager.Request(android.net.Uri.parse(coverUrl))
+                                        .setTitle("下载封面图片")
+                                        .setDescription("正在下载封面图片")
+                                        .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                        .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_PICTURES, "CloudMusic/$fileName")
+                                    downloadManager.enqueue(request)
+                                    android.widget.Toast.makeText(context, "已保存到 /Pictures/CloudMusic/ 目录", android.widget.Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "保存失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onNavigateToArtist = { artistId ->
+                            navigateTo(Screen.Artist(artistId))
+                        },
+                        onNavigateToComment = { songId, songTitle ->
+                            navigateTo(Screen.Comment(songId, songTitle))
+                        },
+                        onPlayTrack = { track ->
+                            viewModel.playTrack(track)
+                        },
                         isBackHandlerEnabled = !showPlayerPage,
                         modifier = Modifier.padding(padding)
                     )
                 }
+            }
+            is Screen.Comment -> {
+                CommentPage(
+                    songId = screen.songId,
+                    songTitle = screen.songTitle,
+                    onBackClick = {
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
+                    }
+                )
             }
         }
         }
@@ -976,7 +1418,13 @@ fun MainScreen(
                 onNavigateToAlbum = { albumId ->
                     showPlayerPage = false
                     navigateTo(Screen.Album(albumId))
-                }
+                },
+                onNavigateToComment = { songId, songTitle ->
+                    showPlayerPage = false
+                    navigateTo(Screen.Comment(songId, songTitle))
+                },
+                playMode = viewModel.playMode,
+                onSwitchPlayMode = { viewModel.switchPlayMode() }
             )
         }
     }

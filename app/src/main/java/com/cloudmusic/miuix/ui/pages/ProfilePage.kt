@@ -1,7 +1,14 @@
 package com.cloudmusic.miuix.ui.pages
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Environment
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -26,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,23 +42,37 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.cloudmusic.miuix.data.api.NeteaseApi
 import com.cloudmusic.miuix.data.model.UserProfile
+import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.icon.extended.Share
+import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
+import top.yukonga.miuix.kmp.basic.DropdownEntry
+import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import top.yukonga.miuix.kmp.basic.Icon
+import androidx.compose.ui.unit.DpSize
 
 @Composable
 fun ProfilePage(
@@ -60,13 +83,50 @@ fun ProfilePage(
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
+    val context = LocalContext.current
     var userProfile by remember { mutableStateOf<UserProfile?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+    var showExportWarning by remember { mutableStateOf(false) }
+    var exportType by remember { mutableStateOf("") } // "clipboard" or "file"
+    var exportButtonEnabled by remember { mutableStateOf(false) }
+    var exportCountdown by remember { mutableIntStateOf(3) }
     val pullToRefreshState = rememberPullToRefreshState()
+
+    // SAF文件选择器
+    val fileSaverLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri?.let {
+            try {
+                val cookies = NeteaseApi.getCookie()
+                val jsonCredentials = formatCookiesToJson(cookies)
+                context.contentResolver.openOutputStream(it)?.use { outputStream ->
+                    outputStream.write(jsonCredentials.toByteArray())
+                }
+                android.widget.Toast.makeText(context, "保存成功", android.widget.Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "保存失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     BackHandler {
         onBackClick()
+    }
+
+    // 导出警告对话框倒计时
+    LaunchedEffect(showExportWarning) {
+        if (showExportWarning) {
+            exportButtonEnabled = false
+            exportCountdown = 3
+            for (i in 3 downTo 1) {
+                exportCountdown = i
+                delay(1000)
+            }
+            exportButtonEnabled = true
+        }
     }
 
     // 加载用户信息（当isLoggedIn或profileVersion变化时重新加载）
@@ -132,6 +192,34 @@ fun ProfilePage(
                             .padding(start = 8.dp)
                             .clickable { onBackClick() }
                     )
+                },
+                actions = {
+                    OverlayIconDropdownMenu(
+                        entry = DropdownEntry(
+                            items = listOf(
+                                DropdownItem(
+                                    text = "复制登录凭证到剪贴板",
+                                    onClick = {
+                                        exportType = "clipboard"
+                                        showExportWarning = true
+                                    }
+                                ),
+                                DropdownItem(
+                                    text = "将登录凭证导出为文件",
+                                    onClick = {
+                                        exportType = "file"
+                                        showExportWarning = true
+                                    }
+                                )
+                            )
+                        )
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Share,
+                            contentDescription = "导出",
+                            tint = MiuixTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             )
         }
@@ -278,8 +366,7 @@ fun ProfilePage(
                         Spacer(modifier = Modifier.height(24.dp))
                         Button(
                             onClick = {
-                                onLogout()
-                                onBackClick()
+                                showLogoutDialog = true
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -298,6 +385,79 @@ fun ProfilePage(
                 }
             }
         }
+        
+        // 退出登录确认对话框
+        OverlayDialog(
+            show = showLogoutDialog,
+            title = "退出登录",
+            summary = "确定要退出登录吗？",
+            onDismissRequest = { showLogoutDialog = false },
+            content = {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    TextButton(
+                        text = "取消",
+                        onClick = { showLogoutDialog = false },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(20.dp))
+                    TextButton(
+                        text = "确定",
+                        onClick = {
+                            showLogoutDialog = false
+                            onLogout()
+                            onBackClick()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                    )
+                }
+            },
+        )
+
+        // 导出警告对话框
+        OverlayDialog(
+            show = showExportWarning,
+            title = "警告",
+            summary = "登录凭证为极其重要的数据，其他人也可通过登录凭证登录此账号，请勿随意分享给他人。导出后，登录凭证将会有泄露的风险。",
+            onDismissRequest = { showExportWarning = false },
+            content = {
+                Column {
+                    TextButton(
+                        text = if (exportButtonEnabled) "已了解风险，继续导出" else "已了解风险，继续导出（${exportCountdown}）",
+                        onClick = {
+                            if (exportButtonEnabled) {
+                                showExportWarning = false
+                                if (exportType == "clipboard") {
+                                    val cookies = NeteaseApi.getCookie()
+                                    val jsonCredentials = formatCookiesToJson(cookies)
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clip = ClipData.newPlainText("login_credentials", jsonCredentials)
+                                    clipboard.setPrimaryClip(clip)
+                                    android.widget.Toast.makeText(context, "已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    // 使用SAF文件选择器
+                                    fileSaverLauncher.launch("loginkey.json")
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = exportButtonEnabled,
+                        colors = ButtonDefaults.textButtonColors(
+                            color = if (exportButtonEnabled) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.surfaceVariant,
+                            textColor = if (exportButtonEnabled) MiuixTheme.colorScheme.onError else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        ),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        text = "取消",
+                        onClick = { showExportWarning = false },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+        )
     }
 }
 
@@ -375,4 +535,44 @@ private fun getCityName(city: Int): String {
         231200 -> "绥化"
         else -> "未知"
     }
+}
+
+private fun formatCookiesToJson(cookies: String): String {
+    val cookieMap = LinkedHashMap<String, String>()
+    
+    // 解析Cookie字符串，去除重复键值
+    cookies.split(";").forEach { cookie ->
+        val parts = cookie.trim().split("=", limit = 2)
+        if (parts.size == 2) {
+            val key = parts[0].trim()
+            val value = parts[1].trim()
+            if (key.isNotEmpty()) {
+                cookieMap[key] = value
+            }
+        }
+    }
+    
+    // 按键名排序
+    val sortedMap = cookieMap.toSortedMap()
+    
+    // 构建JSON字符串
+    val json = StringBuilder("{\n")
+    val entries = sortedMap.entries.toList()
+    entries.forEachIndexed { index, (key, value) ->
+        // 转义JSON特殊字符
+        val escapedValue = value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        json.append("  \"$key\": \"$escapedValue\"")
+        if (index < entries.size - 1) {
+            json.append(",")
+        }
+        json.append("\n")
+    }
+    json.append("}")
+    
+    return json.toString()
 }

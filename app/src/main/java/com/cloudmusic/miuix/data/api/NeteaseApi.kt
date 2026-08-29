@@ -2,6 +2,8 @@ package com.cloudmusic.miuix.data.api
 
 import com.cloudmusic.miuix.data.model.AlbumInfo
 import com.cloudmusic.miuix.data.model.ArtistInfo
+import com.cloudmusic.miuix.data.model.Comment
+import com.cloudmusic.miuix.data.model.CommentResult
 import com.cloudmusic.miuix.data.model.LyricLine
 import com.cloudmusic.miuix.data.model.Playlist
 import com.cloudmusic.miuix.data.model.PlaylistDetail
@@ -37,6 +39,15 @@ object NeteaseApi {
     private var context: android.content.Context? = null
     private var userId: Long? = null
     private var onProfileChanged: (() -> Unit)? = null
+    
+    // 多账号管理
+    data class AccountData(
+        val userId: String,
+        val nickname: String,
+        val avatarUrl: String,
+        val cookies: String
+    )
+    private var accounts: MutableList<AccountData> = mutableListOf()
 
     fun setOnProfileChangedListener(listener: (() -> Unit)?) {
         onProfileChanged = listener
@@ -47,14 +58,155 @@ object NeteaseApi {
         // Load saved cookies
         val prefs = context!!.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
         cookies = prefs.getString("cookies", "") ?: ""
+        // Load saved accounts
+        loadAccounts()
         android.util.Log.d("NeteaseApi", "Init - Loaded cookies: $cookies")
+        android.util.Log.d("NeteaseApi", "Init - Loaded ${accounts.size} accounts")
         // 获取用户ID
         if (cookies.isNotEmpty()) {
             kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 userId = getUserId()
                 android.util.Log.d("NeteaseApi", "Init - User ID: $userId")
+                // 如果已登录但账号列表中没有当前账号，自动保存
+                if (userId != null && cookies.contains("MUSIC_U")) {
+                    val currentUserId = userId.toString()
+                    if (!accounts.any { it.userId == currentUserId }) {
+                        saveCurrentAccount()
+                    }
+                }
             }
         }
+    }
+    
+    private fun loadAccounts() {
+        context?.let { ctx ->
+            val prefs = ctx.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
+            val accountsJson = prefs.getString("accounts", "[]") ?: "[]"
+            try {
+                val jsonArray = com.google.gson.JsonParser.parseString(accountsJson).asJsonArray
+                accounts.clear()
+                val seenIds = mutableSetOf<String>()
+                for (i in 0 until jsonArray.size()) {
+                    val obj = jsonArray.get(i).asJsonObject
+                    val userId = obj.get("userId").asString
+                    // 去重：同一ID只保留一个
+                    if (seenIds.contains(userId)) {
+                        continue
+                    }
+                    seenIds.add(userId)
+                    accounts.add(
+                        AccountData(
+                            userId = userId,
+                            nickname = obj.get("nickname").asString,
+                            avatarUrl = obj.get("avatarUrl").asString,
+                            cookies = obj.get("cookies").asString
+                        )
+                    )
+                }
+                // 如果有重复，保存去重后的列表
+                if (accounts.size < jsonArray.size()) {
+                    saveAccounts()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("NeteaseApi", "Error loading accounts: ${e.message}")
+            }
+        }
+    }
+    
+    private fun saveAccounts() {
+        context?.let { ctx ->
+            val prefs = ctx.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
+            val jsonArray = com.google.gson.JsonArray()
+            for (account in accounts) {
+                val obj = com.google.gson.JsonObject()
+                obj.addProperty("userId", account.userId)
+                obj.addProperty("nickname", account.nickname)
+                obj.addProperty("avatarUrl", account.avatarUrl)
+                obj.addProperty("cookies", account.cookies)
+                jsonArray.add(obj)
+            }
+            prefs.edit().putString("accounts", jsonArray.toString()).apply()
+        }
+    }
+    
+    fun saveCurrentAccount() {
+        // 保存当前账号到列表
+        if (cookies.contains("MUSIC_U") && userId != null) {
+            val currentUserId = userId.toString()
+            // 检查是否已存在
+            val existingIndex = accounts.indexOfFirst { it.userId == currentUserId }
+            var nickname = getUserNicknameFromCache()
+            var avatarUrl = getUserAvatarFromCache()
+            
+            // 如果缓存中没有用户资料，尝试从API获取
+            if (nickname == null || nickname.isEmpty()) {
+                kotlinx.coroutines.runBlocking {
+                    try {
+                        val result = getUserProfile()
+                        result.onSuccess { profile ->
+                            nickname = profile.nickname
+                            avatarUrl = profile.avatarUrl
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("NeteaseApi", "Error getting user profile: ${e.message}")
+                    }
+                }
+            }
+            
+            if (nickname == null || nickname.isEmpty()) {
+                nickname = "用户$currentUserId"
+            }
+            if (avatarUrl == null) {
+                avatarUrl = ""
+            }
+            
+            val accountData = AccountData(currentUserId, nickname!!, avatarUrl!!, cookies)
+            if (existingIndex >= 0) {
+                accounts[existingIndex] = accountData
+            } else {
+                accounts.add(accountData)
+            }
+            saveAccounts()
+            android.util.Log.d("NeteaseApi", "Saved account: $currentUserId, nickname: $nickname, total: ${accounts.size}")
+        }
+    }
+    
+    fun getAccounts(): List<AccountData> = accounts.toList()
+    
+    fun getAccountCookie(userId: String): String? {
+        return accounts.find { it.userId == userId }?.cookies
+    }
+    
+    fun switchToAccount(userId: String): Boolean {
+        val account = accounts.find { it.userId == userId }
+        if (account != null) {
+            cookies = account.cookies
+            this.userId = userId.toLongOrNull()
+            // 保存当前cookies
+            context?.let { ctx ->
+                val prefs = ctx.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
+                prefs.edit().putString("cookies", cookies).apply()
+            }
+            android.util.Log.d("NeteaseApi", "Switched to account: $userId")
+            return true
+        }
+        return false
+    }
+    
+    private fun getUserNicknameFromCache(): String? {
+        context?.let { ctx ->
+            val prefs = ctx.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
+            return prefs.getString("profile_nickname", null)
+        }
+        return null
+    }
+    
+    private fun getUserAvatarFromCache(): String? {
+        context?.let { ctx ->
+            val prefs = ctx.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
+            return prefs.getString("profile_avatarUrl", null)
+        }
+        return null
     }
 
     fun setCookie(newCookies: String) {
@@ -78,6 +230,10 @@ object NeteaseApi {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     onProfileChanged?.invoke()
                 }
+            }
+            // 保存当前账号到账号列表
+            if (userId != null && cookies.contains("MUSIC_U")) {
+                saveCurrentAccount()
             }
         }
     }
@@ -465,13 +621,13 @@ object NeteaseApi {
         }
     }
 
-    suspend fun getSongUrl(songId: String): Result<Triple<String, Int, String>> = withContext(Dispatchers.IO) {
+    suspend fun getSongUrl(songId: String, bitrate: Int = 999000): Result<Triple<String, Int, String>> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()
             val id = songId.removePrefix("netrack_")
             val url = "https://interface3.music.163.com/eapi/song/enhance/player/url"
             val eapiUrl = "/api/song/enhance/player/url"
-            val reqData = """{"ids":"[$id]","br":999000}"""
+            val reqData = """{"ids":"[$id]","br":$bitrate}"""
             val encrypted = NeteaseCrypto.eapi(eapiUrl, reqData)
 
             val body = FormBody.Builder()
@@ -1156,7 +1312,7 @@ object NeteaseApi {
         val hasMore: Boolean
     )
 
-    suspend fun getCloudDiskSongs(offset: Int = 0, limit: Int = 100): Result<CloudDiskResult> = withContext(Dispatchers.IO) {
+    suspend fun getCloudDiskSongs(offset: Int = 0, limit: Int = 10): Result<CloudDiskResult> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()
             val url = "https://music.163.com/api/v1/cloud/get"
@@ -1190,8 +1346,9 @@ object NeteaseApi {
             val json = gson.fromJson(responseBody, JsonObject::class.java)
                 ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
 
-            val hasMore = if (json.has("hasMore")) json.get("hasMore").asBoolean else false
-            android.util.Log.d("NeteaseApi", "getCloudDiskSongs - hasMore: $hasMore")
+            val count = if (json.has("count")) json.get("count").asInt else 0
+            val hasMore = if (json.has("hasMore")) json.get("hasMore").asBoolean else offset + limit < count
+            android.util.Log.d("NeteaseApi", "getCloudDiskSongs - hasMore: $hasMore, count: $count, offset: $offset, limit: $limit")
 
             if (!json.has("data")) {
                 return@withContext Result.failure(Exception("No data field in response"))
@@ -1211,12 +1368,16 @@ object NeteaseApi {
                     
                     var artistName = "Unknown"
                     var artistNames = mutableListOf<String>()
+                    var artistId = 0L
                     if (song.has("ar") && song.get("ar").isJsonArray) {
                         val artists = song.getAsJsonArray("ar")
                         for (j in 0 until artists.size()) {
                             val artist = artists.get(j).asJsonObject
                             if (artist.has("name") && !artist.get("name").isJsonNull) {
                                 artistNames.add(artist.get("name").asString)
+                            }
+                            if (j == 0 && artist.has("id")) {
+                                artistId = artist.get("id").asLong
                             }
                         }
                         artistName = formatArtistNames(artistNames)
@@ -1225,13 +1386,30 @@ object NeteaseApi {
                     }
                     
                     var albumName = ""
+                    var albumId = 0L
+                    var picUrl = ""
                     if (song.has("al") && song.get("al").isJsonObject) {
                         val album = song.getAsJsonObject("al")
                         if (album.has("name") && !album.get("name").isJsonNull) {
                             albumName = album.get("name").asString
                         }
-                    } else if (song.has("album") && !song.get("album").isJsonNull) {
-                        albumName = song.get("album").asString
+                        if (album.has("id")) {
+                            albumId = album.get("id").asLong
+                        }
+                        if (album.has("picUrl") && !album.get("picUrl").isJsonNull) {
+                            picUrl = album.get("picUrl").asString
+                        }
+                    } else if (song.has("album") && song.get("album").isJsonObject) {
+                        val album = song.getAsJsonObject("album")
+                        if (album.has("name") && !album.get("name").isJsonNull) {
+                            albumName = album.get("name").asString
+                        }
+                        if (album.has("id")) {
+                            albumId = album.get("id").asLong
+                        }
+                        if (album.has("picUrl") && !album.get("picUrl").isJsonNull) {
+                            picUrl = album.get("picUrl").asString
+                        }
                     }
                     
                     val duration = if (song.has("dt")) song.get("dt").asLong else 0L
@@ -1241,14 +1419,17 @@ object NeteaseApi {
                             id = "netrack_$songId",
                             title = songName,
                             artist = artistName,
-                            artistId = "neartist_0",
+                            artistId = "neartist_$artistId",
                             album = albumName,
-                            albumId = "nealbum_0",
+                            albumId = "nealbum_$albumId",
                             sourceUrl = "https://music.163.com/#/song?id=$songId",
-                            imgUrl = "",
+                            imgUrl = picUrl,
                             duration = duration,
                             isVip = false,
-                            artistNames = artistNames
+                            artistNames = artistNames,
+                            artistIds = artistNames.mapIndexed { index, _ -> 
+                                if (index == 0) "neartist_$artistId" else "neartist_0"
+                            }
                         )
                     )
                 } catch (e: Exception) {
@@ -1532,7 +1713,7 @@ object NeteaseApi {
                 
                 if (isArtist && splitLyrics != null) {
                     // 需要拆行：冒号前是歌手行，冒号后是正常歌词
-                    val artistText = splitLyrics.first
+                    val artistText = formatArtistText(splitLyrics.first)
                     val lyricText = splitLyrics.second
                     // 歌手行
                     lines.add(LyricLine(text = artistText, translation = "", startAt = time, isArtistLine = true))
@@ -1540,7 +1721,8 @@ object NeteaseApi {
                     lines.add(LyricLine(text = lyricText, translation = translation, startAt = time, isArtistLine = false))
                 } else if (isArtist) {
                     // 整行是歌手行
-                    lines.add(LyricLine(text = text, translation = translation, startAt = time, isArtistLine = true))
+                    val artistText = formatArtistText(text)
+                    lines.add(LyricLine(text = artistText, translation = translation, startAt = time, isArtistLine = true))
                 } else {
                     // 正常歌词
                     lines.add(LyricLine(text = text, translation = translation, startAt = time, isArtistLine = false))
@@ -1549,6 +1731,42 @@ object NeteaseApi {
         }
 
         return SongLyrics(lines = lines.sortedBy { it.startAt })
+    }
+
+    /**
+     * 格式化歌手行文本
+     * 1. 去掉冒号（中英文）
+     */
+    private fun formatArtistText(text: String): String {
+        var result = text.trim()
+        
+        // 去掉末尾的冒号（中英文）
+        if (result.endsWith("：")) {
+            result = result.substring(0, result.length - 1).trim()
+        } else if (result.endsWith(":")) {
+            result = result.substring(0, result.length - 1).trim()
+        }
+        
+        return result
+    }
+
+    /**
+     * 为歌手行文本添加括号（用于传递给词幕）
+     */
+    private fun addBracketsToArtistText(text: String): String {
+        val trimmed = text.trim()
+        
+        // 检查是否已经有括号
+        val hasBrackets = (trimmed.startsWith("（") && trimmed.endsWith("）")) ||
+                         (trimmed.startsWith("(") && trimmed.endsWith(")")) ||
+                         (trimmed.startsWith("【") && trimmed.endsWith("】"))
+        
+        // 如果没有括号，加括号
+        return if (!hasBrackets) {
+            "（$trimmed）"
+        } else {
+            trimmed
+        }
     }
 
     /**
@@ -1610,7 +1828,7 @@ object NeteaseApi {
             val afterColon = contentWithoutBrackets.substring(colonIndex + 1).trim()
             
             if (afterColon.isNotEmpty()) {
-                // 冒号后有文字：检查冒号前是否包含关键词
+                // 3.1.1 冒号后有文字：检查冒号前是否包含关键词
                 for (keyword in keywords) {
                     if (beforeColon.contains(keyword)) {
                         // 返回需要拆行的标识
@@ -1618,45 +1836,60 @@ object NeteaseApi {
                     }
                 }
             } else {
-                // 冒号后没有文字：完全匹配关键词
+                // 3.1.2 冒号后没有文字：除冒号以外的文字和关键词进行比对，剩余逻辑参考3.2
                 val beforeColonTrimmed = beforeColon.trim()
+                
+                // 3.2.1 关键词和歌词完全一样，算作歌手行
                 for (keyword in keywords) {
                     if (beforeColonTrimmed == keyword) {
                         return Pair(true, null)
                     }
                 }
-                // 多位歌手情况：识别空格、顿号、斜杠、反斜杠
+                
+                // 3.2.2 多位歌手识别
                 if (beforeColonTrimmed.contains(" ") || beforeColonTrimmed.contains("、") ||
                     beforeColonTrimmed.contains("/") || beforeColonTrimmed.contains("\\")) {
-                    // 拆分多位歌手
                     val artists = beforeColonTrimmed.split(" ", "、", "/", "\\")
                         .map { it.trim() }
                         .filter { it.isNotEmpty() }
-                    // 依次和关键词匹配
-                    for (artist in artists) {
-                        for (keyword in keywords) {
-                            if (artist == keyword) {
-                                return Pair(true, null)
+                    if (artists.isNotEmpty()) {
+                        var allMatch = true
+                        for (artist in artists) {
+                            var artistMatch = false
+                            for (keyword in keywords) {
+                                // 3种情况：歌手和关键字相同/歌手包含关键字/关键字包含歌手
+                                if (artist == keyword || artist.contains(keyword) || keyword.contains(artist)) {
+                                    artistMatch = true
+                                    break
+                                }
                             }
+                            if (!artistMatch) {
+                                allMatch = false
+                                break
+                            }
+                        }
+                        if (allMatch) {
+                            return Pair(true, null)
                         }
                     }
                 }
             }
         } else {
-            // 不包含冒号：完全匹配关键词
+            // 3.2 不包含冒号：直接用整行歌词和关键词做对比
+            
+            // 3.2.1 关键词和歌词完全一样，算作歌手行
             for (keyword in keywords) {
                 if (contentWithoutBrackets == keyword) {
                     return Pair(true, null)
                 }
             }
-            // 多位歌手情况：识别空格、顿号、斜杠、反斜杠
+            
+            // 3.2.2 多位歌手识别
             if (contentWithoutBrackets.contains(" ") || contentWithoutBrackets.contains("、") ||
                 contentWithoutBrackets.contains("/") || contentWithoutBrackets.contains("\\")) {
-                // 拆分多位歌手
                 val artists = contentWithoutBrackets.split(" ", "、", "/", "\\")
                     .map { it.trim() }
                     .filter { it.isNotEmpty() }
-                // 检查所有歌手是否都符合至少一种情况
                 if (artists.isNotEmpty()) {
                     var allMatch = true
                     for (artist in artists) {
@@ -1736,7 +1969,7 @@ object NeteaseApi {
                 
                 if (isArtist && splitLyrics != null) {
                     // 需要拆行：冒号前是歌手行，冒号后是正常歌词
-                    val artistText = splitLyrics.first
+                    val artistText = formatArtistText(splitLyrics.first)
                     val lyricText = splitLyrics.second
                     // 歌手行
                     lines.add(LyricLine(
@@ -1758,8 +1991,9 @@ object NeteaseApi {
                     ))
                 } else if (isArtist) {
                     // 整行是歌手行
+                    val artistText = formatArtistText(text)
                     lines.add(LyricLine(
-                        text = text,
+                        text = artistText,
                         translation = translation,
                         startAt = start,
                         endAt = end,
@@ -1803,7 +2037,9 @@ object NeteaseApi {
             "网易云音乐ACG企划",
             "纯音乐，请欣赏",
             "未经著作权人许可",
+            "不得翻唱",
             "本作品经过词曲著作权利方授权",
+            "ISRC ",
             "Co.",
             "Ltd.",
             "发布会现场",
@@ -2193,5 +2429,183 @@ object NeteaseApi {
             }
         }
         return Pair("", 0L)
+    }
+
+    suspend fun getSongComments(
+        songId: String,
+        offset: Int = 0,
+        limit: Int = 20,
+        sortType: Int = 2 // 1: 推荐, 2: 热度, 3: 最新
+    ): Result<CommentResult> = withContext(Dispatchers.IO) {
+        try {
+            ensureCookie()
+            val id = songId.removePrefix("netrack_")
+            val url = "https://music.163.com/api/v1/resource/comments/R_SO_4_$id"
+            val reqData = """{"rid":"R_SO_4_$id","offset":$offset,"total":true,"limit":$limit,"sortType":$sortType}"""
+            val encrypted = NeteaseCrypto.weapi(reqData)
+
+            val formBody = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(formBody)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Cookie", cookies)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            Log.d("NeteaseApi", "getSongComments - url: $url, sortType: $sortType, offset: $offset, limit: $limit")
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            if (responseBody.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            val total = if (json.has("total")) json.get("total").asInt else 0
+            // hasMore 基于已加载数量和总数比较
+            val currentCount = offset + limit
+            val hasMore = currentCount < total
+
+            Log.d("NeteaseApi", "getSongComments - total: $total, hasMore: $hasMore, offset: $offset")
+
+            val comments = mutableListOf<Comment>()
+            // 解析热门评论
+            if (sortType == 2 && json.has("hotComments") && json.get("hotComments").isJsonArray) {
+                val hotCommentsArray = json.getAsJsonArray("hotComments")
+                for (i in 0 until hotCommentsArray.size()) {
+                    try {
+                        val commentJson = hotCommentsArray.get(i).asJsonObject
+                        val comment = parseComment(commentJson)
+                        comments.add(comment)
+                    } catch (e: Exception) {
+                        Log.e("NeteaseApi", "parseHotComment error: ${e.message}")
+                    }
+                }
+            }
+            // 解析普通评论
+            if (json.has("comments") && json.get("comments").isJsonArray) {
+                val commentsArray = json.getAsJsonArray("comments")
+                for (i in 0 until commentsArray.size()) {
+                    try {
+                        val commentJson = commentsArray.get(i).asJsonObject
+                        val comment = parseComment(commentJson)
+                        comments.add(comment)
+                    } catch (e: Exception) {
+                        Log.e("NeteaseApi", "parseComment error: ${e.message}")
+                    }
+                }
+            }
+
+            Log.d("NeteaseApi", "getSongComments - loaded ${comments.size} comments")
+
+            Result.success(CommentResult(comments = comments, total = total, hasMore = hasMore))
+        } catch (e: Exception) {
+            Log.e("NeteaseApi", "getSongComments error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getCommentReplies(
+        commentId: Long,
+        songId: String,
+        offset: Int = 0,
+        limit: Int = 20
+    ): Result<List<Comment>> = withContext(Dispatchers.IO) {
+        try {
+            ensureCookie()
+            val id = songId.removePrefix("netrack_")
+            val url = "https://music.163.com/api/v1/resource/comments/R_SO_4_$id/reply"
+            val reqData = """{"commentId":$commentId,"rid":"R_SO_4_$id","offset":$offset,"limit":$limit}"""
+            val encrypted = NeteaseCrypto.weapi(reqData)
+
+            val formBody = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(formBody)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Cookie", cookies)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            if (responseBody.isNullOrEmpty()) {
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            val replies = mutableListOf<Comment>()
+            if (json.has("comments") && json.get("comments").isJsonArray) {
+                val commentsArray = json.getAsJsonArray("comments")
+                for (i in 0 until commentsArray.size()) {
+                    try {
+                        val commentJson = commentsArray.get(i).asJsonObject
+                        val comment = parseComment(commentJson)
+                        replies.add(comment)
+                    } catch (e: Exception) {
+                        Log.e("NeteaseApi", "parseReply error: ${e.message}")
+                    }
+                }
+            }
+
+            Result.success(replies)
+        } catch (e: Exception) {
+            Log.e("NeteaseApi", "getCommentReplies error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    private fun parseComment(json: JsonObject): Comment {
+        val commentId = if (json.has("commentId")) json.get("commentId").asLong else 0L
+        val content = if (json.has("content") && !json.get("content").isJsonNull) json.get("content").asString else ""
+        val time = if (json.has("time")) json.get("time").asLong else 0L
+        val likedCount = if (json.has("likedCount")) json.get("likedCount").asInt else 0
+
+        var userId = 0L
+        var nickname = ""
+        var avatarUrl = ""
+        if (json.has("user") && json.get("user").isJsonObject) {
+            val user = json.getAsJsonObject("user")
+            userId = if (user.has("userId")) user.get("userId").asLong else 0L
+            nickname = if (user.has("nickname") && !user.get("nickname").isJsonNull) user.get("nickname").asString else ""
+            avatarUrl = if (user.has("avatarUrl") && !user.get("avatarUrl").isJsonNull) user.get("avatarUrl").asString else ""
+        }
+
+        val replies = mutableListOf<Comment>()
+        if (json.has("beReplied") && json.get("beReplied").isJsonArray) {
+            // 这里是被回复的评论，不是回复列表
+        }
+
+        return Comment(
+            commentId = commentId,
+            userId = userId,
+            nickname = nickname,
+            avatarUrl = avatarUrl,
+            content = content,
+            time = time,
+            likedCount = likedCount,
+            replies = replies
+        )
     }
 }

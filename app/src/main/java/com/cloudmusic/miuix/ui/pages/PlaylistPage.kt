@@ -53,6 +53,7 @@ fun PlaylistPage(
     onPlaylistClick: (String, String, String) -> Unit,
     onRefresh: () -> Unit,
     isLoggedIn: Boolean,
+    onLoginClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -61,15 +62,17 @@ fun PlaylistPage(
 
     // 自动加载歌单
     LaunchedEffect(Unit) {
-        if (recommendState.userPlaylists.isEmpty()) {
+        if (isLoggedIn && recommendState.userPlaylists.isEmpty()) {
             onRefresh()
         }
     }
 
     // 下拉刷新回调
     LaunchedEffect(isRefreshing) {
-        if (isRefreshing) {
+        if (isRefreshing && isLoggedIn) {
             onRefresh()
+            isRefreshing = false
+        } else {
             isRefreshing = false
         }
     }
@@ -95,70 +98,84 @@ fun PlaylistPage(
             )
         }
     ) { paddingValues ->
-        PullToRefresh(
-            isRefreshing = isRefreshing,
-            onRefresh = { isRefreshing = true },
-            pullToRefreshState = pullToRefreshState,
-            topAppBarScrollBehavior = scrollBehavior,
-            refreshTexts = listOf(
-                "继续下拉以刷新",
-                "松手后刷新",
-                "正在刷新...",
-                "刷新成功"
-            ),
-            modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
-        ) {
-            LazyColumn(
+        if (!isLoggedIn) {
+            // 未登录状态：显示提示文字
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .overScrollVertical()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(top = paddingValues.calculateTopPadding()),
+                contentAlignment = Alignment.Center
             ) {
-                // 云盘歌单（第一位，仅登录时显示）
-                if (isLoggedIn) {
+                Text(
+                    text = "登录后即可查看个人歌单",
+                    fontSize = 16.sp,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+            }
+        } else {
+            PullToRefresh(
+                isRefreshing = isRefreshing,
+                onRefresh = { isRefreshing = true },
+                pullToRefreshState = pullToRefreshState,
+                topAppBarScrollBehavior = scrollBehavior,
+                refreshTexts = listOf(
+                    "继续下拉以刷新",
+                    "松手后刷新",
+                    "正在刷新...",
+                    "刷新成功"
+                ),
+                modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .overScrollVertical()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // 云盘歌单（第一位）
                     item {
                         UserPlaylistCard(
                             playlist = cloudDiskPlaylist,
                             onClick = { onPlaylistClick(cloudDiskPlaylist.id, cloudDiskPlaylist.coverImgUrl, cloudDiskPlaylist.title) }
                         )
                     }
-                }
 
-                // 我喜欢的音乐歌单
-                if (likedPlaylists.isEmpty()) {
-                    item {
-                        Text(
-                            text = "暂无喜欢的音乐",
-                            modifier = Modifier.padding(vertical = 16.dp),
-                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
+                    // 我喜欢的音乐歌单
+                    if (likedPlaylists.isEmpty()) {
+                        item {
+                            Text(
+                                text = "暂无喜欢的音乐",
+                                modifier = Modifier.padding(vertical = 16.dp),
+                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
+                    } else {
+                        items(likedPlaylists) { playlist ->
+                            UserPlaylistCard(
+                                playlist = playlist,
+                                onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }
+                            )
+                        }
                     }
-                } else {
-                    items(likedPlaylists) { playlist ->
-                        UserPlaylistCard(
-                            playlist = playlist,
-                            onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }
-                        )
-                    }
-                }
 
-                // 其他歌单
-                if (otherPlaylists.isEmpty()) {
-                    item {
-                        Text(
-                            text = "暂无歌单",
-                            modifier = Modifier.padding(vertical = 16.dp),
-                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
-                    }
-                } else {
-                    items(otherPlaylists) { playlist ->
-                        UserPlaylistCard(
-                            playlist = playlist,
-                            onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }
-                        )
+                    // 其他歌单
+                    if (otherPlaylists.isEmpty()) {
+                        item {
+                            Text(
+                                text = "暂无歌单",
+                                modifier = Modifier.padding(vertical = 16.dp),
+                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
+                    } else {
+                        items(otherPlaylists) { playlist ->
+                            UserPlaylistCard(
+                                playlist = playlist,
+                                onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }
+                            )
+                        }
                     }
                 }
             }

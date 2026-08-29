@@ -1,7 +1,10 @@
 package com.cloudmusic.miuix.ui.pages
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,16 +17,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.cloudmusic.miuix.R
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -44,6 +51,17 @@ fun AboutPage(
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
+    val context = LocalContext.current
+    
+    // 获取APP版本号
+    val versionName = remember {
+        try {
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            packageInfo.versionName ?: "unknown"
+        } catch (e: Exception) {
+            "unknown"
+        }
+    }
 
     BackHandler {
         onBackClick()
@@ -82,15 +100,31 @@ fun AboutPage(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    AsyncImage(
-                        model = "https://p1.music.126.net/z6i7sKp3e5q3e5q3e5q3eQ==/109951166968412345.jpg",
-                        contentDescription = "App Icon",
+                    Box(
                         modifier = Modifier
                             .size(80.dp)
-                            .clip(RoundedCornerShape(16.dp)),
-                        contentScale = ContentScale.Crop,
-                        error = painterResource(android.R.drawable.ic_menu_gallery)
-                    )
+                            .clip(RoundedCornerShape(16.dp))
+                    ) {
+                        // 背景层
+                        Image(
+                            painter = painterResource(R.drawable.ic_launcher_background),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        // 前景层（放大1.5倍，裁掉多余部分）
+                        Image(
+                            painter = painterResource(R.drawable.ic_launcher_foreground),
+                            contentDescription = "App Icon",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer(
+                                    scaleX = 1.5f,
+                                    scaleY = 1.5f
+                                ),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
                 }
             }
             item {
@@ -110,7 +144,7 @@ fun AboutPage(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "v0.5.1-dev",
+                            text = "v$versionName",
                             fontSize = 14.sp,
                             color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
@@ -118,7 +152,7 @@ fun AboutPage(
                 }
             }
             item { Spacer(modifier = Modifier.height(32.dp)) }
-            item { SmallTitle("其他") }
+            item { SmallTitle("开源项目引用") }
             item {
                 Card(
                     modifier = Modifier
@@ -126,9 +160,44 @@ fun AboutPage(
                         .padding(bottom = 12.dp)
                 ) {
                     ArrowPreference(
-                        title = "开放源代码许可",
-                        summary = "查看开源组件许可信息",
-                        onClick = onOpenSourceClick
+                        title = "Miuix",
+                        summary = "使用此项目作为软件UI框架",
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/compose-miuix-ui/miuix"))
+                            context.startActivity(intent)
+                        }
+                    )
+                    ArrowPreference(
+                        title = "BuJuan",
+                        summary = "通过此项目实现网易云音乐扫码登录、每日推荐、歌曲播放等功能",
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/2697a/bujuan"))
+                            context.startActivity(intent)
+                        }
+                    )
+                    ArrowPreference(
+                        title = "音理音理!",
+                        summary = "通过此项目适配词幕接口",
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/cwuom/NeriPlayer"))
+                            context.startActivity(intent)
+                        }
+                    )
+                    ArrowPreference(
+                        title = "词幕",
+                        summary = "提供系统状态栏歌词统一接口",
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/tomakino/lyricon"))
+                            context.startActivity(intent)
+                        }
+                    )
+                    ArrowPreference(
+                        title = "LyricInfo",
+                        summary = "提供系统媒体播放歌词识别",
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/limczhh/LyricInfo"))
+                            context.startActivity(intent)
+                        }
                     )
                 }
             }

@@ -76,6 +76,15 @@ fun LyricsView(
     // 提前 animationDuration 开始切换，使动画完成时正好是歌词时间戳开始
     val currentIndex = lyrics.lines.indexOfLast { it.startAt <= currentPosition + animationDuration }
 
+    // 计算应该滚动到的索引（跳过歌手行）
+    // 如果当前行是歌手行，不执行滚动（返回-1）
+    // 如果当前行不是歌手行，执行滚动
+    val scrollToIndex = if (currentIndex >= 0 && !lyrics.lines[currentIndex].isArtistLine) {
+        currentIndex
+    } else {
+        -1
+    }
+
     // 歌词区域高度和当前行高度（用于计算滚动偏移）
     var lyricsAreaHeight by remember { mutableStateOf(0) }
     var currentLineHeight by remember { mutableStateOf(0) }
@@ -88,12 +97,12 @@ fun LyricsView(
     }
 
     // 自动滚动到当前歌词（只在非用户手动滚动时）
-    LaunchedEffect(currentIndex) {
-        if (currentIndex >= 0 && !userScrolling) {
+    LaunchedEffect(scrollToIndex) {
+        if (scrollToIndex >= 0 && !userScrolling) {
             // 滚动到当前行，使用偏移让它居中
             // 由于顶部有空白区域，需要计算正确的偏移量
             // index + 1 是因为顶部有一个空白item
-            val targetIndex = currentIndex + 1
+            val targetIndex = scrollToIndex + 1
             // 使用animateScrollToItem并设置负的scrollOffset让当前行向下偏移
             listState.animateScrollToItem(
                 index = targetIndex,
@@ -122,7 +131,8 @@ fun LyricsView(
         }
         
         itemsIndexed(lyrics.lines) { index, line ->
-            val isActive = index == currentIndex
+            // 如果当前行是歌手行，不高亮显示
+            val isActive = index == currentIndex && !line.isArtistLine
             
             // 计算相对于当前行的距离，用于设置延迟时间
             val distanceFromCurrent = if (index > currentIndex) index - currentIndex else 0
@@ -284,12 +294,18 @@ private fun LyricLineItem(
 }
 
 /**
- * 格式化歌手行文字，统一括号为中文括号
+ * 格式化歌手行文字，统一括号为中文括号，去掉冒号
  */
 private fun formatArtistLineText(text: String): String {
     var result = text.trim()
     // 统一括号为中文括号
     result = result.replace("(", "（").replace(")", "）")
     result = result.replace("[", "【").replace("]", "】")
+    // 去掉末尾的冒号（中英文）
+    if (result.endsWith("：")) {
+        result = result.substring(0, result.length - 1).trim()
+    } else if (result.endsWith(":")) {
+        result = result.substring(0, result.length - 1).trim()
+    }
     return result
 }

@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,6 +42,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
@@ -52,12 +54,31 @@ fun SettingsPage(
     onThemeSettingsClick: () -> Unit,
     onPlayPageSettingsClick: () -> Unit = {},
     onAboutClick: () -> Unit,
+    onLyriconAdapterClick: () -> Unit = {},
+    onManageAccountsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
+    val context = LocalContext.current
     var userProfile by remember { mutableStateOf<UserProfile?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var isMultiAccountEnabled by remember { 
+        mutableStateOf(
+            context.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
+                .getBoolean("multi_account_enabled", false)
+        ) 
+    }
     val pullToRefreshState = rememberPullToRefreshState()
+    
+    // 获取APP版本号
+    val versionName = remember {
+        try {
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            packageInfo.versionName ?: "unknown"
+        } catch (e: Exception) {
+            "unknown"
+        }
+    }
 
     // 加载用户信息
     LaunchedEffect(isLoggedIn) {
@@ -125,7 +146,7 @@ fun SettingsPage(
                     .fillMaxSize()
                     .overScrollVertical()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 16.dp),
+                contentPadding = PaddingValues(bottom = 80.dp),
                 overscrollEffect = null
             ) {
                 item { Spacer(modifier = Modifier.size(12.dp)) }
@@ -137,25 +158,54 @@ fun SettingsPage(
                             .padding(bottom = 12.dp),
                         onClick = if (isLoggedIn) onProfileClick else onLoginClick
                     ) {
-                        BasicComponent(
-                            title = if (isLoggedIn) userProfile?.nickname ?: "已登录" else "点击登录",
-                            summary = if (isLoggedIn) "查看个人资料" else "登录后享受完整音乐体验",
-                            startAction = {
-                                if (isLoggedIn && userProfile?.avatarUrl?.isNotEmpty() == true) {
-                                    AsyncImage(
-                                        model = userProfile?.avatarUrl,
-                                        contentDescription = "头像",
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .clip(RoundedCornerShape(24.dp)),
-                                        contentScale = ContentScale.Crop,
-                                        error = painterResource(android.R.drawable.ic_menu_gallery)
-                                    )
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                }
-                            },
-                            onClick = if (isLoggedIn) onProfileClick else onLoginClick
-                        )
+                        // 未登录状态 或 已登录但未开启多账号
+                        if (!isLoggedIn || !isMultiAccountEnabled) {
+                            BasicComponent(
+                                title = if (isLoggedIn) userProfile?.nickname ?: "已登录" else "点击登录",
+                                summary = if (isLoggedIn) "查看个人资料" else "登录后享受完整音乐体验",
+                                startAction = {
+                                    if (isLoggedIn && userProfile?.avatarUrl?.isNotEmpty() == true) {
+                                        AsyncImage(
+                                            model = userProfile?.avatarUrl,
+                                            contentDescription = "头像",
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(RoundedCornerShape(24.dp)),
+                                            contentScale = ContentScale.Crop,
+                                            error = painterResource(android.R.drawable.ic_menu_gallery)
+                                        )
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                    }
+                                },
+                                onClick = if (isLoggedIn) onProfileClick else onLoginClick
+                            )
+                        }
+                        
+                        // 已登录状态下显示多账号开关
+                        if (isLoggedIn) {
+                            SwitchPreference(
+                                checked = isMultiAccountEnabled,
+                                onCheckedChange = { 
+                                    isMultiAccountEnabled = it
+                                    // 保存状态
+                                    context.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
+                                        .edit()
+                                        .putBoolean("multi_account_enabled", it)
+                                        .apply()
+                                },
+                                title = "多账号切换",
+                                summary = if (isMultiAccountEnabled) "已开启" else "未开启"
+                            )
+                        }
+                        
+                        // 多账号开启后显示管理选项
+                        if (isLoggedIn && isMultiAccountEnabled) {
+                            ArrowPreference(
+                                title = "管理多账号",
+                                summary = "添加、切换和管理账号",
+                                onClick = onManageAccountsClick
+                            )
+                        }
                     }
                 }
                 item { SmallTitle("个性化") }
@@ -186,8 +236,13 @@ fun SettingsPage(
                     ) {
                         ArrowPreference(
                             title = "关于",
-                            summary = "CloudMusic Miuix v0.5.1-dev",
+                            summary = "CloudMusic Miuix v$versionName",
                             onClick = onAboutClick
+                        )
+                        ArrowPreference(
+                            title = "歌词接口适配",
+                            summary = "词幕、LyricInfo",
+                            onClick = onLyriconAdapterClick
                         )
                     }
                 }

@@ -197,15 +197,22 @@ class LyriconProviderManager(private val context: Context) {
                 songDuration
             }
             
+            // 对歌手行添加括号
+            val lineText = if (line.isArtistLine) {
+                addBracketsToArtistText(line.text)
+            } else {
+                line.text
+            }
+            
             if (index < 5) {
-                Log.d(TAG, "Line $index: text=${line.text}, start=${line.startAt}, end=$endAt")
+                Log.d(TAG, "Line $index: text=$lineText, start=${line.startAt}, end=$endAt, isArtist=${line.isArtistLine}")
             }
             
             result.add(
                 RichLyricLine(
                     begin = line.startAt,
                     end = endAt,
-                    text = line.text,
+                    text = lineText,
                     words = words,
                     translation = line.translation.takeIf { it.isNotEmpty() }
                 )
@@ -224,6 +231,25 @@ class LyriconProviderManager(private val context: Context) {
             Log.d(TAG, "Lyricon provider released")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to release LyriconProvider", e)
+        }
+    }
+    
+    /**
+     * 为歌手行文本添加括号（用于传递给词幕）
+     */
+    private fun addBracketsToArtistText(text: String): String {
+        val trimmed = text.trim()
+        
+        // 检查是否已经有括号
+        val hasBrackets = (trimmed.startsWith("（") && trimmed.endsWith("）")) ||
+                         (trimmed.startsWith("(") && trimmed.endsWith(")")) ||
+                         (trimmed.startsWith("【") && trimmed.endsWith("】"))
+        
+        // 如果没有括号，加括号
+        return if (!hasBrackets) {
+            "（$trimmed）"
+        } else {
+            trimmed
         }
     }
 }
