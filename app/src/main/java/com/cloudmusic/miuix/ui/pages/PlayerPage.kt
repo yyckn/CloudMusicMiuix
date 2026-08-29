@@ -119,6 +119,8 @@ fun PlayerPage(
     lyricState: LyricState,
     currentPlaylist: List<Track> = emptyList(),
     isCurrentTrackLiked: Boolean = false,
+    isFMMode: Boolean = false,
+    isIntelligenceMode: Boolean = false,
     onBackClick: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPrevious: () -> Unit,
@@ -126,6 +128,8 @@ fun PlayerPage(
     onSeekTo: (Long) -> Unit,
     onDownload: () -> Unit = {},
     onDownloadCover: () -> Unit = {},
+    onDownloadAndShare: () -> Unit = {},
+    onDownloadCoverAndShare: () -> Unit = {},
     onShare: () -> Unit = {},
     onPlayTrack: (Track) -> Unit = {},
     onLoadLyrics: () -> Unit = {},
@@ -548,33 +552,35 @@ fun PlayerPage(
                                             modifier = Modifier.size(24.dp)
                                         )
                                     }
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    IconButton(onClick = onSwitchPlayMode, modifier = Modifier.size(48.dp)) {
-                                        Icon(
-                                            imageVector = when (playMode) {
-                                                0 -> MiuixIcons.Sort
-                                                1 -> MiuixIcons.Merge
-                                                2 -> MiuixIcons.Replace
-                                                else -> MiuixIcons.Sort
-                                            },
-                                            contentDescription = when (playMode) {
-                                                0 -> "顺序播放"
-                                                1 -> "乱序播放"
-                                                2 -> "单曲循环"
-                                                else -> "顺序播放"
-                                            },
-                                            tint = Color.White.copy(alpha = 0.6f),
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    IconButton(onClick = { showPlaylistSheet = true }, modifier = Modifier.size(48.dp)) {
-                                        Icon(
-                                            imageVector = MiuixIcons.ListView,
-                                            contentDescription = "播放列表",
-                                            tint = Color.White.copy(alpha = 0.6f),
-                                            modifier = Modifier.size(24.dp)
-                                        )
+                                    if (!isFMMode && !isIntelligenceMode) {
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        IconButton(onClick = onSwitchPlayMode, modifier = Modifier.size(48.dp)) {
+                                            Icon(
+                                                imageVector = when (playMode) {
+                                                    0 -> MiuixIcons.Sort
+                                                    1 -> MiuixIcons.Merge
+                                                    2 -> MiuixIcons.Replace
+                                                    else -> MiuixIcons.Sort
+                                                },
+                                                contentDescription = when (playMode) {
+                                                    0 -> "顺序播放"
+                                                    1 -> "乱序播放"
+                                                    2 -> "单曲循环"
+                                                    else -> "顺序播放"
+                                                },
+                                                tint = Color.White.copy(alpha = 0.6f),
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        IconButton(onClick = { showPlaylistSheet = true }, modifier = Modifier.size(48.dp)) {
+                                            Icon(
+                                                imageVector = MiuixIcons.ListView,
+                                                contentDescription = "播放列表",
+                                                tint = Color.White.copy(alpha = 0.6f),
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
                                     }
                                     Spacer(modifier = Modifier.width(16.dp))
                                     IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) {
@@ -614,6 +620,7 @@ fun PlayerPage(
                                     lyrics = lyricState.lyrics,
                                     currentPosition = playerState.currentPosition,
                                     onSeekTo = onSeekTo,
+                                    isPlaying = playerState.isPlaying,
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
@@ -752,6 +759,7 @@ fun PlayerPage(
                                         lyrics = lyricState.lyrics,
                                         currentPosition = playerState.currentPosition,
                                         onSeekTo = onSeekTo,
+                                        isPlaying = playerState.isPlaying,
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
@@ -875,28 +883,30 @@ fun PlayerPage(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            // 播放模式按钮
-                            IconButton(
-                                onClick = onSwitchPlayMode,
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = when (playMode) {
-                                        0 -> MiuixIcons.Sort
-                                        1 -> MiuixIcons.Merge
-                                        2 -> MiuixIcons.Replace
-                                        else -> MiuixIcons.Sort
-                                    },
-                                    contentDescription = when (playMode) {
-                                        0 -> "顺序播放"
-                                        1 -> "乱序播放"
-                                        2 -> "单曲循环"
-                                        else -> "顺序播放"
-                                    },
-                                    tint = Color.White.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(24.dp)
-                                )
+                            if (!isFMMode && !isIntelligenceMode) {
+                                Spacer(modifier = Modifier.width(16.dp))
+                                // 播放模式按钮
+                                IconButton(
+                                    onClick = onSwitchPlayMode,
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = when (playMode) {
+                                            0 -> MiuixIcons.Sort
+                                            1 -> MiuixIcons.Merge
+                                            2 -> MiuixIcons.Replace
+                                            else -> MiuixIcons.Sort
+                                        },
+                                        contentDescription = when (playMode) {
+                                            0 -> "顺序播放"
+                                            1 -> "乱序播放"
+                                            2 -> "单曲循环"
+                                            else -> "顺序播放"
+                                        },
+                                        tint = Color.White.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             // 歌词按钮
@@ -923,14 +933,16 @@ fun PlayerPage(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            IconButton(onClick = { showPlaylistSheet = true }, modifier = Modifier.size(48.dp)) {
-                                Icon(
-                                    imageVector = MiuixIcons.ListView,
-                                    contentDescription = "播放列表",
-                                    tint = Color.White.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(24.dp)
-                                )
+                            if (!isFMMode && !isIntelligenceMode) {
+                                Spacer(modifier = Modifier.width(16.dp))
+                                IconButton(onClick = { showPlaylistSheet = true }, modifier = Modifier.size(48.dp)) {
+                                    Icon(
+                                        imageVector = MiuixIcons.ListView,
+                                        contentDescription = "播放列表",
+                                        tint = Color.White.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) {
@@ -1146,48 +1158,6 @@ fun PlayerPage(
                         }
                     }
 
-                    // 下载区域
-                    item { SmallTitle("下载") }
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .padding(horizontal = 12.dp)
-                                .padding(bottom = 12.dp),
-                            colors = CardDefaults.defaultColors(
-                                color = MiuixTheme.colorScheme.secondaryContainer
-                            )
-                        ) {
-                            ArrowPreference(
-                                title = "下载此歌曲",
-                                startAction = {
-                                    Icon(
-                                        imageVector = MiuixIcons.Download,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                },
-                                onClick = {
-                                    showMoreSheet = false
-                                    onDownload()
-                                }
-                            )
-                            ArrowPreference(
-                                title = "下载封面图片",
-                                startAction = {
-                                    Icon(
-                                        imageVector = MiuixIcons.Download,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                },
-                                onClick = {
-                                    showMoreSheet = false
-                                    onDownloadCover()
-                                }
-                            )
-                        }
-                    }
-
                     // 歌手与专辑区域
                     item { SmallTitle("歌手与专辑") }
                     item {
@@ -1254,6 +1224,76 @@ fun PlayerPage(
                                     }
                                 )
                             }
+                        }
+                    }
+
+                    // 下载区域
+                    item { SmallTitle("下载") }
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp)
+                                .padding(bottom = 12.dp),
+                            colors = CardDefaults.defaultColors(
+                                color = MiuixTheme.colorScheme.secondaryContainer
+                            )
+                        ) {
+                            ArrowPreference(
+                                title = "下载此歌曲",
+                                startAction = {
+                                    Icon(
+                                        imageVector = MiuixIcons.Download,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMoreSheet = false
+                                    onDownload()
+                                }
+                            )
+                            ArrowPreference(
+                                title = "下载此歌曲并分享",
+                                startAction = {
+                                    Icon(
+                                        imageVector = MiuixIcons.Share,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMoreSheet = false
+                                    onDownloadAndShare()
+                                }
+                            )
+                            ArrowPreference(
+                                title = "下载封面图片",
+                                startAction = {
+                                    Icon(
+                                        imageVector = MiuixIcons.Download,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMoreSheet = false
+                                    onDownloadCover()
+                                }
+                            )
+                            ArrowPreference(
+                                title = "下载封面图片并分享",
+                                startAction = {
+                                    Icon(
+                                        imageVector = MiuixIcons.Share,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMoreSheet = false
+                                    onDownloadCoverAndShare()
+                                }
+                            )
                         }
                     }
                 }

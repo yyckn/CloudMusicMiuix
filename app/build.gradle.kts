@@ -11,8 +11,8 @@ android {
         applicationId = "com.cloudmusic.miuix"
         minSdk = 33
         targetSdk = 36
-        versionCode = 41
-        versionName = "0.7.0"
+        versionCode = 42
+        versionName = "0.7.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

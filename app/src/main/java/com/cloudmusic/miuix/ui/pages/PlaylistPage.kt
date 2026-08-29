@@ -1,5 +1,6 @@
 package com.cloudmusic.miuix.ui.pages
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,6 +55,7 @@ fun PlaylistPage(
     onRefresh: () -> Unit,
     isLoggedIn: Boolean,
     onLoginClick: () -> Unit = {},
+    onIntelligenceMode: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -140,6 +142,19 @@ fun PlaylistPage(
                             playlist = cloudDiskPlaylist,
                             onClick = { onPlaylistClick(cloudDiskPlaylist.id, cloudDiskPlaylist.coverImgUrl, cloudDiskPlaylist.title) }
                         )
+                    }
+
+                    // 心动模式
+                    if (likedPlaylists.isNotEmpty()) {
+                        val likedPlaylist = likedPlaylists.first()
+                        val firstTrackId = recommendState.dailySongs.firstOrNull()?.id ?: ""
+                        if (firstTrackId.isNotEmpty()) {
+                            item {
+                                IntelligenceModeCard(
+                                    onClick = { onIntelligenceMode(firstTrackId, likedPlaylist.id) }
+                                )
+                            }
+                        }
                     }
 
                     // 我喜欢的音乐歌单
@@ -230,6 +245,59 @@ private fun UserPlaylistCard(
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IntelligenceModeCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        pressFeedbackType = PressFeedbackType.Tilt,
+        showIndication = true,
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MiuixTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "❤",
+                    fontSize = 24.sp,
+                    color = MiuixTheme.colorScheme.onPrimary
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column {
+                Text(
+                    text = "心动模式",
+                    style = MiuixTheme.textStyles.main,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "根据当前喜爱歌曲实时推荐",
+                    style = MiuixTheme.textStyles.subtitle,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
             }
         }
     }

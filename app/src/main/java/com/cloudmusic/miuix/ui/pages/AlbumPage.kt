@@ -86,6 +86,8 @@ fun AlbumPage(
     onLikeTrack: () -> Unit = {},
     onDownload: () -> Unit = {},
     onDownloadCover: () -> Unit = {},
+    onDownloadAndShare: () -> Unit = {},
+    onDownloadCoverAndShare: () -> Unit = {},
     onNavigateToArtist: (String) -> Unit = {},
     onNavigateToComment: (String, String) -> Unit = { _, _ -> },
     onPlayTrack: (Track) -> Unit = {},
@@ -361,48 +363,6 @@ fun AlbumPage(
                     }
                 }
 
-                // 下载区域
-                item { SmallTitle("下载") }
-                item {
-                    Card(
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
-                        colors = CardDefaults.defaultColors(
-                            color = MiuixTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        ArrowPreference(
-                            title = "下载此歌曲",
-                            startAction = {
-                                Icon(
-                                    imageVector = MiuixIcons.Download,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            },
-                            onClick = {
-                                showMoreSheet = false
-                                onDownload()
-                            }
-                        )
-                        ArrowPreference(
-                            title = "下载封面图片",
-                            startAction = {
-                                Icon(
-                                    imageVector = MiuixIcons.Download,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            },
-                            onClick = {
-                                showMoreSheet = false
-                                onDownloadCover()
-                            }
-                        )
-                    }
-                }
-
                 // 歌手区域
                 item { SmallTitle("歌手") }
                 item {
@@ -454,6 +414,76 @@ fun AlbumPage(
                                 }
                             )
                         }
+                    }
+                }
+
+                // 下载区域
+                item { SmallTitle("下载") }
+                item {
+                    Card(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .padding(bottom = 12.dp),
+                        colors = CardDefaults.defaultColors(
+                            color = MiuixTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        ArrowPreference(
+                            title = "下载此歌曲",
+                            startAction = {
+                                Icon(
+                                    imageVector = MiuixIcons.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            },
+                            onClick = {
+                                showMoreSheet = false
+                                onDownload()
+                            }
+                        )
+                        ArrowPreference(
+                            title = "下载此歌曲并分享",
+                            startAction = {
+                                Icon(
+                                    imageVector = MiuixIcons.Share,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            },
+                            onClick = {
+                                showMoreSheet = false
+                                onDownloadAndShare()
+                            }
+                        )
+                        ArrowPreference(
+                            title = "下载封面图片",
+                            startAction = {
+                                Icon(
+                                    imageVector = MiuixIcons.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            },
+                            onClick = {
+                                showMoreSheet = false
+                                onDownloadCover()
+                            }
+                        )
+                        ArrowPreference(
+                            title = "下载封面图片并分享",
+                            startAction = {
+                                Icon(
+                                    imageVector = MiuixIcons.Share,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            },
+                            onClick = {
+                                showMoreSheet = false
+                                onDownloadCoverAndShare()
+                            }
+                        )
                     }
                 }
             }

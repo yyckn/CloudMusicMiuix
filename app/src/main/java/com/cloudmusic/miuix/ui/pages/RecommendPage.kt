@@ -1,5 +1,6 @@
 package com.cloudmusic.miuix.ui.pages
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -321,6 +322,17 @@ fun RecommendPage(
                         }
                     }
 
+                    // 随身听FM
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        FmCard(
+                            onClick = {
+                                android.util.Log.d("RecommendPage", "FM card clicked, entering FM mode")
+                                viewModel.enterFMMode()
+                                onOpenPlayerPage()
+                            }
+                        )
+                    }
+
                     // 推荐歌单
                     items(recommendState.playlists) { playlist ->
                         RecommendPlaylistCard(
@@ -425,6 +437,60 @@ private fun DailyRecommendCard(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "${songs.size}首歌曲",
+                    style = MiuixTheme.textStyles.subtitle,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FmCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        pressFeedbackType = PressFeedbackType.Tilt,
+        showIndication = true,
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MiuixTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "FM",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onPrimary
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column {
+                Text(
+                    text = "随身听FM",
+                    style = MiuixTheme.textStyles.main,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "发现你可能喜欢的音乐",
                     style = MiuixTheme.textStyles.subtitle,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )

@@ -235,7 +235,8 @@ fun MainScreen(
                                         onPlaylistClick = { showPlaylistSheet = true },
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = this@AnimatedContent,
-                                        hasBottomBar = false
+                                        hasBottomBar = false,
+                                        hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode
                                     )
                                 }
                             ) { padding ->
@@ -366,16 +367,21 @@ fun MainScreen(
                                         onOpenPlayerPage = { showPlayerPage = true },
                                         modifier = Modifier.padding(padding)
                                     )
-                                        1 -> PlaylistPage(
-                                            recommendState = viewModel.recommendState,
-                                            onPlaylistClick = { playlistId, coverUrl, title ->
-                                                viewModel.loadPlaylistDetail(playlistId)
-                                                navigateTo(Screen.PlaylistDetail(coverUrl, title))
-                                            },
-                                            onRefresh = { viewModel.loadUserPlaylists() },
-                                            isLoggedIn = isLoggedIn,
-                                            modifier = Modifier.padding(padding)
-                                        )
+                                1 -> PlaylistPage(
+                                    recommendState = viewModel.recommendState,
+                                    onPlaylistClick = { playlistId, coverUrl, title ->
+                                        viewModel.loadPlaylistDetail(playlistId)
+                                        navigateTo(Screen.PlaylistDetail(coverUrl, title))
+                                    },
+                                    onRefresh = { viewModel.loadUserPlaylists() },
+                                    isLoggedIn = isLoggedIn,
+                                    onIntelligenceMode = { songId, playlistId ->
+                                        viewModel.enterIntelligenceMode(songId, playlistId) {
+                                            showPlayerPage = true
+                                        }
+                                    },
+                                    modifier = Modifier.padding(padding)
+                                )
                                 2 -> SettingsPage(
                                     isLoggedIn = isLoggedIn,
                                     onLoginClick = {
@@ -418,7 +424,8 @@ fun MainScreen(
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = this@AnimatedContent,
                                         hasBottomBar = !ThemeSettings.useFloatingBar,
-                                        isFloatingStyle = ThemeSettings.useFloatingBar
+                                        isFloatingStyle = ThemeSettings.useFloatingBar,
+                                        hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode
                                     )
                                     if (ThemeSettings.useFloatingBar) {
                                         // 悬浮底栏
@@ -587,16 +594,21 @@ fun MainScreen(
                                     onOpenPlayerPage = { showPlayerPage = true },
                                     modifier = Modifier.padding(padding)
                                 )
-                                        1 -> PlaylistPage(
-                                            recommendState = viewModel.recommendState,
-                                            onPlaylistClick = { playlistId, coverUrl, title ->
-                                                viewModel.loadPlaylistDetail(playlistId)
-                                                navigateTo(Screen.PlaylistDetail(coverUrl, title))
-                                            },
-                                            onRefresh = { viewModel.loadUserPlaylists() },
-                                            isLoggedIn = isLoggedIn,
-                                            modifier = Modifier.padding(padding)
-                                        )
+                                1 -> PlaylistPage(
+                                    recommendState = viewModel.recommendState,
+                                    onPlaylistClick = { playlistId, coverUrl, title ->
+                                        viewModel.loadPlaylistDetail(playlistId)
+                                        navigateTo(Screen.PlaylistDetail(coverUrl, title))
+                                    },
+                                    onRefresh = { viewModel.loadUserPlaylists() },
+                                    isLoggedIn = isLoggedIn,
+                                    onIntelligenceMode = { songId, playlistId ->
+                                        viewModel.enterIntelligenceMode(songId, playlistId) {
+                                            showPlayerPage = true
+                                        }
+                                    },
+                                    modifier = Modifier.padding(padding)
+                                )
                                 2 -> SettingsPage(
                                     isLoggedIn = isLoggedIn,
                                     onLoginClick = {
@@ -638,7 +650,8 @@ fun MainScreen(
                                 onPlaylistClick = { showPlaylistSheet = true },
                                 sharedTransitionScope = this@SharedTransitionLayout,
                                 animatedVisibilityScope = this@AnimatedContent,
-                                hasBottomBar = false
+                                hasBottomBar = false,
+                                hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode
                             )
                         }
                     ) { padding ->
@@ -812,6 +825,8 @@ fun MainScreen(
                                     }
                                 }
                             },
+                            onDownloadAndShare = { viewModel.downloadAndShareCurrentTrack() },
+                            onDownloadCoverAndShare = { viewModel.downloadAndShareCover() },
                             onNavigateToArtist = { artistId ->
                                 navigateTo(Screen.Artist(artistId))
                             },
@@ -969,7 +984,8 @@ fun MainScreen(
                             onPlaylistClick = { showPlaylistSheet = true },
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
-                            hasBottomBar = false
+                            hasBottomBar = false,
+                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode
                         )
                     }
                 ) { padding ->
@@ -1126,6 +1142,8 @@ fun MainScreen(
                                 }
                             }
                         },
+                        onDownloadAndShare = { viewModel.downloadAndShareCurrentTrack() },
+                        onDownloadCoverAndShare = { viewModel.downloadAndShareCover() },
                         onNavigateToArtist = { artistId ->
                             navigateTo(Screen.Artist(artistId))
                         },
@@ -1154,7 +1172,8 @@ fun MainScreen(
                             onPlaylistClick = { showPlaylistSheet = true },
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
-                            hasBottomBar = false
+                            hasBottomBar = false,
+                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode
                         )
                     }
                 ) { padding ->
@@ -1313,6 +1332,8 @@ fun MainScreen(
                                 }
                             }
                         },
+                        onDownloadAndShare = { viewModel.downloadAndShareCurrentTrack() },
+                        onDownloadCoverAndShare = { viewModel.downloadAndShareCover() },
                         onNavigateToArtist = { artistId ->
                             navigateTo(Screen.Artist(artistId))
                         },
@@ -1355,10 +1376,24 @@ fun MainScreen(
                 lyricState = viewModel.lyricState,
                 currentPlaylist = viewModel.currentPlaylist,
                 isCurrentTrackLiked = viewModel.isCurrentTrackLiked,
+                isFMMode = viewModel.isFMMode,
+                isIntelligenceMode = viewModel.isIntelligenceMode,
                 onBackClick = { showPlayerPage = false },
                 onTogglePlayPause = { viewModel.togglePlayPause() },
-                onPrevious = { viewModel.playPrevious() },
-                onNext = { viewModel.playNext() },
+                onPrevious = {
+                    when {
+                        viewModel.isFMMode -> viewModel.fmPlayPrevious()
+                        viewModel.isIntelligenceMode -> viewModel.intelligencePlayPrevious()
+                        else -> viewModel.playPrevious()
+                    }
+                },
+                onNext = {
+                    when {
+                        viewModel.isFMMode -> viewModel.fmPlayNext()
+                        viewModel.isIntelligenceMode -> viewModel.intelligencePlayNext()
+                        else -> viewModel.playNext()
+                    }
+                },
                 onSeekTo = { position -> viewModel.seekTo(position) },
                 onDownload = { viewModel.downloadCurrentTrack() },
                 onDownloadCover = {
@@ -1379,6 +1414,8 @@ fun MainScreen(
                         }
                     }
                 },
+                onDownloadAndShare = { viewModel.downloadAndShareCurrentTrack() },
+                onDownloadCoverAndShare = { viewModel.downloadAndShareCover() },
                 onShare = {
                     val track = viewModel.playerState.currentTrack
                     if (track != null) {

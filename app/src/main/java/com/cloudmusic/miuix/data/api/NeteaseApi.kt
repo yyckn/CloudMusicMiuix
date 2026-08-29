@@ -2608,4 +2608,234 @@ object NeteaseApi {
             replies = replies
         )
     }
+
+    suspend fun getPersonalFM(): Result<List<Track>> = withContext(Dispatchers.IO) {
+        try {
+            ensureCookie()
+            val url = "https://music.163.com/api/v1/radio/get"
+            val reqData = "{}"
+            val encrypted = NeteaseCrypto.weapi(reqData)
+
+            val formBody = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .add("encSecKey", encrypted["encSecKey"]!!)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(formBody)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Cookie", cookies)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            Log.d("NeteaseApi", "getPersonalFM - url: $url")
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                Log.e("NeteaseApi", "getPersonalFM - HTTP error: ${response.code}")
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            if (responseBody.isNullOrEmpty()) {
+                Log.e("NeteaseApi", "getPersonalFM - Empty response")
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+            
+            Log.d("NeteaseApi", "getPersonalFM - response: $responseBody")
+
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            val tracks = mutableListOf<Track>()
+            if (json.has("data") && json.get("data").isJsonArray) {
+                val dataArray = json.getAsJsonArray("data")
+                Log.d("NeteaseApi", "getPersonalFM - found ${dataArray.size()} songs")
+                for (i in 0 until dataArray.size()) {
+                    try {
+                        val song = dataArray.get(i).asJsonObject
+                        val songId = if (song.has("id")) song.get("id").asLong else 0L
+                        val songName = if (song.has("name") && !song.get("name").isJsonNull) song.get("name").asString else ""
+
+                        var artistName = ""
+                        val artistNames = mutableListOf<String>()
+                        val artistIds = mutableListOf<String>()
+                        if (song.has("artists") && song.get("artists").isJsonArray) {
+                            val artists = song.getAsJsonArray("artists")
+                            for (j in 0 until artists.size()) {
+                                val artist = artists.get(j).asJsonObject
+                                if (artist.has("name") && !artist.get("name").isJsonNull) {
+                                    artistNames.add(artist.get("name").asString)
+                                }
+                                if (artist.has("id")) {
+                                    artistIds.add("neartist_${artist.get("id").asLong}")
+                                }
+                            }
+                            artistName = artistNames.joinToString(" / ")
+                        }
+
+                        var albumName = ""
+                        var albumId = 0L
+                        var picUrl = ""
+                        if (song.has("album") && song.get("album").isJsonObject) {
+                            val album = song.getAsJsonObject("album")
+                            if (album.has("name") && !album.get("name").isJsonNull) {
+                                albumName = album.get("name").asString
+                            }
+                            if (album.has("id")) {
+                                albumId = album.get("id").asLong
+                            }
+                            if (album.has("picUrl") && !album.get("picUrl").isJsonNull) {
+                                picUrl = album.get("picUrl").asString
+                            }
+                        }
+
+                        val duration = if (song.has("duration")) song.get("duration").asLong else 0L
+
+                        tracks.add(
+                            Track(
+                                id = "netrack_$songId",
+                                title = songName,
+                                artist = artistName,
+                                artistId = artistIds.firstOrNull() ?: "",
+                                album = albumName,
+                                albumId = "nealbum_$albumId",
+                                sourceUrl = "https://music.163.com/#/song?id=$songId",
+                                imgUrl = picUrl,
+                                duration = duration,
+                                isVip = false,
+                                artistNames = artistNames,
+                                artistIds = artistIds
+                            )
+                        )
+                    } catch (e: Exception) {
+                        Log.e("NeteaseApi", "parseFMSong error: ${e.message}")
+                    }
+                }
+            }
+
+            Result.success(tracks)
+        } catch (e: Exception) {
+            Log.e("NeteaseApi", "getPersonalFM error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getIntelligenceList(songId: String, playlistId: String): Result<List<Track>> = withContext(Dispatchers.IO) {
+        try {
+            ensureCookie()
+            val id = songId.removePrefix("netrack_")
+            val pid = playlistId.removePrefix("neplaylist_")
+            val url = "https://music.163.com/api/playmode/intelligence/list"
+            val eapiUrl = "/api/playmode/intelligence/list"
+            val reqData = """{"songId":$id,"type":"fromPlaylist","playlistId":$pid,"startMusicId":$id,"count":1}"""
+            val encrypted = NeteaseCrypto.eapi(eapiUrl, reqData)
+
+            val formBody = FormBody.Builder()
+                .add("params", encrypted["params"]!!)
+                .build()
+
+            val cookieStr = "os=pc; ${cookies}"
+
+            val request = Request.Builder()
+                .url(url)
+                .post(formBody)
+                .header("Referer", "https://music.163.com")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Cookie", cookieStr)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            Log.d("NeteaseApi", "getIntelligenceList - url: $url, songId: $id, playlistId: $pid")
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                Log.e("NeteaseApi", "getIntelligenceList - HTTP error: ${response.code}")
+                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+            }
+            val responseBody = response.body?.string()
+            if (responseBody.isNullOrEmpty()) {
+                Log.e("NeteaseApi", "getIntelligenceList - Empty response")
+                return@withContext Result.failure(Exception("Empty response"))
+            }
+
+            Log.d("NeteaseApi", "getIntelligenceList - response: $responseBody")
+
+            val json = gson.fromJson(responseBody, JsonObject::class.java)
+                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+
+            val tracks = mutableListOf<Track>()
+            if (json.has("data") && json.get("data").isJsonArray) {
+                val dataArray = json.getAsJsonArray("data")
+                Log.d("NeteaseApi", "getIntelligenceList - found ${dataArray.size()} songs")
+                for (i in 0 until dataArray.size()) {
+                    try {
+                        val item = dataArray.get(i).asJsonObject
+                        val songInfo = if (item.has("songInfo")) item.getAsJsonObject("songInfo") else item
+                        
+                        val songIdVal = if (songInfo.has("id")) songInfo.get("id").asLong else 0L
+                        val songName = if (songInfo.has("name") && !songInfo.get("name").isJsonNull) songInfo.get("name").asString else ""
+
+                        var artistName = ""
+                        val artistNames = mutableListOf<String>()
+                        val artistIds = mutableListOf<String>()
+                        if (songInfo.has("ar") && songInfo.get("ar").isJsonArray) {
+                            val artists = songInfo.getAsJsonArray("ar")
+                            for (j in 0 until artists.size()) {
+                                val artist = artists.get(j).asJsonObject
+                                if (artist.has("name") && !artist.get("name").isJsonNull) {
+                                    artistNames.add(artist.get("name").asString)
+                                }
+                                if (artist.has("id")) {
+                                    artistIds.add("neartist_${artist.get("id").asLong}")
+                                }
+                            }
+                            artistName = artistNames.joinToString(" / ")
+                        }
+
+                        var albumName = ""
+                        var albumId = 0L
+                        var picUrl = ""
+                        if (songInfo.has("al") && songInfo.get("al").isJsonObject) {
+                            val album = songInfo.getAsJsonObject("al")
+                            if (album.has("name") && !album.get("name").isJsonNull) {
+                                albumName = album.get("name").asString
+                            }
+                            if (album.has("id")) {
+                                albumId = album.get("id").asLong
+                            }
+                            if (album.has("picUrl") && !album.get("picUrl").isJsonNull) {
+                                picUrl = album.get("picUrl").asString
+                            }
+                        }
+
+                        val duration = if (songInfo.has("dt")) songInfo.get("dt").asLong else 0L
+
+                        tracks.add(
+                            Track(
+                                id = "netrack_$songIdVal",
+                                title = songName,
+                                artist = artistName,
+                                artistId = artistIds.firstOrNull() ?: "",
+                                album = albumName,
+                                albumId = "nealbum_$albumId",
+                                sourceUrl = "https://music.163.com/#/song?id=$songIdVal",
+                                imgUrl = picUrl,
+                                duration = duration,
+                                isVip = false,
+                                artistNames = artistNames,
+                                artistIds = artistIds
+                            )
+                        )
+                    } catch (e: Exception) {
+                        Log.e("NeteaseApi", "parseIntelligenceSong error: ${e.message}")
+                    }
+                }
+            }
+
+            Result.success(tracks)
+        } catch (e: Exception) {
+            Log.e("NeteaseApi", "getIntelligenceList error: ${e.message}")
+            Result.failure(e)
+        }
+    }
 }

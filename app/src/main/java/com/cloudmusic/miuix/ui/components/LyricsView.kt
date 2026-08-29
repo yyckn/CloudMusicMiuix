@@ -1,10 +1,16 @@
 package com.cloudmusic.miuix.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -50,6 +58,7 @@ fun LyricsView(
     lyrics: SongLyrics?,
     currentPosition: Long,
     onSeekTo: (Long) -> Unit,
+    isPlaying: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     if (lyrics == null || lyrics.lines.isEmpty()) {
@@ -116,6 +125,16 @@ fun LyricsView(
         userScrolling = listState.isScrollInProgress
     }
 
+    // 检查是否需要显示等待歌词
+    // 找到第一句正文歌词（跳过歌手行、纯音乐等）
+    val firstRealLyric = lyrics.lines.firstOrNull { 
+        !it.isArtistLine && it.text.isNotBlank() && it.text != "纯音乐，请欣赏"
+    }
+    val firstLyricTime = firstRealLyric?.startAt ?: 0L
+    val showWaitingDots = firstLyricTime > 10000
+
+    android.util.Log.d("LyricsView", "lyrics.lines.size=${lyrics.lines.size}, firstLyricTime=$firstLyricTime, showWaitingDots=$showWaitingDots, currentPosition=$currentPosition, isPlaying=$isPlaying")
+
     LazyColumn(
         state = listState,
         modifier = modifier
@@ -131,8 +150,20 @@ fun LyricsView(
         }
         
         itemsIndexed(lyrics.lines) { index, line ->
+            // 检查是否是第一行空歌词，且需要显示等待歌词
+            // 如果需要显示等待歌词，第一行视为等待歌词行
+            // 如果不需要显示等待歌词（<=10秒），第一行显示为空格
+            val isFirstLine = index == 0
+            val isFirstEmptyLine = isFirstLine && (line.text.isBlank() || line.startAt == 0L || showWaitingDots || firstLyricTime in 1..10000)
+            val showWaitingDotsHere = showWaitingDots && isFirstEmptyLine
+            
             // 如果当前行是歌手行，不高亮显示
-            val isActive = index == currentIndex && !line.isArtistLine
+            // 如果是等待歌词行，在第一句歌词到达前视为活动状态
+            val isActive = if (showWaitingDotsHere) {
+                currentPosition < firstLyricTime
+            } else {
+                index == currentIndex && !line.isArtistLine
+            }
             
             // 计算相对于当前行的距离，用于设置延迟时间
             val distanceFromCurrent = if (index > currentIndex) index - currentIndex else 0
@@ -154,21 +185,52 @@ fun LyricsView(
                 targetAlpha = if (isActive) 1f else 0.4f
             }
 
-            LyricLineItem(
-                line = line,
-                isActive = isActive,
-                alpha = alpha,
-                onClick = {
-                    onSeekTo(line.startAt)
-                },
-                modifier = Modifier
-                    .padding(vertical = 0.dp, horizontal = 0.dp)
-                    .onGloballyPositioned { coordinates ->
-                        if (isActive) {
-                            currentLineHeight = coordinates.size.height
+            if (showWaitingDotsHere) {
+                // 替换空歌词行为等待歌词
+                WaitingLyricDots(
+                    firstLyricTime = firstLyricTime,
+                    currentPosition = currentPosition,
+                    isPlaying = isPlaying,
+                    baseFontSize = ThemeSettings.lyricFontSize.sp,
+                    onClick = { onSeekTo(0L) },
+                    modifier = Modifier
+                        .onGloballyPositioned { coordinates ->
+                            if (isActive) {
+                                currentLineHeight = coordinates.size.height
+                            }
                         }
-                    }
-            )
+                )
+            } else if (isFirstLine && firstLyricTime in 1..10000) {
+                // 第一句歌词时间 <= 10秒，显示一个空格的歌词行
+                LyricLineItem(
+                    line = line.copy(text = " "),
+                    isActive = isActive,
+                    alpha = alpha,
+                    onClick = { onSeekTo(line.startAt) },
+                    modifier = Modifier
+                        .onGloballyPositioned { coordinates ->
+                            if (isActive) {
+                                currentLineHeight = coordinates.size.height
+                            }
+                        }
+                )
+            } else {
+                LyricLineItem(
+                    line = line,
+                    isActive = isActive,
+                    alpha = alpha,
+                    onClick = {
+                        onSeekTo(line.startAt)
+                    },
+                    modifier = Modifier
+                        .padding(vertical = 0.dp, horizontal = 0.dp)
+                        .onGloballyPositioned { coordinates ->
+                            if (isActive) {
+                                currentLineHeight = coordinates.size.height
+                            }
+                        }
+                )
+            }
         }
         
         // 底部空白，高度为歌词区域的一半
@@ -308,4 +370,131 @@ private fun formatArtistLineText(text: String): String {
         result = result.substring(0, result.length - 1).trim()
     }
     return result
+}
+
+/**
+ * 等待歌词圆圈组件
+ * 当第一句歌词时间戳大于10秒时显示
+ */
+@Composable
+fun WaitingLyricDots(
+    firstLyricTime: Long,
+    currentPosition: Long,
+    isPlaying: Boolean,
+    baseFontSize: androidx.compose.ui.unit.TextUnit,
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    // 确定圆圈数量：大于10秒显示3个，小于等于10秒不显示
+    val dotCount = when {
+        firstLyricTime <= 10000 -> return
+        else -> 3
+    }
+
+    // 每个圆圈的时长
+    val dotDuration = firstLyricTime / dotCount
+
+    // 第一句歌词到达前500ms开始淡出动画
+    val fadeOutStartTime = firstLyricTime - 500
+    val isFinished = currentPosition >= fadeOutStartTime
+    val targetAlpha = if (isFinished) 0f else 1f
+    val overallAlpha by animateFloatAsState(
+        targetValue = targetAlpha,
+        animationSpec = tween(durationMillis = 500),
+        label = "waiting_dots_alpha"
+    )
+
+    val lyricCenter = ThemeSettings.lyricCenter
+
+    // 如果完全透明，仍然渲染但不可见，以便点击跳转
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onClick() }
+            .padding(vertical = 2.dp, horizontal = 2.dp)
+            .graphicsLayer { this.alpha = overallAlpha }
+            .padding(horizontal = 2.dp, vertical = 8.dp),
+        horizontalAlignment = if (lyricCenter) Alignment.CenterHorizontally else Alignment.Start
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 动画参数
+            val firstAnimDuration = 1250L // 第一次动画时长
+            val loopDuration = 2500L // 每次循环动画时长
+
+            for (i in 0 until dotCount) {
+                val dotStartTime = i * dotDuration
+                val isActive = currentPosition >= dotStartTime
+                val elapsedInDot = if (isActive) currentPosition - dotStartTime else 0L
+
+                // 计算循环次数（四舍五入）
+                val remainingAfterFirst = dotDuration - firstAnimDuration
+                val numLoops = if (remainingAfterFirst > 0) {
+                    Math.round(remainingAfterFirst.toFloat() / loopDuration.toFloat()).toInt()
+                } else {
+                    0
+                }
+
+                // 总动画时长
+                val totalAnimDuration = firstAnimDuration + numLoops * loopDuration
+
+                // 判断是否应该执行动画
+                val shouldAnimate = isActive && elapsedInDot < totalAnimDuration
+
+                // 计算动画进度
+                val dotScale: Float
+                val dotColor: Color
+
+                if (shouldAnimate) {
+                    if (elapsedInDot < firstAnimDuration) {
+                        // 第一次动画：0.8倍 → 1倍，灰色 → 白色
+                        val progress = elapsedInDot.toFloat() / firstAnimDuration.toFloat()
+                        dotScale = 0.8f + 0.2f * progress
+                        dotColor = androidx.compose.ui.graphics.lerp(Color.Gray, Color.White, progress)
+                    } else {
+                        // 循环动画：1倍 → 0.8倍 → 1倍，白色 → 灰色 → 白色
+                        val loopElapsed = elapsedInDot - firstAnimDuration
+                        val loopProgress = ((loopElapsed % loopDuration).toFloat() / loopDuration.toFloat()).coerceIn(0f, 1f)
+                        val animProgress = kotlin.math.sin(loopProgress * kotlin.math.PI.toFloat())
+                        // sin(0)=0, sin(π/2)=1, sin(π)=0 → 1x → 0.8x → 1x
+                        dotScale = 1f - 0.2f * animProgress
+                        // 颜色同步：白色 → 灰色 → 白色
+                        dotColor = androidx.compose.ui.graphics.lerp(Color.White, Color.Gray, animProgress)
+                    }
+                } else if (isActive) {
+                    // 动画完成，保持最终状态：1倍，白色
+                    dotScale = 1f
+                    dotColor = Color.White
+                } else {
+                    // 未开始状态：0.8倍，灰色
+                    dotScale = 0.8f
+                    dotColor = Color.Gray
+                }
+
+                // 固定宽度容器，防止字号变化导致后面的圆圈移动
+                Box(
+                    modifier = Modifier.width((baseFontSize.value * 0.8f).dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "●",
+                        fontSize = baseFontSize * dotScale,
+                        color = dotColor
+                    )
+                }
+
+                if (i < dotCount - 1) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+            }
+            // 右侧空格，字体大小1.2倍
+            Text(
+                text = " ",
+                fontSize = baseFontSize * 1.2f,
+                color = Color.Transparent
+            )
+        }
+    }
 }

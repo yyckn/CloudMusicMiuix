@@ -55,6 +55,7 @@ fun PlayerBar(
     animatedVisibilityScope: AnimatedVisibilityScope,
     hasBottomBar: Boolean = true,
     isFloatingStyle: Boolean = false,
+    hidePlaylistButton: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     if (playerState.currentTrack != null) {
@@ -176,19 +177,21 @@ fun PlayerBar(
                             }
 
                             // 列表按钮
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable { onPlaylistClick() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = MiuixIcons.ListView,
-                                    contentDescription = "播放列表",
-                                    tint = MiuixTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                            if (!hidePlaylistButton) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { onPlaylistClick() },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = MiuixIcons.ListView,
+                                        contentDescription = "播放列表",
+                                        tint = MiuixTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                             }
                         }
                     }

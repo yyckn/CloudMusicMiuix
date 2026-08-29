@@ -8,6 +8,7 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -20,8 +21,10 @@ import com.cloudmusic.miuix.data.model.SongLyrics
 import com.cloudmusic.miuix.data.model.Track
 import com.cloudmusic.miuix.service.MediaPlaybackService
 import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class PlayerState(
     val currentTrack: Track? = null,
@@ -99,6 +102,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     var playMode by mutableStateOf(0)
         private set
     private var originalPlaylist: List<Track> = emptyList()
+
+    // 随身听FM模式
+    var isFMMode by mutableStateOf(false)
+        private set
+    private var fmPlaylist: List<Track> = emptyList()
+    private var fmIndex by mutableIntStateOf(0)
+
+    // 心动模式
+    var isIntelligenceMode by mutableStateOf(false)
+        private set
+    private var intelligencePlaylist: List<Track> = emptyList()
+    private var intelligenceIndex by mutableIntStateOf(0)
 
     private var mediaPlaybackService: MediaPlaybackService? = null
     private var isBound = false
@@ -394,6 +409,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun onTrackCompleted() {
+        if (isFMMode) {
+            fmPlayNext()
+            return
+        }
+        if (isIntelligenceMode) {
+            intelligencePlayNext()
+            return
+        }
         when (playMode) {
             0, 1 -> playNext() // 顺序播放和乱序播放都播放下一首
             2 -> {
@@ -408,6 +431,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
      * 当乱序模式下点击歌曲时，打乱播放列表
      */
     fun playTrackWithMode(track: Track, playlist: List<Track>) {
+        // 如果当前在FM模式或心动模式，退出
+        if (isFMMode) {
+            exitFMMode()
+        }
+        if (isIntelligenceMode) {
+            exitIntelligenceMode()
+        }
         if (playMode == 1) {
             // 乱序播放：打乱播放列表，保持当前歌曲在第一位
             originalPlaylist = playlist.toList()
@@ -421,6 +451,106 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             currentPlaylist = playlist
         }
         playTrack(track)
+    }
+
+    fun enterFMMode() {
+        Log.d("MusicPlayerViewModel", "enterFMMode called")
+        isFMMode = true
+        fmIndex = 0
+        viewModelScope.launch {
+            Log.d("MusicPlayerViewModel", "Loading FM songs...")
+            NeteaseApi.getPersonalFM().fold(
+                onSuccess = { tracks ->
+                    Log.d("MusicPlayerViewModel", "FM songs loaded: ${tracks.size} tracks")
+                    fmPlaylist = tracks
+                    if (tracks.isNotEmpty()) {
+                        currentPlaylist = tracks
+                        playTrack(tracks[0])
+                    }
+                },
+                onFailure = { e ->
+                    Log.e("MusicPlayerViewModel", "Failed to load FM: ${e.message}")
+                }
+            )
+        }
+    }
+
+    fun exitFMMode() {
+        isFMMode = false
+        fmPlaylist = emptyList()
+        fmIndex = 0
+    }
+
+    fun fmPlayNext() {
+        fmIndex++
+        // 如果播放到最后一首，加载更多
+        if (fmIndex >= fmPlaylist.size) {
+            viewModelScope.launch {
+                NeteaseApi.getPersonalFM().fold(
+                    onSuccess = { tracks ->
+                        fmPlaylist = fmPlaylist + tracks
+                        if (fmIndex < fmPlaylist.size) {
+                            playTrack(fmPlaylist[fmIndex])
+                        }
+                    },
+                    onFailure = { e ->
+                        Log.e("MusicPlayerViewModel", "Failed to load more FM: ${e.message}")
+                    }
+                )
+            }
+        } else {
+            playTrack(fmPlaylist[fmIndex])
+        }
+    }
+
+    fun fmPlayPrevious() {
+        if (fmIndex > 0) {
+            fmIndex--
+            playTrack(fmPlaylist[fmIndex])
+        }
+    }
+
+    fun enterIntelligenceMode(songId: String, playlistId: String, onReady: () -> Unit = {}) {
+        isIntelligenceMode = true
+        intelligenceIndex = 0
+        viewModelScope.launch {
+            Log.d("MusicPlayerViewModel", "Loading intelligence list for songId: $songId, playlistId: $playlistId")
+            NeteaseApi.getIntelligenceList(songId, playlistId).fold(
+                onSuccess = { tracks ->
+                    Log.d("MusicPlayerViewModel", "Intelligence songs loaded: ${tracks.size} tracks")
+                    intelligencePlaylist = tracks
+                    if (tracks.isNotEmpty()) {
+                        currentPlaylist = tracks
+                        playTrack(tracks[0])
+                    }
+                    onReady()
+                },
+                onFailure = { e ->
+                    Log.e("MusicPlayerViewModel", "Failed to load intelligence list: ${e.message}")
+                    onReady()
+                }
+            )
+        }
+    }
+
+    fun exitIntelligenceMode() {
+        isIntelligenceMode = false
+        intelligencePlaylist = emptyList()
+        intelligenceIndex = 0
+    }
+
+    fun intelligencePlayNext() {
+        intelligenceIndex++
+        if (intelligenceIndex < intelligencePlaylist.size) {
+            playTrack(intelligencePlaylist[intelligenceIndex])
+        }
+    }
+
+    fun intelligencePlayPrevious() {
+        if (intelligenceIndex > 0) {
+            intelligenceIndex--
+            playTrack(intelligencePlaylist[intelligenceIndex])
+        }
     }
 
     fun loadPlaylistDetail(playlistId: String) {
@@ -719,6 +849,109 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             android.util.Log.d("MusicPlayerViewModel", "Download started: $fileName")
         } catch (e: Exception) {
             android.util.Log.e("MusicPlayerViewModel", "Download failed: ${e.message}")
+        }
+    }
+
+    fun downloadAndShareCurrentTrack() {
+        val track = playerState.currentTrack ?: return
+        val context = getApplication<Application>()
+        android.widget.Toast.makeText(context, "正在下载，请稍等……", android.widget.Toast.LENGTH_SHORT).show()
+        viewModelScope.launch {
+            NeteaseApi.getSongUrl(track.id).fold(
+                onSuccess = { (url, _, type) ->
+                    if (url.isNotEmpty()) {
+                        downloadAndShareFile(url, "${track.title} - ${track.artist}.$type", "audio/$type")
+                    }
+                },
+                onFailure = { e ->
+                    Log.e("MusicPlayerViewModel", "Failed to get download URL: ${e.message}")
+                }
+            )
+        }
+    }
+
+    fun downloadAndShareCover() {
+        val track = playerState.currentTrack ?: return
+        val coverUrl = track.imgUrl
+        if (coverUrl.isNotEmpty()) {
+            val context = getApplication<Application>()
+            android.widget.Toast.makeText(context, "正在下载，请稍等……", android.widget.Toast.LENGTH_SHORT).show()
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val context = getApplication<Application>()
+                    val fileName = "${track.title} - ${track.artist}_cover.jpg"
+                    
+                    // 下载封面到缓存目录
+                    val url = java.net.URL(coverUrl)
+                    val connection = url.openConnection()
+                    connection.connect()
+                    val inputStream = connection.getInputStream()
+                    val file = java.io.File(context.cacheDir, fileName)
+                    file.outputStream().use { output ->
+                        inputStream.copyTo(output)
+                    }
+                    inputStream.close()
+                    
+                    // 分享文件（需要在主线程执行）
+                    withContext(Dispatchers.Main) {
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            file
+                        )
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "image/jpeg"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "分享封面").apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        })
+                    }
+                } catch (e: Exception) {
+                    Log.e("MusicPlayerViewModel", "Download and share cover failed: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun downloadAndShareFile(url: String, fileName: String, mimeType: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                
+                // 下载文件到缓存目录
+                val urlObj = java.net.URL(url)
+                val connection = urlObj.openConnection()
+                connection.connect()
+                val inputStream = connection.getInputStream()
+                val file = java.io.File(context.cacheDir, fileName)
+                file.outputStream().use { output ->
+                    inputStream.copyTo(output)
+                }
+                inputStream.close()
+                
+                // 分享文件（需要在主线程执行）
+                withContext(Dispatchers.Main) {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = mimeType
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "分享歌曲").apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                }
+            } catch (e: Exception) {
+                Log.e("MusicPlayerViewModel", "Download and share failed: ${e.message}")
+            }
         }
     }
 
