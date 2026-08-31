@@ -15,6 +15,7 @@ object ThemeSettings {
     private const val KEY_LYRIC_TRANSLATION_RATIO = "lyric_translation_ratio"
     private const val KEY_USE_ROUND_COVER = "use_round_cover"
     private const val KEY_COVER_ROTATION = "cover_rotation"
+    private const val KEY_COVER_STYLE = "cover_style"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_LYRIC_CENTER = "lyric_center"
 
@@ -25,7 +26,7 @@ object ThemeSettings {
     var useFloatingBar by mutableStateOf(false)
         private set
 
-    var lyricFontSize by mutableIntStateOf(26)
+    var lyricFontSize by mutableIntStateOf(28)
         private set
 
     // 翻译歌词倍率 (0.5-1.0)，默认0.7
@@ -40,8 +41,12 @@ object ThemeSettings {
     var coverRotationIndex by mutableIntStateOf(0)
         private set
 
+    // 封面样式: 0=卡片, 1=全屏渐变, 2=竖屏卡片，横屏全屏
+    var coverStyleIndex by mutableIntStateOf(2)
+        private set
+
     // 播放页保持屏幕常亮
-    var keepScreenOn by mutableStateOf(false)
+    var keepScreenOn by mutableStateOf(true)
         private set
 
     // 保持歌词居中
@@ -54,11 +59,12 @@ object ThemeSettings {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         themeModeIndex = prefs?.getInt(KEY_THEME_MODE, 2) ?: 2
         useFloatingBar = prefs?.getBoolean(KEY_USE_FLOATING_BAR, false) ?: false
-        lyricFontSize = prefs?.getInt(KEY_LYRIC_FONT_SIZE, 26) ?: 26
+        lyricFontSize = prefs?.getInt(KEY_LYRIC_FONT_SIZE, 28) ?: 28
         lyricTranslationRatio = prefs?.getInt(KEY_LYRIC_TRANSLATION_RATIO, 70) ?: 70
         useRoundCover = prefs?.getBoolean(KEY_USE_ROUND_COVER, false) ?: false
         coverRotationIndex = prefs?.getInt(KEY_COVER_ROTATION, 0) ?: 0
-        keepScreenOn = prefs?.getBoolean(KEY_KEEP_SCREEN_ON, false) ?: false
+        coverStyleIndex = prefs?.getInt(KEY_COVER_STYLE, 2) ?: 2
+        keepScreenOn = prefs?.getBoolean(KEY_KEEP_SCREEN_ON, true) ?: true
         lyricCenter = prefs?.getBoolean(KEY_LYRIC_CENTER, false) ?: false
     }
 
@@ -90,6 +96,11 @@ object ThemeSettings {
     fun updateCoverRotationIndex(index: Int) {
         coverRotationIndex = index
         prefs?.edit()?.putInt(KEY_COVER_ROTATION, index)?.apply()
+    }
+
+    fun updateCoverStyleIndex(index: Int) {
+        coverStyleIndex = index
+        prefs?.edit()?.putInt(KEY_COVER_STYLE, index)?.apply()
     }
 
     fun updateKeepScreenOn(value: Boolean) {

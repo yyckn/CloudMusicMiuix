@@ -41,6 +41,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     private var playbackPosition = 0L
     private var currentBitmap: Bitmap? = null
     private var currentLyrics: com.cloudmusic.miuix.data.model.SongLyrics? = null
+    private var wasPlayingBeforeFocusLoss = false
     
     // 回调接口，用于通知ViewModel歌曲切换
     var onTrackChangedListener: OnTrackChangedListener? = null
@@ -268,6 +269,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     fun togglePlayPause() {
+        wasPlayingBeforeFocusLoss = false
         if (isPlaying) {
             pausePlayback()
         } else {
@@ -412,9 +414,11 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS -> {
+                wasPlayingBeforeFocusLoss = isPlaying
                 pausePlayback()
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                wasPlayingBeforeFocusLoss = isPlaying
                 pausePlayback()
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
@@ -422,7 +426,10 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 mediaPlayer?.setVolume(1.0f, 1.0f)
-                resumePlayback()
+                if (wasPlayingBeforeFocusLoss) {
+                    resumePlayback()
+                    wasPlayingBeforeFocusLoss = false
+                }
             }
         }
     }

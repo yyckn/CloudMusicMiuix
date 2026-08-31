@@ -144,19 +144,6 @@ fun PlaylistPage(
                         )
                     }
 
-                    // 心动模式
-                    if (likedPlaylists.isNotEmpty()) {
-                        val likedPlaylist = likedPlaylists.first()
-                        val firstTrackId = recommendState.dailySongs.firstOrNull()?.id ?: ""
-                        if (firstTrackId.isNotEmpty()) {
-                            item {
-                                IntelligenceModeCard(
-                                    onClick = { onIntelligenceMode(firstTrackId, likedPlaylist.id) }
-                                )
-                            }
-                        }
-                    }
-
                     // 我喜欢的音乐歌单
                     if (likedPlaylists.isEmpty()) {
                         item {
@@ -176,15 +163,7 @@ fun PlaylistPage(
                     }
 
                     // 其他歌单
-                    if (otherPlaylists.isEmpty()) {
-                        item {
-                            Text(
-                                text = "暂无歌单",
-                                modifier = Modifier.padding(vertical = 16.dp),
-                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                            )
-                        }
-                    } else {
+                    if (otherPlaylists.isNotEmpty()) {
                         items(otherPlaylists) { playlist ->
                             UserPlaylistCard(
                                 playlist = playlist,
@@ -245,59 +224,6 @@ private fun UserPlaylistCard(
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun IntelligenceModeCard(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        pressFeedbackType = PressFeedbackType.Tilt,
-        showIndication = true,
-        onClick = onClick
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MiuixTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "❤",
-                    fontSize = 24.sp,
-                    color = MiuixTheme.colorScheme.onPrimary
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column {
-                Text(
-                    text = "心动模式",
-                    style = MiuixTheme.textStyles.main,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "根据当前喜爱歌曲实时推荐",
-                    style = MiuixTheme.textStyles.subtitle,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
             }
         }
     }

@@ -365,6 +365,11 @@ fun MainScreen(
                                         isLoggedIn = isLoggedIn,
                                         isPlayerPageVisible = showPlayerPage,
                                         onOpenPlayerPage = { showPlayerPage = true },
+                                        onIntelligenceMode = { songId, playlistId ->
+                                            viewModel.enterIntelligenceMode(songId, playlistId) {
+                                                showPlayerPage = true
+                                            }
+                                        },
                                         modifier = Modifier.padding(padding)
                                     )
                                 1 -> PlaylistPage(
@@ -592,6 +597,11 @@ fun MainScreen(
                                     isLoggedIn = isLoggedIn,
                                     isPlayerPageVisible = showPlayerPage,
                                     onOpenPlayerPage = { showPlayerPage = true },
+                                    onIntelligenceMode = { songId, playlistId ->
+                                        viewModel.enterIntelligenceMode(songId, playlistId) {
+                                            showPlayerPage = true
+                                        }
+                                    },
                                     modifier = Modifier.padding(padding)
                                 )
                                 1 -> PlaylistPage(

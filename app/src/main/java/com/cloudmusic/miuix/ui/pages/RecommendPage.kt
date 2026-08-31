@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -34,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -73,6 +75,7 @@ fun RecommendPage(
     isLoggedIn: Boolean,
     isPlayerPageVisible: Boolean = false,
     onOpenPlayerPage: () -> Unit = {},
+    onIntelligenceMode: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -298,50 +301,48 @@ fun RecommendPage(
                         color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                     )
                 }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(160.dp),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .overScrollVertical()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // 每日推荐歌单
-                    if (recommendState.dailySongs.isNotEmpty()) {
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(160.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .overScrollVertical()
+                            .nestedScroll(scrollBehavior.nestedScrollConnection),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // 每日推荐、随身听FM、心动模式 横向滚动卡片
                         item(span = { GridItemSpan(maxLineSpan) }) {
-                            DailyRecommendCard(
-                                songs = recommendState.dailySongs,
-                                onClick = {
-                                    // 跳转到每日推荐歌单详情页
+                            FeatureCardsRow(
+                                dailySongs = recommendState.dailySongs,
+                                onDailyRecommendClick = {
                                     onPlaylistClick("daily_recommend", "", "每日推荐")
+                                },
+                                onFmClick = {
+                                    viewModel.enterFMMode()
+                                    onOpenPlayerPage()
+                                },
+                                onIntelligenceModeClick = { trackId, playlistId ->
+                                    onIntelligenceMode(trackId, playlistId)
                                 }
                             )
                         }
-                    }
 
-                    // 随身听FM
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        FmCard(
-                            onClick = {
-                                android.util.Log.d("RecommendPage", "FM card clicked, entering FM mode")
-                                viewModel.enterFMMode()
-                                onOpenPlayerPage()
-                            }
-                        )
-                    }
+                        // 歌单推荐标题
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            SmallTitle("歌单推荐")
+                        }
 
-                    // 推荐歌单
-                    items(recommendState.playlists) { playlist ->
-                        RecommendPlaylistCard(
-                            playlist = playlist,
-                            onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }
-                        )
+                        // 推荐歌单
+                        items(recommendState.playlists) { playlist ->
+                            RecommendPlaylistCard(
+                                playlist = playlist,
+                                onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }
+                            )
+                        }
                     }
                 }
-            }
         }
     }
 }
@@ -396,49 +397,46 @@ private fun RecommendPlaylistCard(
 }
 
 @Composable
-private fun DailyRecommendCard(
-    songs: List<Track>,
-    onClick: () -> Unit,
+private fun FeatureCardsRow(
+    dailySongs: List<Track>,
+    onDailyRecommendClick: () -> Unit,
+    onFmClick: () -> Unit,
+    onIntelligenceModeClick: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    LazyRow(
         modifier = modifier.fillMaxWidth(),
-        pressFeedbackType = PressFeedbackType.Tilt,
-        showIndication = true,
-        onClick = onClick
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 0.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsyncImage(
-                model = songs.firstOrNull()?.imgUrl,
-                contentDescription = "每日推荐",
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop,
-                error = painterResource(android.R.drawable.ic_menu_gallery)
+        // 每日推荐
+        item {
+            FeatureCard(
+                title = "每日推荐",
+                coverUrl = dailySongs.firstOrNull()?.imgUrl ?: "",
+                onClick = onDailyRecommendClick
             )
+        }
 
-            Spacer(modifier = Modifier.width(16.dp))
+        // 随身听FM
+        item {
+            FeatureCard(
+                title = "随身听FM",
+                coverUrl = "",
+                onClick = onFmClick,
+                isFmCard = true
+            )
+        }
 
-            Column {
-                Text(
-                    text = "每日推荐",
-                    style = MiuixTheme.textStyles.main,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "${songs.size}首歌曲",
-                    style = MiuixTheme.textStyles.subtitle,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        // 心动模式（需要传入likedPlaylists信息）
+        // 这里简化处理，只在有每日推荐歌曲时显示
+        if (dailySongs.isNotEmpty()) {
+            item {
+                FeatureCard(
+                    title = "心动模式",
+                    coverUrl = "",
+                    onClick = { onIntelligenceModeClick(dailySongs.first().id, "") },
+                    isIntelligenceCard = true
                 )
             }
         }
@@ -446,55 +444,79 @@ private fun DailyRecommendCard(
 }
 
 @Composable
-private fun FmCard(
+private fun FeatureCard(
+    title: String,
+    coverUrl: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isFmCard: Boolean = false,
+    isIntelligenceCard: Boolean = false
 ) {
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.width(140.dp),
         pressFeedbackType = PressFeedbackType.Tilt,
         showIndication = true,
         onClick = onClick
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.Start
         ) {
+            // 封面图片
             Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MiuixTheme.colorScheme.primary),
+                    .size(116.dp)
+                    .clip(RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "FM",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onPrimary
-                )
+                if (isFmCard) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0xFFE0E0E0)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "📻",
+                            fontSize = 48.sp
+                        )
+                    }
+                } else if (isIntelligenceCard) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0xFFFFCDD2)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "❤",
+                            fontSize = 40.sp,
+                            color = Color(0xFFE53935)
+                        )
+                    }
+                } else {
+                    AsyncImage(
+                        model = coverUrl,
+                        contentDescription = title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(android.R.drawable.ic_menu_gallery)
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            Column {
-                Text(
-                    text = "随身听FM",
-                    style = MiuixTheme.textStyles.main,
-                    fontWeight = FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "发现你可能喜欢的音乐",
-                    style = MiuixTheme.textStyles.subtitle,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
+            // 标题靠左
+            Text(
+                text = title,
+                style = MiuixTheme.textStyles.body2,
+                fontWeight = FontWeight.Bold,
+                color = MiuixTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

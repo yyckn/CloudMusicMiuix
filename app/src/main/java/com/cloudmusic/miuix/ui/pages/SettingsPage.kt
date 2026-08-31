@@ -222,7 +222,7 @@ fun SettingsPage(
                         )
                         ArrowPreference(
                             title = "播放页设置",
-                            summary = "歌词",
+                            summary = "歌词、封面等",
                             onClick = onPlayPageSettingsClick
                         )
                     }

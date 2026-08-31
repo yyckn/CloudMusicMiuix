@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -46,8 +47,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -204,6 +207,22 @@ fun PlayerPage(
     val pageCount = 2
     val pagerState = rememberPagerState(pageCount = { pageCount })
     val coroutineScope = rememberCoroutineScope()
+    
+    // 全屏封面模式下，歌词显示状态
+    var showLyricsInFullScreen by remember { mutableStateOf(false) }
+    val coverStyleIndex = ThemeSettings.coverStyleIndex // 0=卡片, 1=全屏渐变
+    
+    // 歌词和蒙版动画
+    val lyricsAlpha by animateFloatAsState(
+        targetValue = if (showLyricsInFullScreen) 1f else 0f,
+        animationSpec = tween(durationMillis = 500),
+        label = "lyrics_alpha"
+    )
+    val maskAlpha by animateFloatAsState(
+        targetValue = if (showLyricsInFullScreen) 0.6f else 0f,
+        animationSpec = tween(durationMillis = 500),
+        label = "mask_alpha"
+    )
 
     // 封面旋转动画
     val useRoundCover = ThemeSettings.useRoundCover
@@ -343,7 +362,128 @@ fun PlayerPage(
             }
             
             if (isTablet) {
-                // 平板布局：左右分屏
+                // 平板布局
+                if (coverStyleIndex == 1 || coverStyleIndex == 2) {
+                    // 全屏渐变封面样式（平板）
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // 封面层（覆盖全屏高度，包括状态栏）
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(0.55f)
+                                .align(Alignment.CenterStart)
+                                .graphicsLayer {
+                                    compositingStrategy = CompositingStrategy.Offscreen
+                                }
+                                .drawWithContent {
+                                    drawContent()
+                                    drawRect(
+                                        brush = Brush.horizontalGradient(
+                                            colors = listOf(
+                                                Color.Black,
+                                                Color.Black,
+                                                Color.Transparent
+                                            ),
+                                            startX = size.width * 0.6f,
+                                            endX = size.width
+                                        ),
+                                        blendMode = androidx.compose.ui.graphics.BlendMode.DstIn
+                                    )
+                                }
+                        ) {
+                            Crossfade(
+                                targetState = track?.imgUrl,
+                                animationSpec = tween(durationMillis = 500),
+                                label = "tablet_cover_crossfade"
+                            ) { imgUrl ->
+                                AsyncImage(
+                                    model = imgUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop,
+                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                )
+                            }
+                        }
+                        
+                        // 右侧内容区域（50%宽度）
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(0.5f)
+                                .align(Alignment.CenterEnd)
+                                .padding(top = topPadding)
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                // 歌曲标题和信息
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp)
+                                        .padding(top = 16.dp, bottom = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = track?.title ?: "未知歌曲", fontSize = 24.sp, fontWeight = FontWeight.Medium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}", fontSize = 14.sp, color = Color.White.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+                                    }
+                                    IconButton(onClick = onOpenSystemUI) {
+                                        Icon(imageVector = MiuixIcons.ScreenMirroring, contentDescription = "投屏", tint = Color.White)
+                                    }
+                                }
+                                
+                                // 歌词区域（中间）
+                                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                    if (isPureMusic) {
+                                        Box(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp), contentAlignment = Alignment.Center) {
+                                            Text(text = "纯音乐，请欣赏", fontSize = 16.sp, color = Color.White.copy(alpha = 0.5f))
+                                        }
+                                    } else {
+                                        LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp))
+                                    }
+                                }
+                                
+                                // 控制按钮（底部）
+                                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 16.dp)) {
+                                    val progress = if (playerState.duration > 0) playerState.currentPosition.toFloat() / playerState.duration.toFloat() else 0f
+                                    Slider(value = progress, onValueChange = { newValue -> onSeekTo((newValue * playerState.duration).toLong()) }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
+                                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(text = formatDuration(playerState.currentPosition), fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
+                                        Text(text = buildString { if (isFMMode) append("FM模式 · "); else if (isIntelligenceMode) append("心动模式 · "); append(getQualityText(playerState.bitrate)) }, fontSize = 12.sp, color = Color.White)
+                                        Text(text = formatDuration(playerState.duration), fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
+                                    }
+                                    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) { Icon(imageVector = MiuixIcons.ChevronBackward, contentDescription = "上一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
+                                            Spacer(modifier = Modifier.width(24.dp))
+                                            Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
+                                                if (playerState.isLoading) InfiniteProgressIndicator(modifier = Modifier.size(40.dp))
+                                                else IconButton(onClick = onTogglePlayPause) { Icon(imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play, contentDescription = if (playerState.isPlaying) "暂停" else "播放", tint = Color.White, modifier = Modifier.size(40.dp)) }
+                                            }
+                                            Spacer(modifier = Modifier.width(24.dp))
+                                            IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) { Icon(imageVector = MiuixIcons.ChevronForward, contentDescription = "下一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
+                                        }
+                                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(onClick = onBackClick, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.Close, contentDescription = "关闭", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                            if (!isFMMode && !isIntelligenceMode) {
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                                IconButton(onClick = onSwitchPlayMode, modifier = Modifier.size(48.dp)) { Icon(imageVector = when (playMode) { 0 -> MiuixIcons.Sort; 1 -> MiuixIcons.Merge; 2 -> MiuixIcons.Replace; else -> MiuixIcons.Sort }, contentDescription = when (playMode) { 0 -> "顺序播放"; 1 -> "乱序播放"; 2 -> "单曲循环"; else -> "顺序播放" }, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                            }
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            if (!isFMMode && !isIntelligenceMode) {
+                                                IconButton(onClick = { showPlaylistSheet = true }, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.ListView, contentDescription = "播放列表", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                            }
+                                            IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.More, contentDescription = "更多", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                // 卡片封面样式（原有平板布局）
                 // 计算最大宽度，小屏模式下铺满屏幕，否则保证长宽比不超过5:4
                 val maxContentWidth = if (isSmallScreen) {
                     screenWidth
@@ -627,8 +767,132 @@ fun PlayerPage(
                         }
                     }
                 }
+                } // 结束平板卡片封面样式
             } else {
-                // 手机布局：原有布局
+                // 手机布局
+                if (coverStyleIndex == 1) {
+                    // 全屏渐变封面样式（手机）
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // 模糊背景（全屏，覆盖状态栏区域）
+                        Crossfade(
+                            targetState = track?.imgUrl,
+                            animationSpec = tween(durationMillis = 500),
+                            label = "fullscreen_bg_crossfade"
+                        ) { imgUrl ->
+                            AsyncImage(
+                                model = imgUrl,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer(scaleX = 1.15f, scaleY = 1.15f)
+                                    .blur(radius = 100.dp),
+                                contentScale = ContentScale.Crop,
+                                error = painterResource(android.R.drawable.ic_menu_gallery)
+                            )
+                        }
+                        // 深色蒙版
+                        Box(modifier = Modifier.fillMaxSize().background(Color(0x40000000)))
+                        
+                        // 内容层
+                        Column(
+                            modifier = Modifier.padding(top = topPadding).fillMaxSize()
+                        ) {
+                            // 歌曲标题和信息
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 16.dp, bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(text = track?.title ?: "未知歌曲", fontSize = 24.sp, fontWeight = FontWeight.Medium, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}", fontSize = 14.sp, color = Color.White.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+                                }
+                                IconButton(onClick = onOpenSystemUI) {
+                                    Icon(imageVector = MiuixIcons.ScreenMirroring, contentDescription = "投屏", tint = Color.White)
+                                }
+                            }
+                            
+                            // 中间区域：封面 + 歌词
+                            Box(
+                                modifier = Modifier.weight(1f).fillMaxWidth()
+                                    .clickable(
+                                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                        indication = null
+                                    ) { showLyricsInFullScreen = !showLyricsInFullScreen },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                // 清晰封面
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+                                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                                        .drawWithContent {
+                                            drawContent()
+                                            drawRect(
+                                                brush = Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black, Color.Black, Color.Transparent)),
+                                                blendMode = androidx.compose.ui.graphics.BlendMode.DstIn
+                                            )
+                                        }
+                                ) {
+                                    Crossfade(targetState = track?.imgUrl, animationSpec = tween(durationMillis = 500), label = "fullscreen_cover_crossfade") { imgUrl ->
+                                        AsyncImage(
+                                            model = imgUrl, contentDescription = null,
+                                            modifier = Modifier.fillMaxSize().then(if (showLyricsInFullScreen) Modifier.blur(10.dp) else Modifier),
+                                            contentScale = ContentScale.Crop,
+                                            error = painterResource(android.R.drawable.ic_menu_gallery)
+                                        )
+                                    }
+                                    if (lyricsAlpha > 0f) {
+                                        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF333333).copy(alpha = maskAlpha)))
+                                    }
+                                }
+                                
+                                // 歌词显示
+                                if (lyricsAlpha > 0f) {
+                                    Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = lyricsAlpha }) {
+                                        if (isPureMusic) {
+                                            Box(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp), contentAlignment = Alignment.Center) {
+                                                Text(text = "纯音乐，请欣赏", fontSize = 16.sp, color = Color.White.copy(alpha = 0.5f))
+                                            }
+                                        } else {
+                                            LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp))
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // 底部控制区域
+                            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                                val progress = if (playerState.duration > 0) playerState.currentPosition.toFloat() / playerState.duration.toFloat() else 0f
+                                Slider(value = progress, onValueChange = { newValue -> onSeekTo((newValue * playerState.duration).toLong()) }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
+                                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(text = formatDuration(playerState.currentPosition), fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
+                                    Text(text = buildString { if (isFMMode) append("FM模式 · "); else if (isIntelligenceMode) append("心动模式 · "); append(getQualityText(playerState.bitrate)) }, fontSize = 12.sp, color = Color.White)
+                                    Text(text = formatDuration(playerState.duration), fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
+                                }
+                                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) { Icon(imageVector = MiuixIcons.ChevronBackward, contentDescription = "上一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
+                                        Spacer(modifier = Modifier.width(24.dp))
+                                        Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
+                                            if (playerState.isLoading) InfiniteProgressIndicator(modifier = Modifier.size(40.dp))
+                                            else IconButton(onClick = onTogglePlayPause) { Icon(imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play, contentDescription = if (playerState.isPlaying) "暂停" else "播放", tint = Color.White, modifier = Modifier.size(40.dp)) }
+                                        }
+                                        Spacer(modifier = Modifier.width(24.dp))
+                                        IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) { Icon(imageVector = MiuixIcons.ChevronForward, contentDescription = "下一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
+                                    }
+                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(onClick = onBackClick, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.Close, contentDescription = "关闭", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        IconButton(onClick = { showLyricsInFullScreen = !showLyricsInFullScreen }, modifier = Modifier.size(48.dp)) { Icon(imageVector = if (showLyricsInFullScreen) MiuixIcons.NotesFill else MiuixIcons.Notes, contentDescription = "歌词", tint = if (showLyricsInFullScreen) Color.White else Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.More, contentDescription = "更多", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                // 卡片封面样式（原有手机布局）
                 Column(
                     modifier = Modifier
                         .padding(top = topPadding)
@@ -957,7 +1221,8 @@ fun PlayerPage(
                     }
                 }
             }
-
+            } // 结束手机卡片封面样式
+            
             // 播放列表抽屉（作为覆盖层）
             var shouldScrollToCurrent by remember { mutableStateOf(false) }
             

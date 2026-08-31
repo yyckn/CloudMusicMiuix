@@ -1620,9 +1620,9 @@ object NeteaseApi {
                 songArtist.split("/", "、", " ").map { it.trim() }.filter { it.isNotEmpty() }
             }
             val lyrics = if (yrcLyric.isNotEmpty()) {
-                parseYrc(yrcLyric, tLyric, effectiveArtistNames)
+                parseYrc(yrcLyric, tLyric, effectiveArtistNames, songTitle)
             } else {
-                parseLrc(lrcLyric, tLyric, effectiveArtistNames)
+                parseLrc(lrcLyric, tLyric, effectiveArtistNames, songTitle)
             }
             
             // 判断是否为纯音乐：刨去无用信息的歌词小于等于3行
@@ -1650,7 +1650,7 @@ object NeteaseApi {
         }
     }
 
-    private fun parseLrc(lrc: String, tlyric: String, artistNames: List<String> = emptyList()): SongLyrics {
+    private fun parseLrc(lrc: String, tlyric: String, artistNames: List<String> = emptyList(), songTitle: String = ""): SongLyrics {
         val singleTimeRegex = Regex("""\[(\d+):(\d+\.\d+)](.*)""")
         val multiTimeRegex = Regex("""(\[\d+:\d+\.\d+])+(.*)""")
         val timeTagRegex = Regex("""\[(\d+):(\d+\.\d+)]""")
@@ -1707,7 +1707,7 @@ object NeteaseApi {
                 0L // 最后一行
             }
             
-            if (!isExcludedLyric(text, duration)) {
+            if (!isExcludedLyric(text, duration, songTitle, artistNames)) {
                 val translation = tlyricMap[time] ?: ""
                 val (isArtist, splitLyrics) = parseArtistLine(text, artistNames)
                 
@@ -1807,7 +1807,7 @@ object NeteaseApi {
         // 歌手名称（拆分/、顿号、空格）
         keywords.addAll(artistNames.flatMap { it.split("/", "、", " ") }.map { it.trim() }.filter { it.isNotEmpty() })
         // 额外关键词
-        keywords.addAll(listOf("童声", "合", "何炅", "万妮达", "袁娅维", "时代少年团宋亚轩"))
+        keywords.addAll(listOf("童声", "合", "合唱", "男", "女", "何炅", "方力申", "万妮达", "袁娅维", "时代少年团宋亚轩", "艾热AIR"))
         
         // 3. 检查是否包含冒号（中英文都算）
         val hasChineseColon = contentWithoutBrackets.contains("：")
@@ -1915,7 +1915,7 @@ object NeteaseApi {
         
         return Pair(false, null)
     }
-    private fun parseYrc(yrc: String, tlyric: String, artistNames: List<String> = emptyList()): SongLyrics {
+    private fun parseYrc(yrc: String, tlyric: String, artistNames: List<String> = emptyList(), songTitle: String = ""): SongLyrics {
         val headerRegex = Regex("""\[(\d{1,19}),\s*(\d{1,19})]""")
         val segRegex = Regex("""\((\d{1,19}),\s*(\d{1,19}),\s*[-\d]{1,20}\)([^()\n\r]*)""")
         val tlyricRegex = Regex("""\[(\d+):(\d+\.\d+)](.*)""")
@@ -1962,7 +1962,7 @@ object NeteaseApi {
             }
 
             val text = sb.toString().trim()
-            if (text.isNotEmpty() && !isExcludedLyric(text, dur)) {
+            if (text.isNotEmpty() && !isExcludedLyric(text, dur, songTitle, artistNames)) {
                 // 查找翻译（使用开始时间匹配）
                 val translation = tlyricMap[start] ?: ""
                 val (isArtist, splitLyrics) = parseArtistLine(text, artistNames)
@@ -2017,9 +2017,9 @@ object NeteaseApi {
         return SongLyrics(lines = lines.sortedBy { it.startAt })
     }
 
-    private fun isExcludedLyric(text: String, duration: Long = 0): Boolean {
+    private fun isExcludedLyric(text: String, duration: Long = 0, songTitle: String = "", artistNames: List<String> = emptyList()): Boolean {
         val colonKeywords = listOf(
-            "编曲", "母带", "OP", "SP", "出品", "贡献者", "调教", "编写", "改编", "和声", "吉他", "鼓", "混音", "剪辑", "MV", "曲绘", "后期", "推广", "出品人", "制作人", "监制", "统筹", "平面视觉", "感谢", "录音棚", "录音", "设计", "手风琴", "巴拉莱卡", "弦乐", "小提琴", "编辑", "录音室", "工程师", "导演", "造型师", "妆发", "文案", "企划", "宣传", "艺人经纪", "经纪人", "营销", "总监", "op", "sp", "pv", "PV", "OA", "OC", "oa", "oc", "制作", "署名", "策划", "表演", "词", "曲", "发行", "原唱", "打击乐", "贝斯", "钢琴", "键盘", "Program", "合音", "合唱", "演唱", "乐谱", "提琴", "和音", "鸣谢", "运营", "执行", "拍摄", "摄影", "花絮", "助理", "服装", "顾问", "版权", "翻译", "制片", "道具师", "灯光师", "调色", "合成", "承制", "艺人", "行销", "媒介", "有限公司", "资产", "技术支持", "合作伙伴", "视频平台", "口哨", "三弦", "长笛", "黑管", "童声", "缩混", "合作", "指导", "PGM", "编舞", "舞团", "宣发", "录混", "唢呐", "萨克斯", "笛子", "声明", "古筝", "箫", "人声", "配唱", "主唱", "封面", "A&R", "乐队", "队长", "女生", "项目支持", "曼陀林", "指挥", "单簧管", "独奏", "乐团", "协力", "项目", "rap", "友情客串", "二胡", "帮帮团", "Guitar", "旋律创作", "陶笛"
+            "编曲", "母带", "OP", "SP", "出品", "贡献者", "调教", "编写", "改编", "和声", "吉他", "鼓", "混音", "剪辑", "MV", "曲绘", "后期", "推广", "出品人", "制作人", "监制", "统筹", "平面视觉", "感谢", "录音棚", "录音", "设计", "手风琴", "巴拉莱卡", "弦乐", "小提琴", "编辑", "录音室", "工程师", "导演", "造型师", "妆发", "文案", "企划", "宣传", "艺人经纪", "经纪人", "营销", "总监", "op", "sp", "pv", "PV", "OA", "OC", "oa", "oc", "制作", "署名", "策划", "表演", "词", "曲", "发行", "原唱", "打击乐", "贝斯", "钢琴", "键盘", "Program", "合音", "合唱", "演唱", "乐谱", "提琴", "和音", "鸣谢", "运营", "执行", "拍摄", "摄影", "花絮", "助理", "服装", "顾问", "版权", "翻译", "制片", "道具师", "灯光师", "调色", "合成", "承制", "艺人", "行销", "媒介", "有限公司", "资产", "技术支持", "合作伙伴", "视频平台", "口哨", "三弦", "长笛", "黑管", "童声", "缩混", "合作", "指导", "PGM", "编舞", "舞团", "宣发", "录混", "唢呐", "萨克斯", "笛子", "声明", "古筝", "箫", "人声", "配唱", "主唱", "封面", "A&R", "乐队", "队长", "女生", "项目支持", "曼陀林", "指挥", "簧管", "独奏", "乐团", "协力", "项目", "rap", "友情客串", "二胡", "帮帮团", "Guitar", "旋律创作", "陶笛", "冬不拉", "扬琴", "卡龙", "小号", "中号", "大号", "竹笛"
         )
 
         val hasColon = text.contains("：") || text.contains(":")
@@ -2060,6 +2060,23 @@ object NeteaseApi {
         for (keyword in plainKeywords) {
             if (text.contains(keyword)) {
                 return true
+            }
+        }
+
+        // 检查是否匹配"歌手-歌名"或"歌名-歌手"格式
+        if (songTitle.isNotEmpty() && artistNames.isNotEmpty()) {
+            val trimmedText = text.trim()
+            for (artistName in artistNames) {
+                if (artistName.isNotEmpty()) {
+                    // 歌手-歌名
+                    if (trimmedText == "$artistName-$songTitle") return false
+                    // 歌手 - 歌名
+                    if (trimmedText == "$artistName - $songTitle") return false
+                    // 歌名 - 歌手
+                    if (trimmedText == "$songTitle - $artistName") return false
+                    // 歌名-歌手
+                    if (trimmedText == "$songTitle-$artistName") return false
+                }
             }
         }
         

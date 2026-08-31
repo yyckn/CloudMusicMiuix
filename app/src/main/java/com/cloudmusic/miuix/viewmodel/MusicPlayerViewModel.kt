@@ -120,6 +120,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val gson = Gson()
     private val prefs = application.getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
 
+    init {
+        // 恢复FM模式或心动模式状态
+        val savedMode = prefs.getString("play_mode_type", "normal")
+        when (savedMode) {
+            "fm" -> {
+                isFMMode = true
+                // FM歌曲列表会在绑定服务后异步加载
+            }
+            "intelligence" -> {
+                isIntelligenceMode = true
+                val songId = prefs.getString("intelligence_song_id", "") ?: ""
+                val playlistId = prefs.getString("intelligence_playlist_id", "") ?: ""
+                if (songId.isNotEmpty() && playlistId.isNotEmpty()) {
+                    // 心动模式歌曲列表会在绑定服务后异步加载
+                }
+            }
+        }
+    }
+
     private var pendingTrack: Track? = null
     private var lyricsLoadJob: kotlinx.coroutines.Job? = null
 
@@ -179,6 +198,55 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         loadUserPlaylists()
         bindMediaService()
         startProgressUpdate()
+        
+        // 恢复FM模式或心动模式
+        val savedMode = prefs.getString("play_mode_type", "normal")
+        when (savedMode) {
+            "fm" -> {
+                isFMMode = true
+                viewModelScope.launch {
+                    NeteaseApi.getPersonalFM().fold(
+                        onSuccess = { tracks ->
+                            fmPlaylist = tracks
+                            if (tracks.isNotEmpty()) {
+                                currentPlaylist = tracks
+                                // 如果没有上次播放的歌曲，播放第一首
+                                if (playerState.currentTrack == null) {
+                                    playTrack(tracks[0])
+                                }
+                            }
+                        },
+                        onFailure = { e ->
+                            Log.e("MusicPlayerViewModel", "Failed to restore FM: ${e.message}")
+                        }
+                    )
+                }
+            }
+            "intelligence" -> {
+                isIntelligenceMode = true
+                val songId = prefs.getString("intelligence_song_id", "") ?: ""
+                val playlistId = prefs.getString("intelligence_playlist_id", "") ?: ""
+                if (songId.isNotEmpty() && playlistId.isNotEmpty()) {
+                    viewModelScope.launch {
+                        NeteaseApi.getIntelligenceList(songId, playlistId).fold(
+                            onSuccess = { tracks ->
+                                intelligencePlaylist = tracks
+                                if (tracks.isNotEmpty()) {
+                                    currentPlaylist = tracks
+                                    // 如果没有上次播放的歌曲，播放第一首
+                                    if (playerState.currentTrack == null) {
+                                        playTrack(tracks[0])
+                                    }
+                                }
+                            },
+                            onFailure = { e ->
+                                Log.e("MusicPlayerViewModel", "Failed to restore intelligence mode: ${e.message}")
+                            }
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private fun startProgressUpdate() {
@@ -457,6 +525,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         Log.d("MusicPlayerViewModel", "enterFMMode called")
         isFMMode = true
         fmIndex = 0
+        // 保存FM模式状态
+        prefs.edit().putString("play_mode_type", "fm").apply()
         viewModelScope.launch {
             Log.d("MusicPlayerViewModel", "Loading FM songs...")
             NeteaseApi.getPersonalFM().fold(
@@ -479,6 +549,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         isFMMode = false
         fmPlaylist = emptyList()
         fmIndex = 0
+        // 清除FM模式状态
+        prefs.edit().remove("play_mode_type").apply()
     }
 
     fun fmPlayNext() {
@@ -513,6 +585,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun enterIntelligenceMode(songId: String, playlistId: String, onReady: () -> Unit = {}) {
         isIntelligenceMode = true
         intelligenceIndex = 0
+        // 保存心动模式状态
+        prefs.edit()
+            .putString("play_mode_type", "intelligence")
+            .putString("intelligence_song_id", songId)
+            .putString("intelligence_playlist_id", playlistId)
+            .apply()
         viewModelScope.launch {
             Log.d("MusicPlayerViewModel", "Loading intelligence list for songId: $songId, playlistId: $playlistId")
             NeteaseApi.getIntelligenceList(songId, playlistId).fold(
@@ -537,6 +615,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         isIntelligenceMode = false
         intelligencePlaylist = emptyList()
         intelligenceIndex = 0
+        // 清除心动模式状态
+        prefs.edit()
+            .remove("play_mode_type")
+            .remove("intelligence_song_id")
+            .remove("intelligence_playlist_id")
+            .apply()
     }
 
     fun intelligencePlayNext() {

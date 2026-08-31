@@ -449,28 +449,28 @@ fun WaitingLyricDots(
 
                 if (shouldAnimate) {
                     if (elapsedInDot < firstAnimDuration) {
-                        // 第一次动画：0.8倍 → 1倍，灰色 → 白色
+                        // 第一次动画：0.8倍 → 1倍，半透明白色 → 白色
                         val progress = elapsedInDot.toFloat() / firstAnimDuration.toFloat()
                         dotScale = 0.8f + 0.2f * progress
-                        dotColor = androidx.compose.ui.graphics.lerp(Color.Gray, Color.White, progress)
+                        dotColor = androidx.compose.ui.graphics.lerp(Color.White.copy(alpha = 0.4f), Color.White, progress)
                     } else {
-                        // 循环动画：1倍 → 0.8倍 → 1倍，白色 → 灰色 → 白色
+                        // 循环动画：1倍 → 0.8倍 → 1倍，白色 → 半透明白色 → 白色
                         val loopElapsed = elapsedInDot - firstAnimDuration
                         val loopProgress = ((loopElapsed % loopDuration).toFloat() / loopDuration.toFloat()).coerceIn(0f, 1f)
                         val animProgress = kotlin.math.sin(loopProgress * kotlin.math.PI.toFloat())
                         // sin(0)=0, sin(π/2)=1, sin(π)=0 → 1x → 0.8x → 1x
                         dotScale = 1f - 0.2f * animProgress
-                        // 颜色同步：白色 → 灰色 → 白色
-                        dotColor = androidx.compose.ui.graphics.lerp(Color.White, Color.Gray, animProgress)
+                        // 颜色同步：白色 → 半透明白色 → 白色
+                        dotColor = androidx.compose.ui.graphics.lerp(Color.White, Color.White.copy(alpha = 0.4f), animProgress)
                     }
                 } else if (isActive) {
                     // 动画完成，保持最终状态：1倍，白色
                     dotScale = 1f
                     dotColor = Color.White
                 } else {
-                    // 未开始状态：0.8倍，灰色
+                    // 未开始状态：0.8倍，半透明白色
                     dotScale = 0.8f
-                    dotColor = Color.Gray
+                    dotColor = Color.White.copy(alpha = 0.4f)
                 }
 
                 // 固定宽度容器，防止字号变化导致后面的圆圈移动

@@ -45,11 +45,16 @@ fun PlayPageSettingsPage(
     var translationRatio by remember { mutableFloatStateOf(ThemeSettings.lyricTranslationRatio.toFloat()) }
     var useRoundCover by remember { mutableStateOf(ThemeSettings.useRoundCover) }
     var coverRotationIndex by remember { mutableStateOf(ThemeSettings.coverRotationIndex) }
+    var coverStyleIndex by remember { mutableStateOf(ThemeSettings.coverStyleIndex) } // 0=卡片, 1=全屏渐变
     var keepScreenOn by remember { mutableStateOf(ThemeSettings.keepScreenOn) }
     var lyricCenter by remember { mutableStateOf(ThemeSettings.lyricCenter) }
 
     val coverRotationOptions = remember {
         listOf("静止", "播放时旋转", "始终旋转")
+    }
+
+    val coverStyleOptions = remember {
+        listOf("卡片", "全屏渐变", "竖屏使用卡片，横屏使用全屏渐变")
     }
 
     BackHandler {
@@ -173,35 +178,48 @@ fun PlayPageSettingsPage(
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 12.dp)
                 ) {
-                    // 使用圆形封面
-                    BasicComponent(
-                        title = "使用圆形封面",
-                        endActions = {
-                            Switch(
-                                checked = useRoundCover,
-                                onCheckedChange = { newValue ->
-                                    useRoundCover = newValue
-                                    ThemeSettings.updateUseRoundCover(newValue)
-                                }
-                            )
-                        },
-                        onClick = {
-                            useRoundCover = !useRoundCover
-                            ThemeSettings.updateUseRoundCover(useRoundCover)
+                    // 封面样式
+                    WindowDropdownPreference(
+                        title = "封面样式",
+                        items = coverStyleOptions,
+                        selectedIndex = coverStyleIndex,
+                        onSelectedIndexChange = { newIndex ->
+                            coverStyleIndex = newIndex
+                            ThemeSettings.updateCoverStyleIndex(newIndex)
                         }
                     )
 
-                    // 封面旋转（仅在圆形封面开启时显示）
-                    if (useRoundCover) {
-                        WindowDropdownPreference(
-                            title = "封面旋转",
-                            items = coverRotationOptions,
-                            selectedIndex = coverRotationIndex,
-                            onSelectedIndexChange = { newIndex ->
-                                coverRotationIndex = newIndex
-                                ThemeSettings.updateCoverRotationIndex(newIndex)
+                    // 使用圆形封面（仅在封面样式为卡片或自动切换时显示）
+                    if (coverStyleIndex == 0 || coverStyleIndex == 2) {
+                        BasicComponent(
+                            title = "使用圆形封面",
+                            endActions = {
+                                Switch(
+                                    checked = useRoundCover,
+                                    onCheckedChange = { newValue ->
+                                        useRoundCover = newValue
+                                        ThemeSettings.updateUseRoundCover(newValue)
+                                    }
+                                )
+                            },
+                            onClick = {
+                                useRoundCover = !useRoundCover
+                                ThemeSettings.updateUseRoundCover(useRoundCover)
                             }
                         )
+
+                        // 封面旋转（仅在圆形封面开启时显示）
+                        if (useRoundCover) {
+                            WindowDropdownPreference(
+                                title = "封面旋转",
+                                items = coverRotationOptions,
+                                selectedIndex = coverRotationIndex,
+                                onSelectedIndexChange = { newIndex ->
+                                    coverRotationIndex = newIndex
+                                    ThemeSettings.updateCoverRotationIndex(newIndex)
+                                }
+                            )
+                        }
                     }
                 }
             }
