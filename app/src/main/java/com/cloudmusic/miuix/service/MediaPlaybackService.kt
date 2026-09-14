@@ -198,13 +198,14 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                         setOnCompletionListener {
                             val duration = this.duration.toLong()
                             val position = this.currentPosition.toLong()
-                            // 只有当播放位置接近总时长时才认为是正常完成
+                            val isStillPlaying = this.isPlaying
+                            // 只有当播放位置接近总时长（允许100ms误差）且实际已停止播放时才认为是正常完成
                             // 避免因流媒体问题导致的误触发
-                            if (duration > 0 && position >= duration * 0.9) {
+                            if (duration > 0 && position >= duration - 100 && !isStillPlaying) {
                                 Log.d(TAG, "Track completed normally: position=$position, duration=$duration")
                                 playNext()
                             } else {
-                                Log.d(TAG, "Track completion ignored: position=$position, duration=$duration")
+                                Log.d(TAG, "Track completion ignored: position=$position, duration=$duration, isStillPlaying=$isStillPlaying")
                             }
                         }
                         setOnErrorListener { _, _, _ ->
@@ -229,6 +230,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
             try {
                 updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
                 
+                // 设置词幕歌曲信息
+                lyriconManager?.setTrack(track)
+                
                 mediaPlayer?.release()
                 mediaPlayer = MediaPlayer().apply {
                     setDataSource(url)
@@ -245,12 +249,13 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                     setOnCompletionListener {
                         val duration = this.duration.toLong()
                         val position = this.currentPosition.toLong()
-                        // 只有当播放位置接近总时长时才认为是正常完成
-                        if (duration > 0 && position >= duration * 0.9) {
+                        val isStillPlaying = this.isPlaying
+                        // 只有当播放位置接近总时长（允许100ms误差）且实际已停止播放时才认为是正常完成
+                        if (duration > 0 && position >= duration - 100 && !isStillPlaying) {
                             Log.d(TAG, "Track completed normally: position=$position, duration=$duration")
                             playNext()
                         } else {
-                            Log.d(TAG, "Track completion ignored: position=$position, duration=$duration")
+                            Log.d(TAG, "Track completion ignored: position=$position, duration=$duration, isStillPlaying=$isStillPlaying")
                         }
                     }
                     setOnErrorListener { _, _, _ ->

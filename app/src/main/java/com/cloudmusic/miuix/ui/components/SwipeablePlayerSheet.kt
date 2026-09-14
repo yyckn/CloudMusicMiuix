@@ -65,7 +65,6 @@ fun SwipeablePlayerSheet(
                 .fillMaxSize()
                 .graphicsLayer {
                     translationY = offsetY.value
-                    alpha = 1f - (offsetY.value / screenHeight).coerceIn(0f, 1f)
                 }
                 .pointerInput(isVisible, enableSwipeToDismiss) {
                     if (isVisible && enableSwipeToDismiss) {

@@ -1,5 +1,6 @@
 package com.cloudmusic.miuix.ui.pages
 
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
@@ -12,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -27,6 +29,9 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.runtime.DisposableEffect
+import com.cloudmusic.miuix.ui.components.AnimatedCoverPlayer
+import com.cloudmusic.miuix.ui.components.LiveBadge
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -39,6 +44,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,10 +54,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -64,9 +78,12 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.cloudmusic.miuix.data.model.Track
+import com.cloudmusic.miuix.ui.components.AnimatedCoverPlayer
+import com.cloudmusic.miuix.ui.components.LiveBadge
 import com.cloudmusic.miuix.ui.components.LyricsView
 import com.cloudmusic.miuix.ui.theme.ThemeSettings
 import com.cloudmusic.miuix.viewmodel.LyricState
+import com.cloudmusic.miuix.viewmodel.MusicPlayerViewModel
 import com.cloudmusic.miuix.viewmodel.PlayerState
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.BasicComponent
@@ -118,12 +135,14 @@ import androidx.compose.material.icons.automirrored.filled.Comment
 
 @Composable
 fun PlayerPage(
+    viewModel: MusicPlayerViewModel,
     playerState: PlayerState,
     lyricState: LyricState,
     currentPlaylist: List<Track> = emptyList(),
     isCurrentTrackLiked: Boolean = false,
     isFMMode: Boolean = false,
     isIntelligenceMode: Boolean = false,
+    isVipAccount: Boolean = false, // 是否是VIP账号
     onBackClick: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPrevious: () -> Unit,
@@ -157,6 +176,21 @@ fun PlayerPage(
     var albumArtist by remember { mutableStateOf<String?>(null) }
     var albumArtistId by remember { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
+    
+    // 使用ViewModel中的Apple Music封面状态
+    val appleMusicCoverUrl = viewModel.appleMusicCoverUrl
+    val appleMusicCoverIsAnimated = viewModel.appleMusicCoverIsAnimated
+    val isLoadingAppleMusicCover = viewModel.isLoadingAppleMusicCover
+    var isAnimatedCoverReady by remember { mutableStateOf(false) }
+    var animatedCoverError by remember { mutableStateOf(false) }
+    val showLiveBadge = viewModel.showLiveBadge
+    
+    // 创建/更新ExoPlayer（由ViewModel管理）
+    LaunchedEffect(appleMusicCoverUrl, appleMusicCoverIsAnimated, animatedCoverError) {
+        if (appleMusicCoverUrl != null && appleMusicCoverIsAnimated && !animatedCoverError) {
+            viewModel.createAnimatedCoverPlayer(appleMusicCoverUrl!!)
+        }
+    }
     
     // 音质选择
     val qualityOptions = listOf(
@@ -322,7 +356,7 @@ fun PlayerPage(
         // 封面可用高度 = 屏幕高度 - 顶部padding - 底部预留 - 标题区域高度 - 额外间距
         val availableHeight = screenHeight - topPadding - bottomReserved - titleAreaHeight - 48.dp
         // 封面大小取高度和宽度的最小值，确保1:1比例不被裁剪
-        val imageSize = minOf(availableHeight, screenWidth - 24.dp, screenHeight - topPadding - 240.dp).coerceAtLeast(0.dp)
+        val imageSize = minOf(availableHeight, screenWidth - 48.dp, screenHeight - topPadding - 240.dp).coerceAtLeast(0.dp)
         // 小屏模式：封面尺寸小于64dp时，隐藏封面，铺满屏幕
         val isSmallScreen = imageSize < 64.dp
 
@@ -365,6 +399,10 @@ fun PlayerPage(
                 // 平板布局
                 if (coverStyleIndex == 1 || coverStyleIndex == 2) {
                     // 全屏渐变封面样式（平板）
+                    val useAnimatedCover = appleMusicCoverIsAnimated && 
+                        appleMusicCoverUrl != null && 
+                        !animatedCoverError
+                    
                     Box(modifier = Modifier.fillMaxSize()) {
                         // 封面层（覆盖全屏高度，包括状态栏）
                         Box(
@@ -391,19 +429,92 @@ fun PlayerPage(
                                     )
                                 }
                         ) {
-                            Crossfade(
-                                targetState = track?.imgUrl,
-                                animationSpec = tween(durationMillis = 500),
-                                label = "tablet_cover_crossfade"
-                            ) { imgUrl ->
-                                AsyncImage(
-                                    model = imgUrl,
-                                    contentDescription = null,
+                            // 静态封面作为底层
+                            AsyncImage(
+                                model = track?.imgUrl,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                                error = painterResource(android.R.drawable.ic_menu_gallery)
+                            )
+                        }
+                        
+                        // 动态封面（在静态封面上方）
+                        if (useAnimatedCover) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(0.55f)
+                                    .align(Alignment.CenterStart)
+                            ) {
+                                AnimatedCoverPlayer(
+                                    exoPlayer = viewModel.animatedCoverExoPlayer,
                                     modifier = Modifier.fillMaxSize(),
+                                    onFirstFrameReady = {
+                                        isAnimatedCoverReady = true
+                                    },
+                                    onError = {
+                                        animatedCoverError = true
+                                    }
+                                )
+                            }
+                            
+                            // 模糊封面蒙版（铺满全屏，覆盖在视频上方，文字下方）
+                            // 只有右侧显示模糊，左侧透明显示视频
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                // 模糊封面图片（通过BlendMode.DstIn控制可见性）
+                                AsyncImage(
+                                    model = track?.imgUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer {
+                                            scaleX = 1.15f
+                                            scaleY = 1.15f
+                                            compositingStrategy = CompositingStrategy.Offscreen
+                                        }
+                                        .drawWithContent {
+                                            drawContent()
+                                            // 左侧透明，右侧不透明
+                                            drawRect(
+                                                brush = Brush.horizontalGradient(
+                                                    0f to Color.Transparent,
+                                                    0.4f to Color.Transparent,
+                                                    0.55f to Color.Black,
+                                                    1f to Color.Black
+                                                ),
+                                                blendMode = androidx.compose.ui.graphics.BlendMode.DstIn
+                                            )
+                                        }
+                                        .blur(radius = 100.dp),
                                     contentScale = ContentScale.Crop,
                                     error = painterResource(android.R.drawable.ic_menu_gallery)
                                 )
+                                // 压暗层（跟随透明度渐变，只在右侧生效）
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                0f to Color.Transparent,
+                                                0.4f to Color.Transparent,
+                                                0.55f to Color(0x40000000),
+                                                1f to Color(0x40000000)
+                                            )
+                                        )
+                                )
                             }
+                        }
+                        
+                        // Live标识 - 左上角（留出状态栏距离）
+                        if (appleMusicCoverIsAnimated && !animatedCoverError) {
+                            LiveBadge(
+                                visible = showLiveBadge,
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(start = 16.dp, top = topPadding + 8.dp),
+                                onClick = { viewModel.updateShowLiveBadge(true) }
+                            )
                         }
                         
                         // 右侧内容区域（50%宽度）
@@ -459,7 +570,7 @@ fun PlayerPage(
                                             Spacer(modifier = Modifier.width(24.dp))
                                             Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
                                                 if (playerState.isLoading) InfiniteProgressIndicator(modifier = Modifier.size(40.dp))
-                                                else IconButton(onClick = onTogglePlayPause) { Icon(imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play, contentDescription = if (playerState.isPlaying) "暂停" else "播放", tint = Color.White, modifier = Modifier.size(40.dp)) }
+                                                else IconButton(onClick = onTogglePlayPause, modifier = Modifier.size(56.dp)) { Icon(imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play, contentDescription = if (playerState.isPlaying) "暂停" else "播放", tint = Color.White, modifier = Modifier.size(40.dp)) }
                                             }
                                             Spacer(modifier = Modifier.width(24.dp))
                                             IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) { Icon(imageVector = MiuixIcons.ChevronForward, contentDescription = "下一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
@@ -552,30 +663,86 @@ fun PlayerPage(
 
                         // 封面（小屏模式下隐藏）
                         if (!isSmallScreen) {
+                            // 判断是否使用动态封面
+                            val useAnimatedCover = appleMusicCoverIsAnimated && 
+                                appleMusicCoverUrl != null && 
+                                !animatedCoverError
+                            
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxWidth(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Crossfade(
-                                    targetState = track?.imgUrl,
-                                    animationSpec = tween(durationMillis = 500),
-                                    label = "cover_crossfade"
-                                ) { imgUrl ->
-                                    AsyncImage(
-                                        model = imgUrl,
-                                        contentDescription = track?.title,
-                                        modifier = Modifier
-                                            .size(imageSize)
-                                            .aspectRatio(1f)
-                                            .clip(coverShape)
-                                            .graphicsLayer {
-                                                rotationZ = coverRotation
-                                            },
-                                        contentScale = ContentScale.Crop,
-                                        error = painterResource(android.R.drawable.ic_menu_gallery)
-                                    )
+                                Card(
+                                    modifier = Modifier
+                                        .size(imageSize)
+                                        .aspectRatio(1f),
+                                    cornerRadius = 24.dp,
+                                    colors = CardDefaults.defaultColors(
+                                        color = Color.Transparent,
+                                        contentColor = Color.White
+                                    ),
+                                    pressFeedbackType = PressFeedbackType.Tilt,
+                                    onClick = { viewModel.updateShowLiveBadge(true) }
+                                ) {
+                                    Box(modifier = Modifier.fillMaxSize()) {
+                                        // 静态封面作为底层（始终显示）
+                                        AsyncImage(
+                                            model = track?.imgUrl,
+                                            contentDescription = track?.title,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(coverShape)
+                                                .graphicsLayer {
+                                                    rotationZ = coverRotation
+                                                },
+                                            contentScale = ContentScale.Crop,
+                                            error = painterResource(android.R.drawable.ic_menu_gallery)
+                                        )
+                                        
+                                        // 动态封面覆盖在静态封面上（首帧就绪后才显示）
+                                        if (useAnimatedCover && isAnimatedCoverReady) {
+                                            AnimatedCoverPlayer(
+                                                exoPlayer = viewModel.animatedCoverExoPlayer,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .clip(coverShape),
+                                                onFirstFrameReady = {
+                                                    isAnimatedCoverReady = true
+                                                },
+                                                onError = {
+                                                    animatedCoverError = true
+                                                }
+                                            )
+                                        }
+                                        
+                                        // 动态封面加载中（首帧未就绪时，显示加载状态）
+                                        if (useAnimatedCover && !isAnimatedCoverReady && !animatedCoverError) {
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                InfiniteProgressIndicator(
+                                                    modifier = Modifier.size(32.dp)
+                                                )
+                                            }
+                                        }
+                                        
+                                        // Live标识 - 右上角（叠加在封面上方）
+                                        if (appleMusicCoverIsAnimated && !animatedCoverError) {
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.TopEnd
+                                            ) {
+                                                LiveBadge(
+                                                    visible = showLiveBadge,
+                                                    modifier = Modifier.padding(8.dp),
+                                    onClick = { viewModel.updateShowLiveBadge(true) }
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -657,7 +824,7 @@ fun PlayerPage(
                                                 modifier = Modifier.size(40.dp)
                                             )
                                         } else {
-                                            IconButton(onClick = onTogglePlayPause) {
+                                            IconButton(onClick = onTogglePlayPause, modifier = Modifier.size(56.dp)) {
                                                 Icon(
                                                     imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
                                                     contentDescription = if (playerState.isPlaying) "暂停" else "播放",
@@ -772,7 +939,27 @@ fun PlayerPage(
                 // 手机布局
                 if (coverStyleIndex == 1) {
                     // 全屏渐变封面样式（手机）
+                    val useAnimatedCover = appleMusicCoverIsAnimated && 
+                        appleMusicCoverUrl != null && 
+                        !animatedCoverError
+                    
+                    // 用于记录标题栏和控件区域的实际位置
+                    var titleBottomY by remember { mutableFloatStateOf(0f) }
+                    var controlsTopY by remember { mutableFloatStateOf(Float.MAX_VALUE) }
+                    
+                    val density = LocalDensity.current
+                    val containerHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+                    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+                    val topPaddingPx = with(density) { topPadding.toPx() }
+                    // 封面是1:1比例，宽度等于屏幕宽度
+                    val coverHeightPx = screenWidthPx
+                    // 封面居中在标题栏下方到控件上方的区域
+                    val coverCenterY = (titleBottomY + controlsTopY) / 2
+                    val coverTopPx = coverCenterY - coverHeightPx / 2
+                    val coverBottomPx = coverCenterY + coverHeightPx / 2
+                    
                     Box(modifier = Modifier.fillMaxSize()) {
+                        
                         // 模糊背景（全屏，覆盖状态栏区域）
                         Crossfade(
                             targetState = track?.imgUrl,
@@ -793,13 +980,181 @@ fun PlayerPage(
                         // 深色蒙版
                         Box(modifier = Modifier.fillMaxSize().background(Color(0x40000000)))
                         
-                        // 内容层
+                            // 动态封面层（在所有UI组件下方，背景上方）
+                            if (useAnimatedCover) {
+                                // 封面居中在标题栏下方到控件上方的区域
+                                val coverCenterY = (titleBottomY + controlsTopY) / 2
+                                val coverTopOffset = coverCenterY - coverHeightPx / 2
+                                
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(1f)
+                                        .offset { IntOffset(0, coverTopOffset.toInt()) }
+                                ) {
+                                    AnimatedCoverPlayer(
+                                        exoPlayer = viewModel.animatedCoverExoPlayer,
+                                        modifier = Modifier.fillMaxSize(),
+                                        onFirstFrameReady = {
+                                            isAnimatedCoverReady = true
+                                        },
+                                        onError = {
+                                            animatedCoverError = true
+                                        }
+                                    )
+                                }
+                                
+                                // 歌词显示时的封面模糊层（在封面之上）
+                                if (lyricsAlpha > 0f) {
+                                    AsyncImage(
+                                        model = track?.imgUrl,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(1f)
+                                            .offset { IntOffset(0, coverTopOffset.toInt()) }
+                                            .graphicsLayer { alpha = lyricsAlpha }
+                                            .blur(radius = 15.dp),
+                                        contentScale = ContentScale.Crop,
+                                        error = painterResource(android.R.drawable.ic_menu_gallery)
+                                    )
+                                }
+                            
+                            // 蒙版层（模糊封面图片，叠在动态封面上方）
+                            // 如果封面上边界比标题栏低，就用封面的上边界；否则用标题栏
+                            // 如果封面下边界比播放栏高，就用封面的下边界；否则用播放栏
+                            val maskTop = if (coverTopPx > titleBottomY) coverTopPx else titleBottomY
+                            val maskBottom = if (coverBottomPx < controlsTopY) coverBottomPx else controlsTopY
+                            val maskHeight = (maskBottom - maskTop).coerceAtLeast(1f)
+                            val mask15Percent = maskTop + maskHeight * 0.15f
+                            val mask85Percent = maskTop + maskHeight * 0.85f
+                            
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        compositingStrategy = CompositingStrategy.Offscreen
+                                    }
+                                    .drawWithContent {
+                                        drawContent()
+                                        drawRect(
+                                            brush = Brush.verticalGradient(
+                                                0f to Color.Black,
+                                                (maskTop / containerHeightPx).coerceIn(0f, 1f) to Color.Black,
+                                                (mask15Percent / containerHeightPx).coerceIn(0f, 1f) to Color.Transparent,
+                                                (mask85Percent / containerHeightPx).coerceIn(0f, 1f) to Color.Transparent,
+                                                (maskBottom / containerHeightPx).coerceIn(0f, 1f) to Color.Black,
+                                                1f to Color.Black
+                                            ),
+                                            blendMode = androidx.compose.ui.graphics.BlendMode.DstIn
+                                        )
+                                    }
+                            ) {
+                                AsyncImage(
+                                    model = track?.imgUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer(scaleX = 1.15f, scaleY = 1.15f)
+                                        .blur(radius = 100.dp),
+                                    contentScale = ContentScale.Crop,
+                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                )
+                            }
+                        } else {
+                            // 静态封面
+                            val coverCenterY = (titleBottomY + controlsTopY) / 2
+                            val coverTopOffset = coverCenterY - coverHeightPx / 2
+                            
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(1f)
+                                    .offset { IntOffset(0, coverTopOffset.toInt()) }
+                            ) {
+                                AsyncImage(
+                                    model = track?.imgUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop,
+                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                )
+                            }
+                            
+                            // 歌词显示时的静态封面模糊层
+                            if (lyricsAlpha > 0f) {
+                                AsyncImage(
+                                    model = track?.imgUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(1f)
+                                        .offset { IntOffset(0, coverTopOffset.toInt()) }
+                                        .graphicsLayer { alpha = lyricsAlpha }
+                                        .blur(radius = 15.dp),
+                                    contentScale = ContentScale.Crop,
+                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                )
+                            }
+                            
+                            // 蒙版层
+                            // 如果封面上边界比标题栏低，就用封面的上边界；否则用标题栏
+                            // 如果封面下边界比播放栏高，就用封面的下边界；否则用播放栏
+                            val maskTop = if (coverTopPx > titleBottomY) coverTopPx else titleBottomY
+                            val maskBottom = if (coverBottomPx < controlsTopY) coverBottomPx else controlsTopY
+                            val maskHeight = (maskBottom - maskTop).coerceAtLeast(1f)
+                            val mask15Percent = maskTop + maskHeight * 0.15f
+                            val mask85Percent = maskTop + maskHeight * 0.85f
+                            
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        compositingStrategy = CompositingStrategy.Offscreen
+                                    }
+                                    .drawWithContent {
+                                        drawContent()
+                                        drawRect(
+                                            brush = Brush.verticalGradient(
+                                                0f to Color.Black,
+                                                (maskTop / containerHeightPx).coerceIn(0f, 1f) to Color.Black,
+                                                (mask15Percent / containerHeightPx).coerceIn(0f, 1f) to Color.Transparent,
+                                                (mask85Percent / containerHeightPx).coerceIn(0f, 1f) to Color.Transparent,
+                                                (maskBottom / containerHeightPx).coerceIn(0f, 1f) to Color.Black,
+                                                1f to Color.Black
+                                            ),
+                                            blendMode = androidx.compose.ui.graphics.BlendMode.DstIn
+                                        )
+                                    }
+                            ) {
+                                AsyncImage(
+                                    model = track?.imgUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer(scaleX = 1.15f, scaleY = 1.15f)
+                                        .blur(radius = 100.dp),
+                                    contentScale = ContentScale.Crop,
+                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                )
+                            }
+                        }
+                        
+                        // 内容层（在封面和蒙版上方）
                         Column(
                             modifier = Modifier.padding(top = topPadding).fillMaxSize()
                         ) {
                             // 歌曲标题和信息
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 16.dp, bottom = 8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp)
+                                    .padding(top = 16.dp, bottom = 8.dp)
+                                    .onGloballyPositioned { coordinates ->
+                                        // 使用positionInParent获取不受graphicsLayer影响的位置
+                                        // 加上topPadding得到实际窗口位置
+                                        titleBottomY = topPaddingPx + coordinates.positionInParent().y + coordinates.size.height
+                                    },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
@@ -812,7 +1167,17 @@ fun PlayerPage(
                                 }
                             }
                             
-                            // 中间区域：封面 + 歌词
+                            // Live标识 - 标题栏下方靠左（歌词显示时隐藏）
+                            if (appleMusicCoverIsAnimated && !animatedCoverError && !showLyricsInFullScreen) {
+                                LiveBadge(
+                                    visible = showLiveBadge,
+                                    modifier = Modifier.padding(start = 24.dp, bottom = 8.dp),
+                                    compact = true,
+                                    onClick = { viewModel.updateShowLiveBadge(true) }
+                                )
+                            }
+                            
+                            // 中间区域：歌词（封面已在背景层）
                             Box(
                                 modifier = Modifier.weight(1f).fillMaxWidth()
                                     .clickable(
@@ -821,47 +1186,54 @@ fun PlayerPage(
                                     ) { showLyricsInFullScreen = !showLyricsInFullScreen },
                                 contentAlignment = Alignment.Center
                             ) {
-                                // 清晰封面
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().aspectRatio(1f)
-                                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                                        .drawWithContent {
-                                            drawContent()
-                                            drawRect(
-                                                brush = Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black, Color.Black, Color.Transparent)),
-                                                blendMode = androidx.compose.ui.graphics.BlendMode.DstIn
-                                            )
-                                        }
-                                ) {
-                                    Crossfade(targetState = track?.imgUrl, animationSpec = tween(durationMillis = 500), label = "fullscreen_cover_crossfade") { imgUrl ->
-                                        AsyncImage(
-                                            model = imgUrl, contentDescription = null,
-                                            modifier = Modifier.fillMaxSize().then(if (showLyricsInFullScreen) Modifier.blur(10.dp) else Modifier),
-                                            contentScale = ContentScale.Crop,
-                                            error = painterResource(android.R.drawable.ic_menu_gallery)
-                                        )
-                                    }
-                                    if (lyricsAlpha > 0f) {
-                                        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF333333).copy(alpha = maskAlpha)))
-                                    }
-                                }
-                                
                                 // 歌词显示
                                 if (lyricsAlpha > 0f) {
-                                    Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = lyricsAlpha }) {
+                                    // 歌词蒙版背景（压暗+模糊+渐变）
+                                    // 使用封面的上下位置，渐变位置为封面的15%和85%
+                                    val lyricsMaskTop = if (coverTopPx > titleBottomY) coverTopPx else titleBottomY
+                                    val lyricsMaskBottom = if (coverBottomPx < controlsTopY) coverBottomPx else controlsTopY
+                                    val lyricsMaskHeight = (lyricsMaskBottom - lyricsMaskTop).coerceAtLeast(1f)
+                                    val lyricsGradient15 = (lyricsMaskTop + lyricsMaskHeight * 0.15f) / containerHeightPx
+                                    val lyricsGradient85 = (lyricsMaskTop + lyricsMaskHeight * 0.85f) / containerHeightPx
+                                    
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .graphicsLayer { alpha = lyricsAlpha }
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    0f to Color.Transparent,
+                                                    lyricsGradient15.coerceIn(0f, 1f) to Color.Black.copy(alpha = 0.3f),
+                                                    lyricsGradient85.coerceIn(0f, 1f) to Color.Black.copy(alpha = 0.3f),
+                                                    1f to Color.Transparent
+                                                )
+                                            )
+                                    )
+                                    // 歌词内容
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .graphicsLayer { alpha = lyricsAlpha }
+                                    ) {
                                         if (isPureMusic) {
-                                            Box(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp), contentAlignment = Alignment.Center) {
+                                            Box(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
                                                 Text(text = "纯音乐，请欣赏", fontSize = 16.sp, color = Color.White.copy(alpha = 0.5f))
                                             }
                                         } else {
-                                            LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp))
+                                            LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp))
                                         }
                                     }
                                 }
                             }
                             
                             // 底部控制区域
-                            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(horizontal = 24.dp)
+                                    .onGloballyPositioned { coordinates ->
+                                        controlsTopY = topPaddingPx + coordinates.positionInParent().y
+                                    }
+                            ) {
                                 val progress = if (playerState.duration > 0) playerState.currentPosition.toFloat() / playerState.duration.toFloat() else 0f
                                 Slider(value = progress, onValueChange = { newValue -> onSeekTo((newValue * playerState.duration).toLong()) }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
                                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -875,7 +1247,7 @@ fun PlayerPage(
                                         Spacer(modifier = Modifier.width(24.dp))
                                         Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
                                             if (playerState.isLoading) InfiniteProgressIndicator(modifier = Modifier.size(40.dp))
-                                            else IconButton(onClick = onTogglePlayPause) { Icon(imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play, contentDescription = if (playerState.isPlaying) "暂停" else "播放", tint = Color.White, modifier = Modifier.size(40.dp)) }
+                                            else IconButton(onClick = onTogglePlayPause, modifier = Modifier.size(56.dp)) { Icon(imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play, contentDescription = if (playerState.isPlaying) "暂停" else "播放", tint = Color.White, modifier = Modifier.size(40.dp)) }
                                         }
                                         Spacer(modifier = Modifier.width(24.dp))
                                         IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) { Icon(imageVector = MiuixIcons.ChevronForward, contentDescription = "下一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
@@ -897,12 +1269,12 @@ fun PlayerPage(
                     modifier = Modifier
                         .padding(top = topPadding)
                         .fillMaxSize()
-                        .padding(horizontal = 24.dp)
                 ) {
                     // 歌曲标题和信息
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
                             .padding(top = 16.dp, bottom = 24.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -982,24 +1354,74 @@ fun PlayerPage(
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Crossfade(
-                                            targetState = track?.imgUrl,
-                                            animationSpec = tween(durationMillis = 500),
-                                            label = "cover_crossfade"
-                                        ) { imgUrl ->
-                                            AsyncImage(
-                                                model = imgUrl,
-                                                contentDescription = track?.title,
-                                                modifier = Modifier
-                                                    .size(imageSize)
-                                                    .aspectRatio(1f)
-                                                    .clip(coverShape)
-                                                    .graphicsLayer {
-                                                        rotationZ = coverRotation
-                                                    },
-                                                contentScale = ContentScale.Crop,
-                                                error = painterResource(android.R.drawable.ic_menu_gallery)
-                                            )
+                                        // 判断是否使用动态封面
+                                        val useAnimatedCover = appleMusicCoverIsAnimated && 
+                                            appleMusicCoverUrl != null && 
+                                            !animatedCoverError
+                                        
+                                        Card(
+                                            modifier = Modifier
+                                                .size(imageSize)
+                                                .aspectRatio(1f),
+                                            cornerRadius = 24.dp,
+                                            colors = CardDefaults.defaultColors(
+                                                color = Color.Transparent,
+                                                contentColor = Color.White
+                                            ),
+                                            pressFeedbackType = PressFeedbackType.Tilt,
+                                            onClick = {}
+                                        ) {
+                                            Box(modifier = Modifier.fillMaxSize()) {
+                                                // 静态封面作为底层（fallback）
+                                                AsyncImage(
+                                                    model = track?.imgUrl,
+                                                    contentDescription = track?.title,
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .clip(coverShape)
+                                                        .graphicsLayer {
+                                                            rotationZ = coverRotation
+                                                        },
+                                                    contentScale = ContentScale.Crop,
+                                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                                )
+                                                
+                                                // 动态封面覆盖在静态封面上
+                                                if (useAnimatedCover) {
+                                                    AnimatedCoverPlayer(
+                                                exoPlayer = viewModel.animatedCoverExoPlayer,
+                                                        modifier = Modifier
+                                                            .fillMaxSize()
+                                                            .clip(coverShape)
+                                                            .graphicsLayer {
+                                                                // 首帧就绪前透明，避免黑屏
+                                                                alpha = if (isAnimatedCoverReady) 1f else 0f
+                                                            },
+                                                        onFirstFrameReady = {
+                                                            isAnimatedCoverReady = true
+                                                        },
+                                                        onError = {
+                                                            animatedCoverError = true
+                                                            Log.e("PlayerPage", "动态封面播放失败，回退到静态封面")
+                                                        }
+                                                    )
+                                                }
+                                                
+                                                // Live标识 - 右上角（叠加在封面上方）
+                                                if (appleMusicCoverIsAnimated && !animatedCoverError) {
+                                                    Box(
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentAlignment = Alignment.TopEnd
+                                                    ) {
+                                                        LiveBadge(
+                                                            visible = showLiveBadge,
+                                                            modifier = Modifier.padding(8.dp),
+                                                            compact = true,
+                                onClick = { viewModel.updateShowLiveBadge(true) }
+                                                        )
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -1009,7 +1431,9 @@ fun PlayerPage(
                                 if (isPureMusic) {
                                     // 纯音乐显示提示
                                     Box(
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 24.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
@@ -1024,39 +1448,43 @@ fun PlayerPage(
                                         currentPosition = playerState.currentPosition,
                                         onSeekTo = onSeekTo,
                                         isPlaying = playerState.isPlaying,
-                                        modifier = Modifier.fillMaxSize()
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 24.dp)
                                     )
                                 }
                             }
                         }
                     }
 
-                    // 播放进度条
-                    val progress = if (playerState.duration > 0) {
-                        playerState.currentPosition.toFloat() / playerState.duration.toFloat()
-                    } else {
-                        0f
-                    }
+                    // 底部控制区域
+                    Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                        // 播放进度条
+                        val progress = if (playerState.duration > 0) {
+                            playerState.currentPosition.toFloat() / playerState.duration.toFloat()
+                        } else {
+                            0f
+                        }
 
-                    Slider(
-                        value = progress,
-                        onValueChange = { newValue ->
-                            val newPosition = (newValue * playerState.duration).toLong()
-                            onSeekTo(newPosition)
-                        },
-                        enabled = !playerState.isLoading,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 4.dp)
-                    )
+                        Slider(
+                            value = progress,
+                            onValueChange = { newValue ->
+                                val newPosition = (newValue * playerState.duration).toLong()
+                                onSeekTo(newPosition)
+                            },
+                            enabled = !playerState.isLoading,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 4.dp)
+                        )
 
-                    // 时间显示和音质
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
+                        // 时间显示和音质
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
                         Text(
                             text = formatDuration(playerState.currentPosition),
                             fontSize = 12.sp,
@@ -1106,7 +1534,7 @@ fun PlayerPage(
                                         modifier = Modifier.size(40.dp)
                                     )
                                 } else {
-                                    IconButton(onClick = onTogglePlayPause) {
+                                    IconButton(onClick = onTogglePlayPause, modifier = Modifier.size(56.dp)) {
                                         Icon(
                                             imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
                                             contentDescription = if (playerState.isPlaying) "暂停" else "播放",
@@ -1219,6 +1647,7 @@ fun PlayerPage(
                             }
                         }
                     }
+                    } // 结束底部控制区域
                 }
             }
             } // 结束手机卡片封面样式
@@ -1346,20 +1775,34 @@ fun PlayerPage(
                                 color = MiuixTheme.colorScheme.secondaryContainer
                             )
                         ) {
-                            WindowDropdownPreference(
-                                title = "音质",
-                                summary = "*选择的音质仅代表可获取的最高音质，实际音频音质可能因歌曲质量而不同",
-                                items = qualityOptions,
-                                selectedIndex = selectedQualityIndex,
-                                onSelectedIndexChange = { newIndex ->
-                                    selectedQualityIndex = newIndex
-                                    // 保存到SharedPreferences
-                                    context.getSharedPreferences("player_prefs", android.content.Context.MODE_PRIVATE)
-                                        .edit()
-                                        .putInt("audio_quality_index", newIndex)
-                                        .apply()
-                                }
-                            )
+                            if (isVipAccount) {
+                                WindowDropdownPreference(
+                                    title = "音质",
+                                    summary = "*选择的音质仅代表可获取的最高音质，实际音频音质可能因歌曲质量而不同",
+                                    items = qualityOptions,
+                                    selectedIndex = selectedQualityIndex,
+                                    onSelectedIndexChange = { newIndex ->
+                                        selectedQualityIndex = newIndex
+                                        // 保存到SharedPreferences
+                                        context.getSharedPreferences("player_prefs", android.content.Context.MODE_PRIVATE)
+                                            .edit()
+                                            .putInt("audio_quality_index", newIndex)
+                                            .apply()
+                                    }
+                                )
+                            } else {
+                                BasicComponent(
+                                    title = "音质",
+                                    summary = "登录VIP账号后可享受更高音质",
+                                    endActions = {
+                                        Text(
+                                            text = "低品质",
+                                            style = MiuixTheme.textStyles.body2,
+                                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
                     item {

@@ -11,8 +11,8 @@ android {
         applicationId = "com.cloudmusic.miuix"
         minSdk = 33
         targetSdk = 36
-        versionCode = 44
-        versionName = "0.8.0"
+        versionCode = 46
+        versionName = "0.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -72,6 +72,11 @@ dependencies {
     implementation("androidx.compose.material3:material3-window-size-class:1.3.1")
     implementation("com.google.zxing:core:3.5.3")
     implementation("io.github.proify.lyricon:provider:0.1.70")
+    val media3Version = "1.3.1"
+    implementation("androidx.media3:media3-exoplayer:$media3Version")
+    implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
+    implementation("androidx.media3:media3-datasource-okhttp:$media3Version")
+    implementation("androidx.media3:media3-ui:$media3Version")
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

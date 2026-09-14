@@ -387,19 +387,6 @@ private fun ImportLoginContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 导入登录凭据文件按钮
-        Button(
-            onClick = {
-                filePickerLauncher.launch(arrayOf("application/json"))
-            },
-            colors = ButtonDefaults.buttonColorsPrimary(),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(text = "导入登录凭据文件（loginkey.json）")
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
         // 导入登录凭据按钮
         Button(
             onClick = {
@@ -436,6 +423,19 @@ private fun ImportLoginContent(
             } else {
                 Text(text = "导入登录凭据")
             }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 导入登录凭据文件按钮
+        Button(
+            onClick = {
+                filePickerLauncher.launch(arrayOf("application/json"))
+            },
+            colors = ButtonDefaults.buttonColors(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = "导入登录凭据文件（loginkey.json）")
         }
     }
 }

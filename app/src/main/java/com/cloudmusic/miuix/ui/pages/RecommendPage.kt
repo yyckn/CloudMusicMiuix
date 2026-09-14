@@ -320,18 +320,21 @@ fun RecommendPage(
                                     onPlaylistClick("daily_recommend", "", "每日推荐")
                                 },
                                 onFmClick = {
-                                    viewModel.enterFMMode()
-                                    onOpenPlayerPage()
+                                    if (isLoggedIn) {
+                                        viewModel.enterFMMode()
+                                        onOpenPlayerPage()
+                                    } else {
+                                        android.widget.Toast.makeText(context, "请登录后使用", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
                                 },
                                 onIntelligenceModeClick = { trackId, playlistId ->
-                                    onIntelligenceMode(trackId, playlistId)
+                                    if (isLoggedIn) {
+                                        onIntelligenceMode(trackId, playlistId)
+                                    } else {
+                                        android.widget.Toast.makeText(context, "请登录后使用", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             )
-                        }
-
-                        // 歌单推荐标题
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            SmallTitle("歌单推荐")
                         }
 
                         // 推荐歌单

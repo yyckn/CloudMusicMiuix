@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -46,6 +47,7 @@ fun PlayPageSettingsPage(
     var useRoundCover by remember { mutableStateOf(ThemeSettings.useRoundCover) }
     var coverRotationIndex by remember { mutableStateOf(ThemeSettings.coverRotationIndex) }
     var coverStyleIndex by remember { mutableStateOf(ThemeSettings.coverStyleIndex) } // 0=卡片, 1=全屏渐变
+    var enableDynamicCover by remember { mutableStateOf(ThemeSettings.enableDynamicCover) }
     var keepScreenOn by remember { mutableStateOf(ThemeSettings.keepScreenOn) }
     var lyricCenter by remember { mutableStateOf(ThemeSettings.lyricCenter) }
 
@@ -219,8 +221,37 @@ fun PlayPageSettingsPage(
                                     ThemeSettings.updateCoverRotationIndex(newIndex)
                                 }
                             )
+                            
+                            // 动态Live封面不支持封面旋转提示
+                            if (enableDynamicCover && coverRotationIndex > 0) {
+                                Text(
+                                    text = "*动态Live封面不支持封面旋转",
+                                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                                    fontSize = 12.sp,
+                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
                         }
                     }
+
+                    // 动态Live封面
+                    BasicComponent(
+                        title = "动态Live封面",
+                        summary = "生动鲜活的Live封面将为听歌带来无与伦比的视听体验（动态封面资源来源于Apple Music，仅部分歌曲支持）",
+                        endActions = {
+                            Switch(
+                                checked = enableDynamicCover,
+                                onCheckedChange = { newValue ->
+                                    enableDynamicCover = newValue
+                                    ThemeSettings.updateEnableDynamicCover(newValue)
+                                }
+                            )
+                        },
+                        onClick = {
+                            enableDynamicCover = !enableDynamicCover
+                            ThemeSettings.updateEnableDynamicCover(enableDynamicCover)
+                        }
+                    )
                 }
             }
 

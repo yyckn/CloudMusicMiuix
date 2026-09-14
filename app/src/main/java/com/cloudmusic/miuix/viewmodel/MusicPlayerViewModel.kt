@@ -22,6 +22,7 @@ import com.cloudmusic.miuix.data.model.Track
 import com.cloudmusic.miuix.service.MediaPlaybackService
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -82,6 +83,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     var isCurrentTrackLiked by mutableStateOf(false)
         private set
 
+    // Toast消息通道
+    val toastMessage = Channel<String>(Channel.BUFFERED)
+    private val _toastMessage = toastMessage
+
     var currentPlaylist by mutableStateOf<List<Track>>(emptyList())
     
     // 用户信息
@@ -90,6 +95,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     var userNickname by mutableStateOf<String?>(null)
         private set
     var userAvatarUrl by mutableStateOf<String?>(null)
+        private set
+    var userVipType by mutableIntStateOf(0) // 0: 非VIP, 1100: VIP
         private set
     
     // 多账号切换
@@ -114,6 +121,33 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         private set
     private var intelligencePlaylist: List<Track> = emptyList()
     private var intelligenceIndex by mutableIntStateOf(0)
+
+    // 动态封面ExoPlayer（在ViewModel中管理，切歌时才销毁）
+    var animatedCoverExoPlayer by mutableStateOf<androidx.media3.exoplayer.ExoPlayer?>(null)
+        private set
+    private var animatedCoverExoPlayerUrl: String? = null
+
+    // Apple Music封面状态（在ViewModel中管理，切歌时才重新加载）
+    var appleMusicCoverUrl by mutableStateOf<String?>(null)
+        private set
+    var appleMusicCoverIsAnimated by mutableStateOf(false)
+        private set
+    var isLoadingAppleMusicCover by mutableStateOf(false)
+        private set
+    var isAnimatedCoverReady by mutableStateOf(false)
+        private set
+    var animatedCoverError by mutableStateOf(false)
+        private set
+    var showLiveBadge by mutableStateOf(false)
+        private set
+    private var appleMusicCoverTrackId: String? = null // 跟踪当前已加载封面的歌曲ID
+
+    /**
+     * 更新Live标识显示状态
+     */
+    fun updateShowLiveBadge(show: Boolean) {
+        showLiveBadge = show
+    }
 
     private var mediaPlaybackService: MediaPlaybackService? = null
     private var isBound = false
@@ -406,16 +440,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     onSuccess = { profile ->
                         userNickname = profile.nickname
                         userAvatarUrl = profile.avatarUrl
+                        userVipType = profile.vipType
                     },
                     onFailure = {
                         userNickname = "未知用户"
                         userAvatarUrl = ""
+                        userVipType = 0
                     }
                 )
             } else {
                 userId = null
                 userNickname = null
                 userAvatarUrl = null
+                userVipType = 0
             }
         }
     }
@@ -434,6 +471,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val accounts = NeteaseApi.getAccounts()
         if (index < accounts.size) {
             NeteaseApi.switchToAccount(accounts[index].userId)
+            // 重新加载用户信息以更新VIP状态
+            loadUserInfo()
         }
     }
 
@@ -777,6 +816,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playTrack(track: Track) {
+        // 切歌时释放动态封面ExoPlayer
+        releaseAnimatedCoverPlayer()
+        
+        // 切歌时加载Apple Music封面（如果歌曲ID变化了）
+        if (appleMusicCoverTrackId != track.id) {
+            loadAppleMusicCover(track)
+        }
+        
         viewModelScope.launch {
             playerState = playerState.copy(isLoading = true, error = null, currentTrack = track)
             saveLastPlayedTrack(track)
@@ -790,8 +837,40 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             val accounts = NeteaseApi.getAccounts()
             val playbackUserId = if (playbackAccountIndex < accounts.size) accounts[playbackAccountIndex].userId else null
             val currentCookieBackup = NeteaseApi.getCookie()
-            if (playbackUserId != null) {
-                NeteaseApi.switchToAccount(playbackUserId)
+            
+            // 检查是否登录
+            if (!NeteaseApi.isLoggedIn()) {
+                // 未登录状态
+                if (track.isVip) {
+                    playerState = playerState.copy(isLoading = false)
+                    _toastMessage.trySend("请登录VIP账号后重试")
+                    return@launch
+                }
+            } else {
+                // 已登录状态，切换到播放账号
+                if (playbackUserId != null) {
+                    NeteaseApi.switchToAccount(playbackUserId)
+                }
+                
+                // 检查VIP歌曲限制
+                if (track.isVip) {
+                    // 获取播放账号的VIP状态
+                    val playbackVipType = NeteaseApi.getUserProfile().fold(
+                        onSuccess = { profile -> profile.vipType },
+                        onFailure = { 0 }
+                    )
+                    if (playbackVipType == 0) {
+                        // 非VIP账号尝试播放VIP歌曲
+                        // 切换回数据账号的Cookie
+                        val dataUserId = if (dataAccountIndex < accounts.size) accounts[dataAccountIndex].userId else null
+                        if (dataUserId != null) {
+                            NeteaseApi.switchToAccount(dataUserId)
+                        }
+                        playerState = playerState.copy(isLoading = false)
+                        _toastMessage.trySend("请登录VIP账号后重试")
+                        return@launch
+                    }
+                }
             }
 
             // 获取用户选择的音质
@@ -836,6 +915,129 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     )
                 }
             )
+        }
+    }
+
+    /**
+     * 创建或更新动态封面ExoPlayer
+     */
+    fun createAnimatedCoverPlayer(videoUrl: String) {
+        // 如果URL没有变化，不重新创建
+        if (animatedCoverExoPlayer != null && animatedCoverExoPlayerUrl == videoUrl) {
+            return
+        }
+        
+        // 释放旧的播放器
+        releaseAnimatedCoverPlayer()
+        
+        try {
+            val context = getApplication<Application>()
+            val dataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+                .setDefaultRequestProperties(
+                    mapOf(
+                        "Referer" to "https://music.apple.com/",
+                        "Origin" to "https://music.apple.com"
+                    )
+                )
+                .setAllowCrossProtocolRedirects(true)
+
+            val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context)
+                .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+                .setEnableDecoderFallback(true)
+
+            // 轨道选择器：强制最高质量
+            val trackSelector = androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context).apply {
+                setParameters(
+                    buildUponParameters()
+                        .setMaxVideoSize(Int.MAX_VALUE, Int.MAX_VALUE)
+                )
+            }
+
+            val mediaSourceFactory = androidx.media3.exoplayer.hls.HlsMediaSource.Factory(dataSourceFactory)
+
+            val player = androidx.media3.exoplayer.ExoPlayer.Builder(context)
+                .setTrackSelector(trackSelector)
+                .setRenderersFactory(renderersFactory)
+                .setMediaSourceFactory(mediaSourceFactory)
+                .build()
+                .apply {
+                    videoScalingMode = androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+
+                    val mediaItem = androidx.media3.common.MediaItem.Builder()
+                        .setUri(videoUrl)
+                        .setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+                        .build()
+
+                    setMediaItem(mediaItem)
+                    repeatMode = androidx.media3.exoplayer.ExoPlayer.REPEAT_MODE_ONE
+                    volume = 0f
+                    prepare()
+                    playWhenReady = true
+                }
+            
+            animatedCoverExoPlayer = player
+            animatedCoverExoPlayerUrl = videoUrl
+            Log.d("MusicPlayerViewModel", "动态封面ExoPlayer创建成功: $videoUrl")
+        } catch (e: Exception) {
+            Log.e("MusicPlayerViewModel", "动态封面ExoPlayer创建失败: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 释放动态封面ExoPlayer
+     */
+    fun releaseAnimatedCoverPlayer() {
+        animatedCoverExoPlayer?.release()
+        animatedCoverExoPlayer = null
+        animatedCoverExoPlayerUrl = null
+    }
+
+    /**
+     * 加载Apple Music封面
+     */
+    private fun loadAppleMusicCover(track: Track) {
+        // 重置状态
+        appleMusicCoverUrl = null
+        appleMusicCoverIsAnimated = false
+        isAnimatedCoverReady = false
+        animatedCoverError = false
+        showLiveBadge = false
+        appleMusicCoverTrackId = track.id
+        
+        // 检查是否启用了动态封面
+        if (!com.cloudmusic.miuix.ui.theme.ThemeSettings.enableDynamicCover) {
+            return
+        }
+        
+        if (track.title.isEmpty() || track.artist.isEmpty()) {
+            return
+        }
+        
+        viewModelScope.launch {
+            isLoadingAppleMusicCover = true
+            try {
+                val cover = com.cloudmusic.miuix.data.api.AppleMusicApi.searchCover(
+                    songName = track.title,
+                    artistName = track.artist
+                )
+                // 检查歌曲是否已切换
+                if (appleMusicCoverTrackId == track.id) {
+                    if (cover != null) {
+                        appleMusicCoverUrl = cover.artworkUrl
+                        appleMusicCoverIsAnimated = cover.isAnimated
+                        if (cover.isAnimated) {
+                            showLiveBadge = true
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MusicPlayerViewModel", "Apple Music封面加载异常: ${e.message}")
+            } finally {
+                if (appleMusicCoverTrackId == track.id) {
+                    isLoadingAppleMusicCover = false
+                }
+            }
         }
     }
 

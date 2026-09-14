@@ -1382,12 +1382,14 @@ fun MainScreen(
         ) {
             val context = LocalContext.current
             PlayerPage(
+                viewModel = viewModel,
                 playerState = viewModel.playerState,
                 lyricState = viewModel.lyricState,
                 currentPlaylist = viewModel.currentPlaylist,
                 isCurrentTrackLiked = viewModel.isCurrentTrackLiked,
                 isFMMode = viewModel.isFMMode,
                 isIntelligenceMode = viewModel.isIntelligenceMode,
+                isVipAccount = viewModel.userVipType > 0,
                 onBackClick = { showPlayerPage = false },
                 onTogglePlayPause = { viewModel.togglePlayPause() },
                 onPrevious = {
@@ -1444,11 +1446,20 @@ fun MainScreen(
                 onLoadLyrics = { viewModel.loadLyrics() },
                 onOpenSystemUI = {
                     try {
+                        // 先尝试小米的投屏Activity
                         val intent = Intent("miui.intent.action.ACTIVITY_MIPLAY_DETAIL")
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         context.startActivity(intent)
                     } catch (e: Exception) {
-                        android.util.Log.e("MainActivity", "Failed to open SystemUI: ${e.message}")
+                        android.util.Log.d("MainActivity", "小米投屏不可用，尝试原生API: ${e.message}")
+                        try {
+                            // 如果失败，使用原生安卓的媒体输出对话框API
+                            val intent = Intent("com.android.systemui.action.LAUNCH_MEDIA_OUTPUT_DIALOG")
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        } catch (e2: Exception) {
+                            android.util.Log.e("MainActivity", "原生投屏API也不可用: ${e2.message}")
+                        }
                     }
                 },
                 onLikeTrack = {

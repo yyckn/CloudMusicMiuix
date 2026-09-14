@@ -16,6 +16,7 @@ object ThemeSettings {
     private const val KEY_USE_ROUND_COVER = "use_round_cover"
     private const val KEY_COVER_ROTATION = "cover_rotation"
     private const val KEY_COVER_STYLE = "cover_style"
+    private const val KEY_ENABLE_DYNAMIC_COVER = "enable_dynamic_cover"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_LYRIC_CENTER = "lyric_center"
 
@@ -45,6 +46,10 @@ object ThemeSettings {
     var coverStyleIndex by mutableIntStateOf(2)
         private set
 
+    // 是否启用动态Live封面
+    var enableDynamicCover by mutableStateOf(true)
+        private set
+
     // 播放页保持屏幕常亮
     var keepScreenOn by mutableStateOf(true)
         private set
@@ -64,6 +69,7 @@ object ThemeSettings {
         useRoundCover = prefs?.getBoolean(KEY_USE_ROUND_COVER, false) ?: false
         coverRotationIndex = prefs?.getInt(KEY_COVER_ROTATION, 0) ?: 0
         coverStyleIndex = prefs?.getInt(KEY_COVER_STYLE, 2) ?: 2
+        enableDynamicCover = prefs?.getBoolean(KEY_ENABLE_DYNAMIC_COVER, true) ?: true
         keepScreenOn = prefs?.getBoolean(KEY_KEEP_SCREEN_ON, true) ?: true
         lyricCenter = prefs?.getBoolean(KEY_LYRIC_CENTER, false) ?: false
     }
@@ -101,6 +107,11 @@ object ThemeSettings {
     fun updateCoverStyleIndex(index: Int) {
         coverStyleIndex = index
         prefs?.edit()?.putInt(KEY_COVER_STYLE, index)?.apply()
+    }
+
+    fun updateEnableDynamicCover(value: Boolean) {
+        enableDynamicCover = value
+        prefs?.edit()?.putBoolean(KEY_ENABLE_DYNAMIC_COVER, value)?.apply()
     }
 
     fun updateKeepScreenOn(value: Boolean) {
