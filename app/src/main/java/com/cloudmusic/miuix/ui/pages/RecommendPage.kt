@@ -124,6 +124,7 @@ fun RecommendPage(
         if (isRefreshing) {
             viewModel.loadRecommendPlaylists()
             viewModel.loadDailyRecommendSongs()
+            viewModel.loadUserPlaylists()
             isRefreshing = false
         }
     }
@@ -316,20 +317,29 @@ fun RecommendPage(
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             FeatureCardsRow(
                                 dailySongs = recommendState.dailySongs,
+                                userPlaylists = recommendState.userPlaylists,
                                 onDailyRecommendClick = {
                                     onPlaylistClick("daily_recommend", "", "每日推荐")
                                 },
                                 onFmClick = {
                                     if (isLoggedIn) {
-                                        viewModel.enterFMMode()
-                                        onOpenPlayerPage()
+                                        if (viewModel.isFMMode) {
+                                            android.widget.Toast.makeText(context, "已经在随身听模式中", android.widget.Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            viewModel.enterFMMode()
+                                            onOpenPlayerPage()
+                                        }
                                     } else {
                                         android.widget.Toast.makeText(context, "请登录后使用", android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 onIntelligenceModeClick = { trackId, playlistId ->
                                     if (isLoggedIn) {
-                                        onIntelligenceMode(trackId, playlistId)
+                                        if (viewModel.isIntelligenceMode) {
+                                            android.widget.Toast.makeText(context, "已经在心动模式中", android.widget.Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            onIntelligenceMode(trackId, playlistId)
+                                        }
                                     } else {
                                         android.widget.Toast.makeText(context, "请登录后使用", android.widget.Toast.LENGTH_SHORT).show()
                                     }
@@ -402,11 +412,19 @@ private fun RecommendPlaylistCard(
 @Composable
 private fun FeatureCardsRow(
     dailySongs: List<Track>,
+    userPlaylists: List<RecommendPlaylist> = emptyList(),
     onDailyRecommendClick: () -> Unit,
     onFmClick: () -> Unit,
     onIntelligenceModeClick: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // 「我喜欢的音乐」歌单 id：优先标题含「喜欢」，否则取第一项
+    val likedPlaylistId = userPlaylists.firstOrNull { it.title.contains("喜欢") }?.id
+        ?: userPlaylists.firstOrNull()?.id
+        ?: ""
+    val heartSeedId = dailySongs.firstOrNull()?.id ?: ""
+    val canShowHeartMode = heartSeedId.isNotEmpty() || likedPlaylistId.isNotEmpty()
+
     LazyRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -431,14 +449,13 @@ private fun FeatureCardsRow(
             )
         }
 
-        // 心动模式（需要传入likedPlaylists信息）
-        // 这里简化处理，只在有每日推荐歌曲时显示
-        if (dailySongs.isNotEmpty()) {
+        // 心动模式：种子歌曲可空，由 ViewModel 再解析；歌单 ID 必须传入「我喜欢的音乐」
+        if (canShowHeartMode) {
             item {
                 FeatureCard(
                     title = "心动模式",
-                    coverUrl = "",
-                    onClick = { onIntelligenceModeClick(dailySongs.first().id, "") },
+                    coverUrl = dailySongs.firstOrNull()?.imgUrl ?: "",
+                    onClick = { onIntelligenceModeClick(heartSeedId, likedPlaylistId) },
                     isIntelligenceCard = true
                 )
             }

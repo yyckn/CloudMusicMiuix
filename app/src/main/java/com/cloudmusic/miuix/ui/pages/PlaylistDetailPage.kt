@@ -218,9 +218,11 @@ fun PlaylistDetailPage(
                 }
             } else if (playlistDetail != null) {
                 itemsIndexed(playlistDetail.tracks) { index, track ->
-                    // 当滚动到接近底部时触发加载更多
-                    if (isCloudDisk && index >= playlistDetail.tracks.size - 5 && !isLoadingMore) {
-                        LaunchedEffect(Unit) {
+                    // 当滚动到接近底部时触发加载更多（云盘兜底；主路径已在 ViewModel 后台自动拉完）
+                    if (isCloudDisk && !isLoadingMore && playlistDetail.tracks.isNotEmpty() &&
+                        index >= playlistDetail.tracks.size - 3
+                    ) {
+                        LaunchedEffect(playlistDetail.tracks.size) {
                             onLoadMore()
                         }
                     }

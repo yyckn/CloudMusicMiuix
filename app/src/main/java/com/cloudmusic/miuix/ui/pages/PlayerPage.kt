@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -167,6 +168,12 @@ fun PlayerPage(
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     val track = playerState.currentTrack
+    // 与「等待歌曲」一致：加载中播放按钮转圈，并禁用进度/上一首/下一首/播放顺序/播放列表
+    val controlsLocked = playerState.isLoading
+    val controlIconAlpha = if (controlsLocked) 0.35f else 1f
+    val onPreviousSafe: () -> Unit = { if (!controlsLocked) onPrevious() }
+    val onNextSafe: () -> Unit = { if (!controlsLocked) onNext() }
+    val onSwitchPlayModeSafe: () -> Unit = { if (!controlsLocked) onSwitchPlayMode() }
     var showMoreMenu by remember { mutableStateOf(false) }
     var showPlaylistSheet by remember { mutableStateOf(false) }
     var showMoreSheet by remember { mutableStateOf(false) }
@@ -561,29 +568,29 @@ fun PlayerPage(
                                     Slider(value = progress, onValueChange = { newValue -> onSeekTo((newValue * playerState.duration).toLong()) }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
                                     Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                         Text(text = formatDuration(playerState.currentPosition), fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
-                                        Text(text = buildString { if (isFMMode) append("FM模式 · "); else if (isIntelligenceMode) append("心动模式 · "); append(getQualityText(playerState.bitrate)) }, fontSize = 12.sp, color = Color.White)
+                                        Text(text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode), fontSize = 12.sp, color = Color.White)
                                         Text(text = formatDuration(playerState.duration), fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
                                     }
                                     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                                            IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) { Icon(imageVector = MiuixIcons.ChevronBackward, contentDescription = "上一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
+                                            IconButton(onClick = onPreviousSafe, modifier = Modifier.size(56.dp).alpha(controlIconAlpha)) { Icon(imageVector = MiuixIcons.ChevronBackward, contentDescription = "上一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
                                             Spacer(modifier = Modifier.width(24.dp))
                                             Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
                                                 if (playerState.isLoading) InfiniteProgressIndicator(modifier = Modifier.size(40.dp))
                                                 else IconButton(onClick = onTogglePlayPause, modifier = Modifier.size(56.dp)) { Icon(imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play, contentDescription = if (playerState.isPlaying) "暂停" else "播放", tint = Color.White, modifier = Modifier.size(40.dp)) }
                                             }
                                             Spacer(modifier = Modifier.width(24.dp))
-                                            IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) { Icon(imageVector = MiuixIcons.ChevronForward, contentDescription = "下一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
+                                            IconButton(onClick = onNextSafe, modifier = Modifier.size(56.dp).alpha(controlIconAlpha)) { Icon(imageVector = MiuixIcons.ChevronForward, contentDescription = "下一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
                                         }
                                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                                             IconButton(onClick = onBackClick, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.Close, contentDescription = "关闭", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                             if (!isFMMode && !isIntelligenceMode) {
                                                 Spacer(modifier = Modifier.width(16.dp))
-                                                IconButton(onClick = onSwitchPlayMode, modifier = Modifier.size(48.dp)) { Icon(imageVector = when (playMode) { 0 -> MiuixIcons.Sort; 1 -> MiuixIcons.Merge; 2 -> MiuixIcons.Replace; else -> MiuixIcons.Sort }, contentDescription = when (playMode) { 0 -> "顺序播放"; 1 -> "乱序播放"; 2 -> "单曲循环"; else -> "顺序播放" }, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                                IconButton(onClick = onSwitchPlayModeSafe, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) { Icon(imageVector = when (playMode) { 0 -> MiuixIcons.Sort; 1 -> MiuixIcons.Merge; 2 -> MiuixIcons.Replace; else -> MiuixIcons.Sort }, contentDescription = when (playMode) { 0 -> "顺序播放"; 1 -> "乱序播放"; 2 -> "单曲循环"; else -> "顺序播放" }, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                             }
                                             Spacer(modifier = Modifier.width(16.dp))
                                             if (!isFMMode && !isIntelligenceMode) {
-                                                IconButton(onClick = { showPlaylistSheet = true }, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.ListView, contentDescription = "播放列表", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                                IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) { Icon(imageVector = MiuixIcons.ListView, contentDescription = "播放列表", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                                 Spacer(modifier = Modifier.width(16.dp))
                                             }
                                             IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.More, contentDescription = "更多", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
@@ -781,7 +788,7 @@ fun PlayerPage(
                                     color = Color.White.copy(alpha = 0.6f)
                                 )
                                 Text(
-                                    text = getQualityText(playerState.bitrate),
+                                    text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode),
                                     fontSize = 12.sp,
                                     color = Color.White
                                 )
@@ -805,7 +812,7 @@ fun PlayerPage(
                                     horizontalArrangement = Arrangement.Center,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) {
+                                    IconButton(onClick = onPreviousSafe, modifier = Modifier.size(56.dp).alpha(controlIconAlpha)) {
                                         Icon(
                                             imageVector = MiuixIcons.ChevronBackward,
                                             contentDescription = "上一首",
@@ -835,7 +842,7 @@ fun PlayerPage(
                                         }
                                     }
                                     Spacer(modifier = Modifier.width(24.dp))
-                                    IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) {
+                                    IconButton(onClick = onNextSafe, modifier = Modifier.size(56.dp).alpha(controlIconAlpha)) {
                                         Icon(
                                             imageVector = MiuixIcons.ChevronForward,
                                             contentDescription = "下一首",
@@ -861,7 +868,7 @@ fun PlayerPage(
                                     }
                                     if (!isFMMode && !isIntelligenceMode) {
                                         Spacer(modifier = Modifier.width(16.dp))
-                                        IconButton(onClick = onSwitchPlayMode, modifier = Modifier.size(48.dp)) {
+                                        IconButton(onClick = onSwitchPlayModeSafe, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) {
                                             Icon(
                                                 imageVector = when (playMode) {
                                                     0 -> MiuixIcons.Sort
@@ -880,7 +887,7 @@ fun PlayerPage(
                                             )
                                         }
                                         Spacer(modifier = Modifier.width(16.dp))
-                                        IconButton(onClick = { showPlaylistSheet = true }, modifier = Modifier.size(48.dp)) {
+                                        IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) {
                                             Icon(
                                                 imageVector = MiuixIcons.ListView,
                                                 contentDescription = "播放列表",
@@ -1238,19 +1245,19 @@ fun PlayerPage(
                                 Slider(value = progress, onValueChange = { newValue -> onSeekTo((newValue * playerState.duration).toLong()) }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
                                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text(text = formatDuration(playerState.currentPosition), fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
-                                    Text(text = buildString { if (isFMMode) append("FM模式 · "); else if (isIntelligenceMode) append("心动模式 · "); append(getQualityText(playerState.bitrate)) }, fontSize = 12.sp, color = Color.White)
+                                    Text(text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode), fontSize = 12.sp, color = Color.White)
                                     Text(text = formatDuration(playerState.duration), fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
                                 }
                                 Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) { Icon(imageVector = MiuixIcons.ChevronBackward, contentDescription = "上一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
+                                        IconButton(onClick = onPreviousSafe, modifier = Modifier.size(56.dp).alpha(controlIconAlpha)) { Icon(imageVector = MiuixIcons.ChevronBackward, contentDescription = "上一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
                                         Spacer(modifier = Modifier.width(24.dp))
                                         Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
                                             if (playerState.isLoading) InfiniteProgressIndicator(modifier = Modifier.size(40.dp))
                                             else IconButton(onClick = onTogglePlayPause, modifier = Modifier.size(56.dp)) { Icon(imageVector = if (playerState.isPlaying) MiuixIcons.Pause else MiuixIcons.Play, contentDescription = if (playerState.isPlaying) "暂停" else "播放", tint = Color.White, modifier = Modifier.size(40.dp)) }
                                         }
                                         Spacer(modifier = Modifier.width(24.dp))
-                                        IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) { Icon(imageVector = MiuixIcons.ChevronForward, contentDescription = "下一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
+                                        IconButton(onClick = onNextSafe, modifier = Modifier.size(56.dp).alpha(controlIconAlpha)) { Icon(imageVector = MiuixIcons.ChevronForward, contentDescription = "下一首", tint = Color.White, modifier = Modifier.size(32.dp)) }
                                     }
                                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(onClick = onBackClick, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.Close, contentDescription = "关闭", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
@@ -1491,7 +1498,7 @@ fun PlayerPage(
                             color = Color.White.copy(alpha = 0.6f)
                         )
                         Text(
-                            text = getQualityText(playerState.bitrate),
+                            text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode),
                             fontSize = 12.sp,
                             color = Color.White
                         )
@@ -1515,7 +1522,7 @@ fun PlayerPage(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) {
+                            IconButton(onClick = onPreviousSafe, modifier = Modifier.size(56.dp).alpha(controlIconAlpha)) {
                                 Icon(
                                     imageVector = MiuixIcons.ChevronBackward,
                                     contentDescription = "上一首",
@@ -1545,7 +1552,7 @@ fun PlayerPage(
                                 }
                             }
                             Spacer(modifier = Modifier.width(24.dp))
-                            IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) {
+                            IconButton(onClick = onNextSafe, modifier = Modifier.size(56.dp).alpha(controlIconAlpha)) {
                                 Icon(
                                     imageVector = MiuixIcons.ChevronForward,
                                     contentDescription = "下一首",
@@ -1579,8 +1586,8 @@ fun PlayerPage(
                                 Spacer(modifier = Modifier.width(16.dp))
                                 // 播放模式按钮
                                 IconButton(
-                                    onClick = onSwitchPlayMode,
-                                    modifier = Modifier.size(48.dp)
+                                    onClick = onSwitchPlayModeSafe,
+                                    modifier = Modifier.size(48.dp).alpha(controlIconAlpha)
                                 ) {
                                     Icon(
                                         imageVector = when (playMode) {
@@ -1627,7 +1634,7 @@ fun PlayerPage(
                             }
                             if (!isFMMode && !isIntelligenceMode) {
                                 Spacer(modifier = Modifier.width(16.dp))
-                                IconButton(onClick = { showPlaylistSheet = true }, modifier = Modifier.size(48.dp)) {
+                                IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) {
                                     Icon(
                                         imageVector = MiuixIcons.ListView,
                                         contentDescription = "播放列表",
@@ -2047,12 +2054,22 @@ private fun formatDuration(durationMs: Long): String {
     return "%d:%02d".format(minutes, seconds)
 }
 
-private fun getQualityText(bitrate: Int): String {
-    return when {
+private fun getQualityText(
+    bitrate: Int,
+    isFMMode: Boolean = false,
+    isIntelligenceMode: Boolean = false
+): String {
+    val quality = when {
         bitrate <= 0 -> "未知品质"
         bitrate <= 320000 -> "低品质"
         bitrate <= 1411000 -> "SQ 标准品质"
         bitrate <= 2304000 -> "HQ 高品质"
         else -> "Hi-Res 无损音频"
     }
+    val prefix = when {
+        isFMMode -> "FM随身听"
+        isIntelligenceMode -> "心动模式"
+        else -> ""
+    }
+    return if (prefix.isEmpty()) quality else "$prefix · $quality"
 }

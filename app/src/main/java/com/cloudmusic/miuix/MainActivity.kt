@@ -1,4 +1,4 @@
-﻿package com.cloudmusic.miuix
+package com.cloudmusic.miuix
 
 import android.content.Intent
 import android.os.Bundle
@@ -154,7 +154,7 @@ fun MainScreen(
     var showPlaylistSheet by remember { mutableStateOf(false) }
     var showPlayerPage by remember { mutableStateOf(false) }
     var isNavigatingBack by remember { mutableStateOf(false) }
-    val tabs = listOf("推荐", "歌单", "设置")
+    val tabs = listOf("推荐", "收藏", "设置")
     val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Settings)
     val railState = rememberNavigationRailState(initialValue = NavigationRailValue.Expanded)
     
@@ -366,9 +366,8 @@ fun MainScreen(
                                         isPlayerPageVisible = showPlayerPage,
                                         onOpenPlayerPage = { showPlayerPage = true },
                                         onIntelligenceMode = { songId, playlistId ->
-                                            viewModel.enterIntelligenceMode(songId, playlistId) {
-                                                showPlayerPage = true
-                                            }
+                                            showPlayerPage = true
+                                            viewModel.enterIntelligenceMode(songId, playlistId)
                                         },
                                         modifier = Modifier.padding(padding)
                                     )
@@ -380,10 +379,11 @@ fun MainScreen(
                                     },
                                     onRefresh = { viewModel.loadUserPlaylists() },
                                     isLoggedIn = isLoggedIn,
+                                    onLoadCloudDiskCover = { viewModel.loadCloudDiskCover() },
+                                    onNavigateToAlbum = { albumId -> navigateTo(Screen.Album(albumId)) },
                                     onIntelligenceMode = { songId, playlistId ->
-                                        viewModel.enterIntelligenceMode(songId, playlistId) {
-                                            showPlayerPage = true
-                                        }
+                                        showPlayerPage = true
+                                        viewModel.enterIntelligenceMode(songId, playlistId)
                                     },
                                     modifier = Modifier.padding(padding)
                                 )
@@ -598,9 +598,8 @@ fun MainScreen(
                                     isPlayerPageVisible = showPlayerPage,
                                     onOpenPlayerPage = { showPlayerPage = true },
                                     onIntelligenceMode = { songId, playlistId ->
-                                        viewModel.enterIntelligenceMode(songId, playlistId) {
-                                            showPlayerPage = true
-                                        }
+                                        showPlayerPage = true
+                                        viewModel.enterIntelligenceMode(songId, playlistId)
                                     },
                                     modifier = Modifier.padding(padding)
                                 )
@@ -612,10 +611,11 @@ fun MainScreen(
                                     },
                                     onRefresh = { viewModel.loadUserPlaylists() },
                                     isLoggedIn = isLoggedIn,
+                                    onLoadCloudDiskCover = { viewModel.loadCloudDiskCover() },
+                                    onNavigateToAlbum = { albumId -> navigateTo(Screen.Album(albumId)) },
                                     onIntelligenceMode = { songId, playlistId ->
-                                        viewModel.enterIntelligenceMode(songId, playlistId) {
-                                            showPlayerPage = true
-                                        }
+                                        showPlayerPage = true
+                                        viewModel.enterIntelligenceMode(songId, playlistId)
                                     },
                                     modifier = Modifier.padding(padding)
                                 )

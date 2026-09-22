@@ -22,6 +22,7 @@ import com.cloudmusic.miuix.data.model.Track
 import com.cloudmusic.miuix.service.MediaPlaybackService
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -41,6 +42,10 @@ data class RecommendState(
     val playlists: List<RecommendPlaylist> = emptyList(),
     val userPlaylists: List<RecommendPlaylist> = emptyList(),
     val dailySongs: List<Track> = emptyList(),
+    /** 收藏的专辑 */
+    val userAlbums: List<com.cloudmusic.miuix.data.model.AlbumInfo> = emptyList(),
+    /** 云盘第一首歌封面（歌单页云盘卡片用） */
+    val cloudDiskCoverUrl: String = "",
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -121,6 +126,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         private set
     private var intelligencePlaylist: List<Track> = emptyList()
     private var intelligenceIndex by mutableIntStateOf(0)
+    private var intelligencePlaylistId: String = ""
+    private var intelligenceSeedSongId: String = ""
 
     // 动态封面ExoPlayer（在ViewModel中管理，切歌时才销毁）
     var animatedCoverExoPlayer by mutableStateOf<androidx.media3.exoplayer.ExoPlayer?>(null)
@@ -257,27 +264,37 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
             }
             "intelligence" -> {
-                isIntelligenceMode = true
                 val songId = prefs.getString("intelligence_song_id", "") ?: ""
                 val playlistId = prefs.getString("intelligence_playlist_id", "") ?: ""
                 if (songId.isNotEmpty() && playlistId.isNotEmpty()) {
+                    isIntelligenceMode = true
+                    intelligenceSeedSongId = songId
+                    intelligencePlaylistId = playlistId
                     viewModelScope.launch {
                         NeteaseApi.getIntelligenceList(songId, playlistId).fold(
                             onSuccess = { tracks ->
                                 intelligencePlaylist = tracks
-                                if (tracks.isNotEmpty()) {
-                                    currentPlaylist = tracks
-                                    // 如果没有上次播放的歌曲，播放第一首
-                                    if (playerState.currentTrack == null) {
-                                        playTrack(tracks[0])
-                                    }
+                                if (tracks.isEmpty()) {
+                                    // 种子/歌单失效，清掉状态避免卡在心动模式
+                                    isIntelligenceMode = false
+                                    prefs.edit().remove("play_mode_type").apply()
+                                    return@fold
+                                }
+                                currentPlaylist = tracks
+                                // 如果没有上次播放的歌曲，播放第一首
+                                if (playerState.currentTrack == null) {
+                                    playTrack(tracks[0])
                                 }
                             },
                             onFailure = { e ->
                                 Log.e("MusicPlayerViewModel", "Failed to restore intelligence mode: ${e.message}")
+                                isIntelligenceMode = false
+                                prefs.edit().remove("play_mode_type").apply()
                             }
                         )
                     }
+                } else {
+                    prefs.edit().remove("play_mode_type").apply()
                 }
             }
         }
@@ -420,6 +437,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     onSuccess = { playlists ->
                         android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists success: ${playlists.size} playlists")
                         recommendState = recommendState.copy(userPlaylists = playlists)
+                        loadCloudDiskCover()
+                        loadUserAlbums()
                     },
                     onFailure = { e ->
                         android.util.Log.e("MusicPlayerViewModel", "loadUserPlaylists error: ${e.message}")
@@ -428,6 +447,38 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             } else {
                 android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists: userId is null - user not logged in")
             }
+        }
+    }
+
+    /** 拉取云盘第一首歌封面，供歌单页云盘卡片展示 */
+    fun loadCloudDiskCover(force: Boolean = false) {
+        if (!force && recommendState.cloudDiskCoverUrl.isNotEmpty()) return
+        viewModelScope.launch {
+            NeteaseApi.getCloudDiskSongs(offset = 0, limit = 1).fold(
+                onSuccess = { result ->
+                    val cover = result.tracks.firstOrNull()?.imgUrl ?: ""
+                    if (cover.isNotEmpty()) {
+                        recommendState = recommendState.copy(cloudDiskCoverUrl = cover)
+                    }
+                },
+                onFailure = { e ->
+                    android.util.Log.e("MusicPlayerViewModel", "loadCloudDiskCover error: ${e.message}")
+                }
+            )
+        }
+    }
+
+    /** 拉取收藏的专辑 */
+    fun loadUserAlbums() {
+        viewModelScope.launch {
+            NeteaseApi.getUserAlbums().fold(
+                onSuccess = { albums ->
+                    recommendState = recommendState.copy(userAlbums = albums)
+                },
+                onFailure = { e ->
+                    android.util.Log.e("MusicPlayerViewModel", "loadUserAlbums error: ${e.message}")
+                }
+            )
         }
     }
 
@@ -562,6 +613,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun enterFMMode() {
         Log.d("MusicPlayerViewModel", "enterFMMode called")
+        if (isFMMode) {
+            android.widget.Toast.makeText(
+                getApplication(),
+                "已经在随身听模式中",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        // FM / 心动 互斥
+        if (isIntelligenceMode) {
+            exitIntelligenceMode()
+        }
         isFMMode = true
         fmIndex = 0
         // 保存FM模式状态
@@ -621,39 +684,158 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    /**
+     * 解析「我喜欢的音乐」歌单 ID（与 SPlayer 的 likedPlaylistId 对齐：
+     * 优先标题含「喜欢」的歌单，否则取用户歌单第一项）
+     */
+    fun resolveLikedPlaylistId(): String {
+        val playlists = recommendState.userPlaylists
+        val liked = playlists.firstOrNull { it.title.contains("喜欢") } ?: playlists.firstOrNull()
+        return liked?.id ?: ""
+    }
+
+    private fun ensureUserPlaylistsLoaded() {
+        if (recommendState.userPlaylists.isEmpty() && NeteaseApi.getCurrentUserId() != null) {
+            loadUserPlaylists()
+        }
+    }
+
+    /**
+     * 进入心动模式
+     * @param songId 种子歌曲 id（可空：自动取每日推荐首首 / 当前播放 / 我喜欢的音乐第一首）
+     * @param playlistId 「我喜欢的音乐」歌单 id（可空：自动解析）
+     */
     fun enterIntelligenceMode(songId: String, playlistId: String, onReady: () -> Unit = {}) {
+        if (isIntelligenceMode) {
+            android.widget.Toast.makeText(
+                getApplication(),
+                "已经在心动模式中",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            onReady()
+            return
+        }
+        // 先进入心动模式状态并立刻回调（打开播放页），接口在后台加载
         isIntelligenceMode = true
-        intelligenceIndex = 0
-        // 保存心动模式状态
-        prefs.edit()
-            .putString("play_mode_type", "intelligence")
-            .putString("intelligence_song_id", songId)
-            .putString("intelligence_playlist_id", playlistId)
-            .apply()
+        if (isFMMode) exitFMMode()
+        // 加载过程复用「等待歌曲」态：播放按钮转圈，进度条/上下首等禁用
+        playerState = playerState.copy(isLoading = true, error = null)
+        onReady()
+        ensureUserPlaylistsLoaded()
         viewModelScope.launch {
-            Log.d("MusicPlayerViewModel", "Loading intelligence list for songId: $songId, playlistId: $playlistId")
-            NeteaseApi.getIntelligenceList(songId, playlistId).fold(
+            Log.d("MusicPlayerViewModel", "Entering intelligence mode seed=$songId pid=$playlistId")
+            val resolved = resolveHeartModeParams(songId, playlistId)
+            if (resolved == null) {
+                Log.e("MusicPlayerViewModel", "Failed to resolve heart mode seed/playlist")
+                isIntelligenceMode = false
+                playerState = playerState.copy(isLoading = false)
+                android.widget.Toast.makeText(
+                    getApplication(),
+                    "心动模式需要登录，且存在「我喜欢的音乐」歌单",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            val (seedId, pid) = resolved
+            NeteaseApi.getIntelligenceList(seedId, pid).fold(
                 onSuccess = { tracks ->
                     Log.d("MusicPlayerViewModel", "Intelligence songs loaded: ${tracks.size} tracks")
-                    intelligencePlaylist = tracks
-                    if (tracks.isNotEmpty()) {
-                        currentPlaylist = tracks
-                        playTrack(tracks[0])
+                    if (tracks.isEmpty()) {
+                        isIntelligenceMode = false
+                        playerState = playerState.copy(isLoading = false)
+                        android.widget.Toast.makeText(
+                            getApplication(),
+                            "心动模式开启失败：未获取到推荐歌曲",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        return@fold
                     }
-                    onReady()
+                    isIntelligenceMode = true
+                    if (isFMMode) exitFMMode()
+                    intelligenceIndex = 0
+                    intelligencePlaylist = tracks
+                    intelligencePlaylistId = pid
+                    intelligenceSeedSongId = seedId
+                    currentPlaylist = tracks
+                    prefs.edit()
+                        .putString("play_mode_type", "intelligence")
+                        .putString("intelligence_song_id", seedId)
+                        .putString("intelligence_playlist_id", pid)
+                        .apply()
+                    // playTrack 内部会继续走 isLoading 流程
+                    playTrack(tracks[0])
                 },
                 onFailure = { e ->
                     Log.e("MusicPlayerViewModel", "Failed to load intelligence list: ${e.message}")
-                    onReady()
+                    isIntelligenceMode = false
+                    playerState = playerState.copy(isLoading = false)
+                    android.widget.Toast.makeText(
+                        getApplication(),
+                        "心动模式开启失败：${e.message ?: "未知错误"}",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
                 }
             )
         }
+    }
+
+    /**
+     * 解析心动模式所需的种子歌曲 ID 与「我喜欢的音乐」歌单 ID
+     * 种子优先取「我喜欢的音乐」里的歌（接口更稳），再退到入参/每日推荐/当前播放
+     */
+    private suspend fun resolveHeartModeParams(songId: String, playlistId: String): Pair<String, String>? {
+        // 确保用户歌单已加载（心动模式必须有 pid）
+        if (recommendState.userPlaylists.isEmpty()) {
+            val userId = NeteaseApi.getCurrentUserId() ?: return null
+            NeteaseApi.getUserPlaylists(userId).fold(
+                onSuccess = { playlists ->
+                    recommendState = recommendState.copy(userPlaylists = playlists)
+                },
+                onFailure = { e ->
+                    Log.e("MusicPlayerViewModel", "resolveHeartModeParams load playlists failed: ${e.message}")
+                }
+            )
+        }
+
+        var pid = playlistId
+        if (pid.isBlank()) {
+            pid = resolveLikedPlaylistId()
+        }
+        if (pid.isBlank()) return null
+
+        // 优先从「我喜欢的音乐」取种子
+        var seed = ""
+        NeteaseApi.getPlaylistDetail(pid).fold(
+            onSuccess = { detail ->
+                seed = detail.tracks.firstOrNull()?.id ?: ""
+            },
+            onFailure = { e ->
+                Log.e("MusicPlayerViewModel", "resolveHeartModeParams load liked playlist failed: ${e.message}")
+            }
+        )
+
+        // 入参种子
+        if (seed.isBlank()) seed = songId
+        // 每日推荐
+        if (seed.isBlank()) seed = recommendState.dailySongs.firstOrNull()?.id ?: ""
+        // 当前播放中的网易云歌曲
+        if (seed.isBlank()) {
+            val current = playerState.currentTrack
+            if (current != null && current.id.startsWith("netrack_")) {
+                seed = current.id
+            }
+        }
+        if (seed.isBlank()) return null
+        Log.d("MusicPlayerViewModel", "resolveHeartModeParams -> seed=$seed pid=$pid")
+        return seed to pid
     }
 
     fun exitIntelligenceMode() {
         isIntelligenceMode = false
         intelligencePlaylist = emptyList()
         intelligenceIndex = 0
+        intelligencePlaylistId = ""
+        intelligenceSeedSongId = ""
         // 清除心动模式状态
         prefs.edit()
             .remove("play_mode_type")
@@ -663,9 +845,33 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun intelligencePlayNext() {
-        intelligenceIndex++
-        if (intelligenceIndex < intelligencePlaylist.size) {
+        if (intelligencePlaylist.isEmpty()) return
+        if (intelligenceIndex < intelligencePlaylist.size - 1) {
+            intelligenceIndex++
             playTrack(intelligencePlaylist[intelligenceIndex])
+            return
+        }
+        // 到末尾：以当前曲目为种子续拉下一批推荐
+        val last = intelligencePlaylist.last()
+        val pid = intelligencePlaylistId.ifBlank { resolveLikedPlaylistId() }
+        if (pid.isBlank()) return
+        viewModelScope.launch {
+            NeteaseApi.getIntelligenceList(last.id, pid).fold(
+                onSuccess = { more ->
+                    val known = intelligencePlaylist.map { it.id }.toSet()
+                    val fresh = more.filter { it.id !in known }
+                    if (fresh.isNotEmpty()) {
+                        intelligencePlaylist = intelligencePlaylist + fresh
+                        intelligenceIndex++
+                        playTrack(intelligencePlaylist[intelligenceIndex])
+                    } else {
+                        Log.d("MusicPlayerViewModel", "Intelligence mode: no more recommendations")
+                    }
+                },
+                onFailure = { e ->
+                    Log.e("MusicPlayerViewModel", "Intelligence mode load more failed: ${e.message}")
+                }
+            )
         }
     }
 
@@ -698,16 +904,26 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     isLoading = false
                 )
             }
-            // 云盘歌单特殊处理
+            // 云盘歌单特殊处理：首页立即展示，随后后台把剩余分页全部拉完
             else if (playlistId == "cloud_disk") {
+                cloudDiskLoadJob?.cancel()
                 cloudDiskOffset = 0
                 cloudDiskHasMore = true
+                cloudDiskTotalCount = 0
                 NeteaseApi.getCloudDiskSongs(offset = 0, limit = cloudDiskLimit).fold(
                     onSuccess = { result ->
-                        cloudDiskOffset = result.tracks.size
-                        cloudDiskHasMore = result.hasMore
+                        cloudDiskOffset = result.rawFetched
+                        // 不要只信 hasMore：count / 满页也要继续
+                        cloudDiskHasMore = result.hasMore ||
+                            (result.count > 0 && result.rawFetched < result.count) ||
+                            result.rawFetched >= cloudDiskLimit
+                        cloudDiskTotalCount = if (result.count > 0) result.count else result.tracks.size
                         // 使用第一首歌的封面作为歌单封面
                         val coverUrl = result.tracks.firstOrNull()?.imgUrl ?: ""
+                        if (coverUrl.isNotEmpty()) {
+                            recommendState = recommendState.copy(cloudDiskCoverUrl = coverUrl)
+                        }
+                        val displayCount = maxOf(cloudDiskTotalCount, result.tracks.size)
                         playlistDetailState = playlistDetailState.copy(
                             detail = PlaylistDetail(
                                 info = Playlist(
@@ -715,13 +931,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                                     title = "云盘",
                                     coverImgUrl = coverUrl,
                                     sourceUrl = "",
-                                    trackCount = result.tracks.size,
+                                    trackCount = displayCount,
                                     description = ""
                                 ),
                                 tracks = result.tracks
                             ),
                             isLoading = false
                         )
+                        // 只要可能还有剩余就后台续拉（不依赖服务端 hasMore 是否正确）
+                        cloudDiskLoadJob = viewModelScope.launch {
+                            loadRemainingCloudDiskSongs()
+                        }
                     },
                     onFailure = { e ->
                         playlistDetailState = playlistDetailState.copy(
@@ -731,6 +951,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 )
             } else {
+                cloudDiskLoadJob?.cancel()
                 NeteaseApi.getPlaylistDetail(playlistId).fold(
                     onSuccess = { detail ->
                         playlistDetailState = playlistDetailState.copy(
@@ -752,42 +973,107 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     // 云盘分段加载相关变量
     private var cloudDiskOffset = 0
     private var cloudDiskHasMore = true
-    private val cloudDiskLimit = 10
+    private var cloudDiskTotalCount = 0
+    private var cloudDiskLoadJob: Job? = null
+    private val cloudDiskLimit = 30
     var isCloudDiskLoadingMore by mutableStateOf(false)
         private set
 
+    /**
+     * 后台拉取云盘剩余分页。
+     * 终止条件不要只看 hasMore：满页 / count 未拉完都继续，直到拉空或安全上限。
+     */
+    private suspend fun loadRemainingCloudDiskSongs() {
+        var guard = 0
+        isCloudDiskLoadingMore = true
+        try {
+            while (guard < 80) {
+                // 用户已离开云盘页则停止
+                if (playlistDetailState.detail?.info?.id != "cloud_disk") break
+                guard++
+                val offset = cloudDiskOffset
+                val page = NeteaseApi.getCloudDiskSongs(offset = offset, limit = cloudDiskLimit)
+                if (page.isFailure) {
+                    Log.e("MusicPlayerViewModel", "loadRemainingCloudDiskSongs failed at offset=$offset: ${page.exceptionOrNull()?.message}")
+                    cloudDiskHasMore = false
+                    break
+                }
+                val result = page.getOrNull() ?: break
+                if (result.rawFetched <= 0 && result.tracks.isEmpty()) {
+                    cloudDiskHasMore = false
+                    break
+                }
+                cloudDiskOffset += result.rawFetched
+                if (result.count > 0) cloudDiskTotalCount = result.count
+                appendCloudDiskTracks(result.tracks)
+
+                val countSaysMore = cloudDiskTotalCount > 0 && cloudDiskOffset < cloudDiskTotalCount
+                val pageWasFull = result.rawFetched >= cloudDiskLimit
+                val serverSaysMore = result.hasMore
+                cloudDiskHasMore = serverSaysMore || countSaysMore || pageWasFull
+                Log.d(
+                    "MusicPlayerViewModel",
+                    "cloud page offset=$cloudDiskOffset total=$cloudDiskTotalCount raw=${result.rawFetched} hasMore=$cloudDiskHasMore"
+                )
+                if (!cloudDiskHasMore) break
+            }
+        } finally {
+            isCloudDiskLoadingMore = false
+        }
+    }
+
+    private fun appendCloudDiskTracks(newTracks: List<Track>) {
+        if (newTracks.isEmpty()) return
+        val detail = playlistDetailState.detail ?: return
+        if (detail.info.id != "cloud_disk") return
+        val existingIds = detail.tracks.map { it.id }.toSet()
+        val merged = detail.tracks + newTracks.filter { it.id !in existingIds }
+        val displayCount = maxOf(cloudDiskTotalCount, merged.size)
+        playlistDetailState = playlistDetailState.copy(
+            detail = detail.copy(
+                info = detail.info.copy(trackCount = displayCount),
+                tracks = merged
+            )
+        )
+        // 若当前正在播放云盘里的歌，同步更新播放队列
+        val currentId = playerState.currentTrack?.id
+        if (currentId != null && merged.any { it.id == currentId }) {
+            currentPlaylist = merged
+        }
+    }
+
     fun loadMoreCloudDiskSongs() {
         if (!cloudDiskHasMore || isCloudDiskLoadingMore) return
-        
-        viewModelScope.launch {
+        if (playlistDetailState.detail?.info?.id != "cloud_disk") return
+        cloudDiskLoadJob?.cancel()
+        cloudDiskLoadJob = viewModelScope.launch {
             isCloudDiskLoadingMore = true
-            NeteaseApi.getCloudDiskSongs(offset = cloudDiskOffset, limit = cloudDiskLimit).fold(
-                onSuccess = { result ->
-                    cloudDiskOffset += result.tracks.size
-                    cloudDiskHasMore = result.hasMore
-                    
-                    val currentTracks = playlistDetailState.detail?.tracks ?: emptyList()
-                    val allTracks = currentTracks + result.tracks
-                    
-                    playlistDetailState = playlistDetailState.copy(
-                        detail = playlistDetailState.detail?.copy(
-                            info = playlistDetailState.detail?.info?.copy(
-                                trackCount = allTracks.size
-                            ) ?: Playlist("", "", "", "", allTracks.size),
-                            tracks = allTracks
-                        )
-                    )
-                    currentPlaylist = allTracks
-                    isCloudDiskLoadingMore = false
-                },
-                onFailure = { e ->
-                    isCloudDiskLoadingMore = false
-                }
-            )
+            try {
+                NeteaseApi.getCloudDiskSongs(offset = cloudDiskOffset, limit = cloudDiskLimit).fold(
+                    onSuccess = { result ->
+                        cloudDiskOffset += result.rawFetched
+                        cloudDiskHasMore = result.hasMore
+                        if (result.count > 0) cloudDiskTotalCount = result.count
+                        appendCloudDiskTracks(result.tracks)
+                        // UI 触发的加载更多若仍有剩余，继续后台拉完
+                        if (cloudDiskHasMore) {
+                            loadRemainingCloudDiskSongs()
+                        }
+                    },
+                    onFailure = { e ->
+                        Log.e("MusicPlayerViewModel", "loadMoreCloudDiskSongs failed: ${e.message}")
+                    }
+                )
+            } finally {
+                isCloudDiskLoadingMore = false
+            }
         }
     }
 
     fun clearPlaylistDetail() {
+        cloudDiskLoadJob?.cancel()
+        cloudDiskLoadJob = null
+        isCloudDiskLoadingMore = false
         playlistDetailState = PlaylistDetailState()
     }
 

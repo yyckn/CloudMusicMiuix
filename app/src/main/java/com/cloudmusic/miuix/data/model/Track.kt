@@ -41,6 +41,15 @@ data class RecommendPlaylist(
     val isCloudDisk: Boolean = false
 )
 
+/** 「XXX喜欢的音乐」→「XXX 收藏的音乐」（仅展示用） */
+fun displayPlaylistTitle(title: String): String {
+    return if (title.endsWith("喜欢的音乐")) {
+        title.removeSuffix("喜欢的音乐") + " 收藏的音乐"
+    } else {
+        title
+    }
+}
+
 data class UserProfile(
     val userId: Long = 0,
     val nickname: String = "",
