@@ -426,6 +426,40 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    /** 随机播放一首（试试手气）：从每日推荐 / 我喜欢的音乐里随机挑一首 */
+    fun playRandomOne() {
+        viewModelScope.launch {
+            val pool = mutableListOf<Track>()
+            pool.addAll(recommendState.dailySongs)
+
+            val likedId = resolveLikedPlaylistId()
+            if (likedId.isNotEmpty()) {
+                NeteaseApi.getPlaylistDetail(likedId).fold(
+                    onSuccess = { detail -> pool.addAll(detail.tracks) },
+                    onFailure = { e ->
+                        Log.e("MusicPlayerViewModel", "playRandomOne load liked failed: ${e.message}")
+                    }
+                )
+            }
+
+            // 去重后随机
+            val unique = pool.distinctBy { it.id }
+            if (unique.isEmpty()) {
+                android.widget.Toast.makeText(
+                    getApplication(),
+                    "暂无可随机播放的歌曲",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            val randomTrack = unique.random()
+            // 队列 = 随机曲 + 每日推荐，保证上一首/下一首可用
+            val queue = mutableListOf(randomTrack)
+            queue.addAll(recommendState.dailySongs.filter { it.id != randomTrack.id })
+            playTrackWithMode(randomTrack, queue)
+        }
+    }
+
     fun loadUserPlaylists() {
         viewModelScope.launch {
             android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists called")
@@ -616,7 +650,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (isFMMode) {
             android.widget.Toast.makeText(
                 getApplication(),
-                "已经在随身听模式中",
+                "已经在私人FM模式中",
                 android.widget.Toast.LENGTH_SHORT
             ).show()
             return

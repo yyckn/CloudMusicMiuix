@@ -68,6 +68,7 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
+import com.cloudmusic.miuix.ui.FeedBottomPads
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Comment
@@ -144,7 +145,7 @@ fun AlbumPage(
                 .padding(top = paddingValues.calculateTopPadding())
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 16.dp),
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = FeedBottomPads.Standard),
             overscrollEffect = null
         ) {
             // 专辑头部信息

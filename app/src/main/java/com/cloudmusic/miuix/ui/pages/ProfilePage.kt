@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -70,6 +71,7 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
+import com.cloudmusic.miuix.ui.FeedBottomPads
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.unit.DpSize
@@ -250,7 +252,7 @@ fun ProfilePage(
                         .fillMaxSize()
                         .overScrollVertical()
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(bottom = 16.dp),
+                    contentPadding = PaddingValues(bottom = FeedBottomPads.None),
                     overscrollEffect = null
                 ) {
                     // 头像和昵称
@@ -277,6 +279,22 @@ fun ProfilePage(
                                 fontWeight = FontWeight.Bold,
                                 color = MiuixTheme.colorScheme.onSurface
                             )
+                            if ((userProfile?.vipType ?: 0) > 0) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.15f))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "VIP",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MiuixTheme.colorScheme.primary
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -342,21 +360,6 @@ fun ProfilePage(
                             BasicComponent(
                                 title = "简介",
                                 summary = userProfile?.signature?.ifEmpty { "空" } ?: "空"
-                            )
-                        }
-                    }
-
-                    // 账号信息
-                    item { SmallTitle("账号信息") }
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .padding(horizontal = 12.dp)
-                                .padding(bottom = 12.dp)
-                        ) {
-                            BasicComponent(
-                                title = "等级",
-                                summary = if (userProfile?.vipType ?: 0 > 0) "VIP" else "普通用户"
                             )
                         }
                     }

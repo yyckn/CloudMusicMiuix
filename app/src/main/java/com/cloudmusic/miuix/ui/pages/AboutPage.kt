@@ -41,6 +41,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
+import com.cloudmusic.miuix.ui.FeedBottomPads
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
@@ -91,7 +92,7 @@ fun AboutPage(
                 .fillMaxSize()
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(bottom = 16.dp),
+            contentPadding = PaddingValues(bottom = FeedBottomPads.None),
             overscrollEffect = null
         ) {
             item { Spacer(modifier = Modifier.height(32.dp)) }
@@ -180,6 +181,14 @@ fun AboutPage(
                         summary = "通过此项目适配词幕接口",
                         onClick = {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/cwuom/NeriPlayer"))
+                            context.startActivity(intent)
+                        }
+                    )
+                    ArrowPreference(
+                        title = "SPlayer-Next",
+                        summary = "提供部分网易云相关接口",
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SPlayer-Dev/SPlayer-Next"))
                             context.startActivity(intent)
                         }
                     )

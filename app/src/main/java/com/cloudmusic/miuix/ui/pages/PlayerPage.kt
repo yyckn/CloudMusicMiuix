@@ -2067,7 +2067,7 @@ private fun getQualityText(
         else -> "Hi-Res 无损音频"
     }
     val prefix = when {
-        isFMMode -> "FM随身听"
+        isFMMode -> "私人FM"
         isIntelligenceMode -> "心动模式"
         else -> ""
     }

@@ -42,6 +42,7 @@ import com.cloudmusic.miuix.R
 import com.cloudmusic.miuix.data.api.NeteaseApi
 import com.cloudmusic.miuix.data.model.Comment
 import com.cloudmusic.miuix.data.model.CommentResult
+import com.cloudmusic.miuix.ui.FeedBottomPads
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
@@ -194,7 +195,12 @@ fun CommentPage(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        contentPadding = PaddingValues(
+                            start = 12.dp,
+                            end = 12.dp,
+                            top = 8.dp,
+                            bottom = FeedBottomPads.Standard
+                        ),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         itemsIndexed(comments) { index, comment ->

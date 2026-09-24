@@ -16,9 +16,10 @@ import java.util.concurrent.TimeUnit
 object AppleMusicApi {
     private const val TAG = "AppleMusicApi"
     
+    // 站点 JS 包很大（index~*.js 约 3MB），超时需放宽，否则拿不到 JWT
     private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .build()
     
     // 缓存JWT Token
@@ -314,24 +315,27 @@ object AppleMusicApi {
             
             val jsPaths = jsSrcRegex.findAll(homeHtml)
                 .map { it.groupValues[1] }
-                .filter { it.contains("index-legacy") }
+                .filter { it.contains("/assets/") || it.contains("index") }
                 .toList()
-            
-            Log.d(TAG, "beta站点找到 ${jsPaths.size} 个legacy JS文件")
-            
+
+            Log.d(TAG, "beta站点找到 ${jsPaths.size} 个JS文件")
+
+            // 先扫 HTML 本身（有时 token 会内联）
+            findValidJwt(homeHtml)?.let { return it }
+
             for (jsPath in jsPaths) {
                 Log.d(TAG, "检查JS文件: $jsPath")
                 val fullUrl = if (jsPath.startsWith("http")) jsPath else "https://beta.music.apple.com$jsPath"
                 val jsContent = fetchString(fullUrl)
                 Log.d(TAG, "JS文件内容长度: ${jsContent.length}")
-                
+
                 val validJwt = findValidJwt(jsContent)
                 if (validJwt != null) {
                     Log.d(TAG, "在JS文件中找到有效Token")
                     return validJwt
                 }
             }
-            
+
             Log.w(TAG, "在beta站点JS文件中未找到有效Token")
             null
         } catch (e: Exception) {
@@ -354,22 +358,31 @@ object AppleMusicApi {
                 return null
             }
             
+            // 新版站点是 Vite 产物：/assets/index~xxxx.js（JWT/WebPlayKid 在这里）
             val jsPaths = jsSrcRegex.findAll(homeHtml)
                 .map { it.groupValues[1] }
-                .filter { it.contains("index-") && it.contains("/assets/") }
+                .filter { it.endsWith(".js") && (it.contains("/assets/") || it.contains("index")) }
+                .sortedByDescending { if (it.contains("index~") || it.contains("/assets/index")) 1 else 0 }
                 .toList()
-            
-            Log.d(TAG, "正式站点找到 ${jsPaths.size} 个JS文件")
-            
+
+            Log.d(TAG, "正式站点找到 ${jsPaths.size} 个JS文件: $jsPaths")
+
+            findValidJwt(homeHtml)?.let { return it }
+
             for (jsPath in jsPaths) {
                 Log.d(TAG, "检查JS文件: $jsPath")
-                val fullUrl = if (jsPath.startsWith("http")) jsPath else "https://music.apple.com$jsPath"
+                val fullUrl = when {
+                    jsPath.startsWith("http") -> jsPath
+                    jsPath.startsWith("//") -> "https:$jsPath"
+                    jsPath.startsWith("/") -> "https://music.apple.com$jsPath"
+                    else -> "https://music.apple.com/$jsPath"
+                }
                 val jsContent = fetchString(fullUrl)
                 Log.d(TAG, "JS文件内容长度: ${jsContent.length}")
-                
+
                 val validJwt = findValidJwt(jsContent)
                 if (validJwt != null) {
-                    Log.d(TAG, "在JS文件中找到有效Token")
+                    Log.d(TAG, "在JS文件中找到有效Token, kid尝试通过")
                     return validJwt
                 }
             }
@@ -388,7 +401,8 @@ object AppleMusicApi {
     private fun findValidJwt(jsContent: String): String? {
         val allJwts = jwtRegex.findAll(jsContent).map { it.value }.toList()
         Log.d(TAG, "找到 ${allJwts.size} 个JWT Token")
-        
+
+        // 优先 WebPlayKid
         for ((index, jwt) in allJwts.withIndex()) {
             Log.d(TAG, "检查JWT[$index]: ${jwt.take(50)}...")
             if (isWebPlayKidToken(jwt)) {
@@ -396,8 +410,13 @@ object AppleMusicApi {
                 return jwt
             }
         }
-        
-        return null
+
+        // 站点改版后 kid 可能变化：退回任一可用三段式 JWT
+        val fallback = allJwts.firstOrNull { it.split(".").size == 3 }
+        if (fallback != null) {
+            Log.d(TAG, "未找到 WebPlayKid，使用候选 Token: ${fallback.take(40)}...")
+        }
+        return fallback
     }
     
     /**
@@ -411,7 +430,7 @@ object AppleMusicApi {
             val headerJson = JSONObject(decoded)
             val kid = headerJson.optString("kid")
             Log.d(TAG, "JWT Header kid: $kid")
-            kid == "WebPlayKid"
+            kid == "WebPlayKid" || kid.contains("WebPlay", ignoreCase = true) || kid.contains("PlayKid", ignoreCase = true)
         } catch (e: Exception) {
             Log.e(TAG, "解析JWT Header失败: ${e.message}")
             false
@@ -510,17 +529,27 @@ object AppleMusicApi {
         val attributes = album.getJSONObject("attributes")
         Log.d(TAG, "attributes字段: ${attributes.keys().asSequence().toList()}")
         
-        // 检查是否有动态封面
+        // 检查是否有动态封面（兼容多种 editorialVideo 字段名）
         if (attributes.has("editorialVideo")) {
             Log.d(TAG, "找到editorialVideo字段（有动态封面）")
             val editorialVideo = attributes.getJSONObject("editorialVideo")
-            
-            if (editorialVideo.has("motionDetailSquare")) {
-                val motionDetailSquare = editorialVideo.getJSONObject("motionDetailSquare")
-                
-                if (motionDetailSquare.has("video")) {
-                    val videoUrl = motionDetailSquare.getString("video")
-                    Log.d(TAG, "找到动态封面视频URL: $videoUrl")
+            val motionKeys = listOf(
+                "motionDetailSquare",
+                "motionDetailSquare1x1",
+                "motionDetailTall",
+                "motionTall",
+                "motionSquare",
+                "motionArtist",
+                "motionWide"
+            )
+            for (key in motionKeys) {
+                if (!editorialVideo.has(key)) continue
+                val motion = editorialVideo.getJSONObject(key)
+                val videoUrl = sequenceOf("video", "hlsUrl", "url", "preview")
+                    .mapNotNull { k -> if (motion.has(k) && !motion.isNull(k)) motion.optString(k) else null }
+                    .firstOrNull { it.isNotEmpty() }
+                if (videoUrl != null) {
+                    Log.d(TAG, "找到动态封面视频URL($key): $videoUrl")
                     return AppleMusicCover(artworkUrl = videoUrl, isAnimated = true)
                 }
             }

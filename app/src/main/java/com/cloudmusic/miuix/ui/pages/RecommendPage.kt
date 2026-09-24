@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.cloudmusic.miuix.data.model.RecommendPlaylist
 import com.cloudmusic.miuix.data.model.Track
+import com.cloudmusic.miuix.ui.FeedBottomPads
 import com.cloudmusic.miuix.viewmodel.MusicPlayerViewModel
 import com.cloudmusic.miuix.viewmodel.RecommendState
 import top.yukonga.miuix.kmp.basic.Card
@@ -309,7 +310,7 @@ fun RecommendPage(
                             .fillMaxSize()
                             .overScrollVertical()
                             .nestedScroll(scrollBehavior.nestedScrollConnection),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = FeedBottomPads.More),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -318,13 +319,21 @@ fun RecommendPage(
                             FeatureCardsRow(
                                 dailySongs = recommendState.dailySongs,
                                 userPlaylists = recommendState.userPlaylists,
+                                onRandomPlayClick = {
+                                    if (isLoggedIn) {
+                                        viewModel.playRandomOne()
+                                        onOpenPlayerPage()
+                                    } else {
+                                        android.widget.Toast.makeText(context, "请登录后使用", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                },
                                 onDailyRecommendClick = {
                                     onPlaylistClick("daily_recommend", "", "每日推荐")
                                 },
                                 onFmClick = {
                                     if (isLoggedIn) {
                                         if (viewModel.isFMMode) {
-                                            android.widget.Toast.makeText(context, "已经在随身听模式中", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(context, "已经在私人FM模式中", android.widget.Toast.LENGTH_SHORT).show()
                                         } else {
                                             viewModel.enterFMMode()
                                             onOpenPlayerPage()
@@ -413,6 +422,7 @@ private fun RecommendPlaylistCard(
 private fun FeatureCardsRow(
     dailySongs: List<Track>,
     userPlaylists: List<RecommendPlaylist> = emptyList(),
+    onRandomPlayClick: () -> Unit = {},
     onDailyRecommendClick: () -> Unit,
     onFmClick: () -> Unit,
     onIntelligenceModeClick: (String, String) -> Unit,
@@ -430,19 +440,32 @@ private fun FeatureCardsRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(horizontal = 0.dp)
     ) {
+        // 随机播放一首
+        item {
+            FeatureCard(
+                title = "随机播放一首",
+                subtitle = "试试手气",
+                coverUrl = "",
+                onClick = onRandomPlayClick,
+                isRandomCard = true
+            )
+        }
+
         // 每日推荐
         item {
             FeatureCard(
                 title = "每日推荐",
+                subtitle = "每日限定精选歌曲",
                 coverUrl = dailySongs.firstOrNull()?.imgUrl ?: "",
                 onClick = onDailyRecommendClick
             )
         }
 
-        // 随身听FM
+        // 私人FM
         item {
             FeatureCard(
-                title = "随身听FM",
+                title = "私人FM",
+                subtitle = "根据你的口味推荐新歌",
                 coverUrl = "",
                 onClick = onFmClick,
                 isFmCard = true
@@ -454,6 +477,7 @@ private fun FeatureCardsRow(
             item {
                 FeatureCard(
                     title = "心动模式",
+                    subtitle = "根据你的喜爱推荐歌曲",
                     coverUrl = dailySongs.firstOrNull()?.imgUrl ?: "",
                     onClick = { onIntelligenceModeClick(heartSeedId, likedPlaylistId) },
                     isIntelligenceCard = true
@@ -466,9 +490,11 @@ private fun FeatureCardsRow(
 @Composable
 private fun FeatureCard(
     title: String,
+    subtitle: String = "",
     coverUrl: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isRandomCard: Boolean = false,
     isFmCard: Boolean = false,
     isIntelligenceCard: Boolean = false
 ) {
@@ -489,7 +515,19 @@ private fun FeatureCard(
                     .clip(RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                if (isFmCard) {
+                if (isRandomCard) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0xFFE3F2FD)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "🎲",
+                            fontSize = 48.sp
+                        )
+                    }
+                } else if (isFmCard) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -537,6 +575,19 @@ private fun FeatureCard(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            // 说明文字（样式对齐下方歌单卡片的播放量文案）
+            if (subtitle.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = subtitle,
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }

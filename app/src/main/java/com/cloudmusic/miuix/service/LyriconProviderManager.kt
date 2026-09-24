@@ -12,33 +12,45 @@ import io.github.proify.lyricon.provider.LyriconFactory
 import io.github.proify.lyricon.provider.LyriconProvider
 
 class LyriconProviderManager(private val context: Context) {
-    
+
+    companion object {
+        /** 是否将歌词推送到词幕（默认开启） */
+        @Volatile
+        var pushLyricsEnabled: Boolean = true
+
+        fun loadPushLyricsEnabled(context: Context) {
+            pushLyricsEnabled = context.getSharedPreferences("lyricon_prefs", Context.MODE_PRIVATE)
+                .getBoolean("push_lyrics_enabled", true)
+        }
+    }
+
     private var provider: LyriconProvider? = null
     private val TAG = "LyriconProviderManager"
     private var enabled = true
     private var currentTrackId: String? = null
     private var currentLyrics: List<RichLyricLine>? = null
     private var currentSongTitle: String = ""
-    
+
     private val connectionListener = object : ConnectionListener {
         override fun onConnected(provider: LyriconProvider) {
             Log.d(TAG, "Lyricon connected")
         }
-        
+
         override fun onReconnected(provider: LyriconProvider) {
             Log.d(TAG, "Lyricon reconnected")
         }
-        
+
         override fun onDisconnected(provider: LyriconProvider) {
             Log.d(TAG, "Lyricon disconnected")
         }
-        
+
         override fun onConnectTimeout(provider: LyriconProvider) {
             Log.e(TAG, "Lyricon connection timeout")
         }
     }
-    
+
     fun initialize() {
+        loadPushLyricsEnabled(context)
         try {
             provider = LyriconFactory.createProvider(context)
             provider?.service?.addConnectionListener(connectionListener)
@@ -48,21 +60,24 @@ class LyriconProviderManager(private val context: Context) {
             Log.e(TAG, "Failed to initialize LyriconProvider", e)
         }
     }
-    
+
     fun setTrack(track: Track, lyrics: SongLyrics? = null) {
         if (!enabled) return
         val player = provider?.player ?: return
-        
-        Log.d(TAG, "setTrack: id=${track.id}, title=${track.title}, artist=${track.artist}, duration=${track.duration}, lyrics=${lyrics?.lines?.size ?: 0} lines, isPureMusic=${lyrics?.isPureMusic}")
-        
+
+        // 关闭「推送歌词到词幕」时只同步歌曲信息，不传歌词
+        val effectiveLyrics = if (pushLyricsEnabled) lyrics else null
+
+        Log.d(TAG, "setTrack: id=${track.id}, title=${track.title}, artist=${track.artist}, duration=${track.duration}, lyrics=${effectiveLyrics?.lines?.size ?: 0} lines, isPureMusic=${effectiveLyrics?.isPureMusic}, pushLyrics=$pushLyricsEnabled")
+
         // 更新当前歌曲ID
         currentTrackId = track.id
-        
+
         // 清除旧歌词
         currentLyrics = null
         currentSongTitle = ""
-        
-        val parsedLyrics = if (lyrics?.isPureMusic == true) {
+
+        val parsedLyrics = if (effectiveLyrics?.isPureMusic == true) {
             // 纯音乐：整首歌从头到尾输出为一句"歌名 - 歌手"
             listOf(
                 RichLyricLine(
@@ -74,9 +89,9 @@ class LyriconProviderManager(private val context: Context) {
                 )
             )
         } else {
-            parseLyrics(lyrics, track.title, track.artist, track.duration)
+            parseLyrics(effectiveLyrics, track.title, track.artist, track.duration)
         }
-        
+
         currentLyrics = parsedLyrics
         currentSongTitle = "${track.title} - ${track.artist}"
         

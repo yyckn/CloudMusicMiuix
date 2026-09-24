@@ -1359,15 +1359,32 @@ fun MainScreen(
                 }
             }
             is Screen.Comment -> {
-                CommentPage(
-                    songId = screen.songId,
-                    songTitle = screen.songTitle,
-                    onBackClick = {
-                        if (!navigateBack()) {
-                            currentScreen = Screen.Main
-                        }
+                Scaffold(
+                    bottomBar = {
+                        PlayerBar(
+                            playerState = viewModel.playerState,
+                            onTogglePlayPause = { viewModel.togglePlayPause() },
+                            onPlayerBarClick = { showPlayerPage = true },
+                            onSwipeUp = { showPlayerPage = true },
+                            onPlaylistClick = { showPlaylistSheet = true },
+                            sharedTransitionScope = this@SharedTransitionLayout,
+                            animatedVisibilityScope = this@AnimatedContent,
+                            hasBottomBar = false,
+                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode
+                        )
                     }
-                )
+                ) { padding ->
+                    CommentPage(
+                        songId = screen.songId,
+                        songTitle = screen.songTitle,
+                        onBackClick = {
+                            if (!navigateBack()) {
+                                currentScreen = Screen.Main
+                            }
+                        },
+                        modifier = Modifier.padding(padding)
+                    )
+                }
             }
         }
         }

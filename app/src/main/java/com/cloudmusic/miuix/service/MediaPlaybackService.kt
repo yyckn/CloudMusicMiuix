@@ -378,8 +378,10 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         if (lyriconManager?.isCurrentTrack(track.id) == true) {
             // 更新当前歌词
             currentLyrics = lyrics
-            lyriconManager?.setTrack(track, lyrics)
-            Log.d(TAG, "Updated lyrics for track: ${track.title}, lines: ${lyrics?.lines?.size ?: 0}")
+            // 关闭「推送歌词到词幕」时不向词幕传歌词
+            val payload = if (com.cloudmusic.miuix.service.LyriconProviderManager.pushLyricsEnabled) lyrics else null
+            lyriconManager?.setTrack(track, payload)
+            Log.d(TAG, "Updated lyrics for track: ${track.title}, pushLyrics=${com.cloudmusic.miuix.service.LyriconProviderManager.pushLyricsEnabled}, lines: ${payload?.lines?.size ?: 0}")
             
             // 重新更新metadata以包含歌词信息
             serviceScope.launch {

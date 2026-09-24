@@ -30,6 +30,7 @@ import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
+import com.cloudmusic.miuix.ui.FeedBottomPads
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import com.cloudmusic.miuix.ui.theme.ThemeSettings
@@ -87,7 +88,7 @@ fun PlayPageSettingsPage(
                 .padding(top = paddingValues.calculateTopPadding())
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(bottom = 16.dp),
+            contentPadding = PaddingValues(bottom = FeedBottomPads.None),
             overscrollEffect = null
         ) {
             // 歌词设置
@@ -234,23 +235,18 @@ fun PlayPageSettingsPage(
                         }
                     }
 
-                    // 动态Live封面
+                    // 动态Live封面（功能暂时下线：默认关闭且禁止打开）
                     BasicComponent(
                         title = "动态Live封面",
-                        summary = "生动鲜活的Live封面将为听歌带来无与伦比的视听体验（动态封面资源来源于Apple Music，仅部分歌曲支持）",
+                        summary = "功能维护中，暂不可用",
                         endActions = {
                             Switch(
-                                checked = enableDynamicCover,
-                                onCheckedChange = { newValue ->
-                                    enableDynamicCover = newValue
-                                    ThemeSettings.updateEnableDynamicCover(newValue)
-                                }
+                                checked = false,
+                                enabled = false,
+                                onCheckedChange = { }
                             )
                         },
-                        onClick = {
-                            enableDynamicCover = !enableDynamicCover
-                            ThemeSettings.updateEnableDynamicCover(enableDynamicCover)
-                        }
+                        onClick = { }
                     )
                 }
             }

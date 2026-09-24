@@ -2181,7 +2181,29 @@ object NeteaseApi {
             }
         }
 
-        return SongLyrics(lines = lines.sortedBy { it.startAt })
+        return SongLyrics(lines = expandIrrelevantBetween(lines.sortedBy { it.startAt }))
+    }
+
+    /**
+     * 邻接扩展：前后行都是「无关歌词」（演职员表/屏蔽词）时，中间行也算无关。
+     * 例如 A/B/C，A、C 为无关 → B 一并过滤。
+     */
+    private fun expandIrrelevantBetween(lines: List<LyricLine>): List<LyricLine> {
+        if (lines.size < 3) return lines
+        val irrelevant = lines.map { it.isArtistLine }.toMutableList()
+        var changed = true
+        while (changed) {
+            changed = false
+            for (i in 1 until irrelevant.size - 1) {
+                if (!irrelevant[i] && irrelevant[i - 1] && irrelevant[i + 1]) {
+                    irrelevant[i] = true
+                    changed = true
+                }
+            }
+        }
+        return lines.mapIndexed { index, line ->
+            if (irrelevant[index] && !line.isArtistLine) line.copy(isArtistLine = true) else line
+        }
     }
 
     private fun isExcludedLyric(text: String, duration: Long = 0, songTitle: String = "", artistNames: List<String> = emptyList()): Boolean {

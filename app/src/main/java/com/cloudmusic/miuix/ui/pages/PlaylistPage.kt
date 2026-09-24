@@ -35,6 +35,7 @@ import coil.compose.AsyncImage
 import com.cloudmusic.miuix.data.model.AlbumInfo
 import com.cloudmusic.miuix.data.model.RecommendPlaylist
 import com.cloudmusic.miuix.data.model.displayPlaylistTitle
+import com.cloudmusic.miuix.ui.FeedBottomPads
 import com.cloudmusic.miuix.viewmodel.RecommendState
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -137,19 +138,15 @@ fun PlaylistPage(
                     "正在刷新...",
                     "刷新成功"
                 ),
-                modifier = Modifier.padding(
-                    top = paddingValues.calculateTopPadding(),
-                    // 垫高底部，避免内容被播放条/导航栏挡住（与设置页同思路）
-                    bottom = paddingValues.calculateBottomPadding()
-                )
+                modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
             ) {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .overScrollVertical()
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    // 与设置页一致：不用 spacedBy；额外底部留白，保证最后一项可滚出
-                    contentPadding = PaddingValues(bottom = 24.dp),
+                    // 更多垫高：迷你播放器 + 底部导航
+                    contentPadding = PaddingValues(bottom = FeedBottomPads.More),
                     overscrollEffect = null
                 ) {
                     item { Spacer(modifier = Modifier.size(12.dp)) }

@@ -45,6 +45,7 @@ import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
+import com.cloudmusic.miuix.ui.FeedBottomPads
 
 @Composable
 fun SettingsPage(
@@ -146,7 +147,7 @@ fun SettingsPage(
                     .fillMaxSize()
                     .overScrollVertical()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 80.dp),
+                contentPadding = PaddingValues(bottom = FeedBottomPads.More),
                 overscrollEffect = null
             ) {
                 item { Spacer(modifier = Modifier.size(12.dp)) }

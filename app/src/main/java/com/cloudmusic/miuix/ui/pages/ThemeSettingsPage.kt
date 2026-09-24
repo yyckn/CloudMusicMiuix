@@ -24,6 +24,7 @@ import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
+import com.cloudmusic.miuix.ui.FeedBottomPads
 import com.cloudmusic.miuix.ui.theme.ThemeSettings
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -67,7 +68,7 @@ fun ThemeSettingsPage(
                 .fillMaxSize()
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(bottom = 16.dp),
+            contentPadding = PaddingValues(bottom = FeedBottomPads.None),
             overscrollEffect = null
         ) {
             item { Spacer(modifier = Modifier.size(12.dp)) }
