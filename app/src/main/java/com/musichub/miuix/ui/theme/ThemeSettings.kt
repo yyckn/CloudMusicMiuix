@@ -25,6 +25,7 @@ object ThemeSettings {
     private const val KEY_LYRIC_ALIGNMENT = "lyric_alignment"
     private const val KEY_SHOW_CAST_BUTTON = "show_cast_button"
     private const val KEY_PLAYER_COLOR_SCHEME = "player_color_scheme"
+    private const val KEY_AUTO_CHECK_UPDATE = "auto_check_update"
 
     // 0 = 浅色模式, 1 = 深色模式, 2 = 跟随系统
     var themeModeIndex by mutableIntStateOf(2)
@@ -80,6 +81,10 @@ object ThemeSettings {
     var playerColorSchemeIndex by mutableIntStateOf(2)
         private set
 
+    // 打开应用时自动检查更新
+    var autoCheckUpdate by mutableStateOf(true)
+        private set
+
     private var prefs: SharedPreferences? = null
 
     fun init(context: Context) {
@@ -98,6 +103,7 @@ object ThemeSettings {
         lyricAlignmentIndex = prefs?.getInt(KEY_LYRIC_ALIGNMENT, 0) ?: 0
         showCastButton = prefs?.getBoolean(KEY_SHOW_CAST_BUTTON, true) ?: true
         playerColorSchemeIndex = prefs?.getInt(KEY_PLAYER_COLOR_SCHEME, 2) ?: 2
+        autoCheckUpdate = prefs?.getBoolean(KEY_AUTO_CHECK_UPDATE, true) ?: true
     }
 
     fun updateThemeModeIndex(index: Int) {
@@ -168,6 +174,11 @@ object ThemeSettings {
     fun updatePlayerColorSchemeIndex(index: Int) {
         playerColorSchemeIndex = index
         prefs?.edit()?.putInt(KEY_PLAYER_COLOR_SCHEME, index)?.apply()
+    }
+
+    fun updateAutoCheckUpdate(value: Boolean) {
+        autoCheckUpdate = value
+        prefs?.edit()?.putBoolean(KEY_AUTO_CHECK_UPDATE, value)?.apply()
     }
 }
 

@@ -1,6 +1,8 @@
 package com.musichub.miuix.ui.pages
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +44,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -49,10 +52,15 @@ import com.musichub.miuix.data.model.AlbumInfo
 import com.musichub.miuix.data.model.ArtistInfo
 import com.musichub.miuix.data.model.RecommendPlaylist
 import com.musichub.miuix.data.model.Track
+import com.musichub.miuix.data.model.UpdateInfo
 import com.musichub.miuix.ui.FeedBottomPads
 import com.musichub.miuix.viewmodel.MusicPlayerViewModel
 import com.musichub.miuix.viewmodel.RecommendState
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -64,6 +72,9 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
@@ -307,6 +318,20 @@ fun RecommendPage(
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
                     contentPadding = PaddingValues(top = 8.dp, bottom = FeedBottomPads.More)
                 ) {
+                    // 0. 新版本提示卡片
+                    val update = viewModel.updateState
+                    if (update.hasUpdate && !update.dismissed) {
+                        item {
+                            UpdateAvailableCard(
+                                onView = {
+                                    viewModel.dismissUpdateCard()
+                                    viewModel.openUpdateLog()
+                                },
+                                onDismiss = { viewModel.dismissUpdateCard() }
+                            )
+                        }
+                    }
+
                     // 1. 播放模式（仅卡片，无标题/解释）
                     item {
                         PlayModeRow(
@@ -432,6 +457,9 @@ fun RecommendPage(
                 }
             }
         }
+
+        // 更新日志抽屉
+        UpdateLogSheet(viewModel = viewModel)
     }
 }
 
@@ -469,6 +497,49 @@ private fun HomeSection(
             contentPadding = PaddingValues(horizontal = 12.dp)
         ) {
             content()
+        }
+    }
+}
+
+/**
+ * 新版本提示卡片
+ */
+@Composable
+private fun UpdateAvailableCard(
+    onView: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .padding(top = 8.dp)
+            .padding(bottom = 16.dp),
+        pressFeedbackType = PressFeedbackType.Tilt,
+        showIndication = true,
+        onClick = onView
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "检测到新版本，点击查看",
+                style = MiuixTheme.textStyles.body1,
+                fontWeight = FontWeight.Medium,
+                color = MiuixTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = MiuixIcons.Close,
+                    contentDescription = "关闭",
+                    tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
         }
     }
 }

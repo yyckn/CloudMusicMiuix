@@ -71,6 +71,12 @@ data class SearchState(
     val error: String? = null
 )
 
+data class UpdateState(
+    val latest: com.musichub.miuix.data.model.UpdateInfo? = null,
+    val hasUpdate: Boolean = false,
+    val dismissed: Boolean = false
+)
+
 data class LyricState(
     val lyrics: SongLyrics? = null,
     val isLoading: Boolean = false,
@@ -90,6 +96,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     var searchState by mutableStateOf(SearchState())
         private set
+
+    var updateState by mutableStateOf(UpdateState())
+        private set
+
+    var showUpdateLog by mutableStateOf(false)
+        private set
+
+    private var updateCheckJob: Job? = null
+    private var autoUpdateChecked = false
 
     var lyricState by mutableStateOf(LyricState())
         private set
@@ -266,6 +281,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         loadRadarPlaylists()
         loadTopArtists()
         loadNewAlbums()
+        // 打开应用时自动检查更新（可在关于页关闭）
+        if (com.musichub.miuix.ui.theme.ThemeSettings.autoCheckUpdate && !autoUpdateChecked) {
+            autoUpdateChecked = true
+            checkForUpdates()
+        }
         bindMediaService()
         startProgressUpdate()
         
@@ -522,6 +542,69 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
             )
         }
+    }
+
+    /** 检查更新：manual=true 时无论结果都会 toast 提示 */
+    fun checkForUpdates(manual: Boolean = false) {
+        if (updateCheckJob?.isActive == true) return
+        updateCheckJob = viewModelScope.launch {
+            com.musichub.miuix.data.api.UpdateApi.fetchUpdateLog().fold(
+                onSuccess = { info ->
+                    val current = getCurrentVersionName()
+                    val newer = isVersionNewer(info.version, current)
+                    updateState = updateState.copy(latest = info, hasUpdate = newer)
+                    if (manual) {
+                        if (newer) {
+                            _toastMessage.trySend("发现新版本 v${info.version}")
+                            showUpdateLog = true
+                        } else {
+                            _toastMessage.trySend("已是最新版本")
+                        }
+                    }
+                },
+                onFailure = { e ->
+                    // 超时/失败不重试
+                    Log.e("MusicPlayerViewModel", "checkForUpdates error", e)
+                    if (manual) {
+                        val reason = e.message?.take(60)?.ifBlank { null } ?: e.javaClass.simpleName
+                        _toastMessage.trySend("检查更新失败：$reason")
+                    }
+                }
+            )
+        }
+    }
+
+    fun dismissUpdateCard() {
+        updateState = updateState.copy(dismissed = true)
+    }
+
+    fun openUpdateLog() {
+        showUpdateLog = true
+    }
+
+    fun closeUpdateLog() {
+        showUpdateLog = false
+    }
+
+    private fun getCurrentVersionName(): String {
+        return try {
+            val app = getApplication<Application>()
+            app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    private fun isVersionNewer(latest: String, current: String): Boolean {
+        val l = latest.trim().removePrefix("v").split(".").mapNotNull { it.toIntOrNull() }
+        val c = current.trim().removePrefix("v").split(".").mapNotNull { it.toIntOrNull() }
+        val n = maxOf(l.size, c.size)
+        for (i in 0 until n) {
+            val lv = l.getOrElse(i) { 0 }
+            val cv = c.getOrElse(i) { 0 }
+            if (lv != cv) return lv > cv
+        }
+        return false
     }
 
     fun loadDailyRecommendSongs() {

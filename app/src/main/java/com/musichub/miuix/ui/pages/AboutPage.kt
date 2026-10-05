@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,16 +35,20 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.musichub.miuix.R
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.musichub.miuix.ui.FeedBottomPads
+import com.musichub.miuix.ui.theme.ThemeSettings
+import com.musichub.miuix.viewmodel.MusicPlayerViewModel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
@@ -49,10 +56,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 fun AboutPage(
     onBackClick: () -> Unit,
     onOpenSourceClick: () -> Unit,
+    viewModel: MusicPlayerViewModel,
+    onCheckUpdate: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     val context = LocalContext.current
+    var autoCheckUpdate by remember { mutableStateOf(ThemeSettings.autoCheckUpdate) }
     
     // 获取APP版本号
     val versionName = remember {
@@ -153,6 +163,35 @@ fun AboutPage(
                 }
             }
             item { Spacer(modifier = Modifier.height(32.dp)) }
+            item { SmallTitle("版本") }
+            item {
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp)
+                ) {
+                    BasicComponent(
+                        title = "打开应用时自动检查更新",
+                        endActions = {
+                            Switch(
+                                checked = autoCheckUpdate,
+                                onCheckedChange = { newValue ->
+                                    autoCheckUpdate = newValue
+                                    ThemeSettings.updateAutoCheckUpdate(newValue)
+                                }
+                            )
+                        },
+                        onClick = {
+                            autoCheckUpdate = !autoCheckUpdate
+                            ThemeSettings.updateAutoCheckUpdate(autoCheckUpdate)
+                        }
+                    )
+                    ArrowPreference(
+                        title = "立即检查更新",
+                        onClick = onCheckUpdate
+                    )
+                }
+            }
             item { SmallTitle("开源项目引用") }
             item {
                 Card(
@@ -211,5 +250,8 @@ fun AboutPage(
                 }
             }
         }
+
+        // 更新日志抽屉
+        UpdateLogSheet(viewModel = viewModel)
     }
 }

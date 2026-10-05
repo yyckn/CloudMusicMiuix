@@ -1,6 +1,10 @@
 package com.musichub.miuix
 
 import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.layout.Spacer
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -923,7 +927,9 @@ fun MainScreen(
                     },
                     onOpenSourceClick = {
                         // TODO: 实现开放源代码许可页面
-                    }
+                    },
+                    viewModel = viewModel,
+                    onCheckUpdate = { viewModel.checkForUpdates(manual = true) }
                 )
             }
             is Screen.LyriconAdapter -> {
