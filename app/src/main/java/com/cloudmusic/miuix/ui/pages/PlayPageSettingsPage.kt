@@ -50,6 +50,7 @@ fun PlayPageSettingsPage(
     var coverStyleIndex by remember { mutableStateOf(ThemeSettings.coverStyleIndex) } // 0=卡片, 1=全屏渐变
     var enableDynamicCover by remember { mutableStateOf(ThemeSettings.enableDynamicCover) }
     var keepScreenOn by remember { mutableStateOf(ThemeSettings.keepScreenOn) }
+    var showCastButton by remember { mutableStateOf(ThemeSettings.showCastButton) }
     var lyricCenter by remember { mutableStateOf(ThemeSettings.lyricCenter) }
 
     val coverRotationOptions = remember {
@@ -259,6 +260,24 @@ fun PlayPageSettingsPage(
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 12.dp)
                 ) {
+                    // 显示小米秒播快捷按钮
+                    BasicComponent(
+                        title = "显示小米秒播快捷按钮",
+                        endActions = {
+                            Switch(
+                                checked = showCastButton,
+                                onCheckedChange = { newValue ->
+                                    showCastButton = newValue
+                                    ThemeSettings.updateShowCastButton(newValue)
+                                }
+                            )
+                        },
+                        onClick = {
+                            showCastButton = !showCastButton
+                            ThemeSettings.updateShowCastButton(showCastButton)
+                        }
+                    )
+
                     // 播放页保持屏幕常亮
                     BasicComponent(
                         title = "播放页保持屏幕常亮",

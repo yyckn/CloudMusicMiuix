@@ -109,6 +109,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         private set
     var dataAccountIndex by mutableStateOf(0)
         private set
+    var playbackVipType by mutableIntStateOf(0) // 播放账号的VIP状态
+        private set
 
     // 播放模式：0=顺序播放，1=乱序播放，2=单曲循环
     var playMode by mutableStateOf(0)
@@ -229,6 +231,21 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         // 加载保存的账号索引
         playbackAccountIndex = prefs.getInt("playback_account_index", 0)
         dataAccountIndex = prefs.getInt("data_account_index", 0)
+        // 初始化播放账号VIP状态
+        val savedAccounts = NeteaseApi.getAccounts()
+        if (playbackAccountIndex < savedAccounts.size) {
+            viewModelScope.launch {
+                NeteaseApi.switchToAccount(savedAccounts[playbackAccountIndex].userId)
+                NeteaseApi.getUserProfile().fold(
+                    onSuccess = { profile -> playbackVipType = profile.vipType },
+                    onFailure = { playbackVipType = 0 }
+                )
+                val dataUserId = if (dataAccountIndex < savedAccounts.size) savedAccounts[dataAccountIndex].userId else null
+                if (dataUserId != null) {
+                    NeteaseApi.switchToAccount(dataUserId)
+                }
+            }
+        }
         // 加载保存的播放模式
         playMode = prefs.getInt("play_mode", 0)
         
@@ -546,6 +563,23 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         playbackAccountIndex = index
         // 保存到SharedPreferences
         prefs.edit().putInt("playback_account_index", index).apply()
+        // 切换播放账号的Cookie并获取VIP状态
+        val accounts = NeteaseApi.getAccounts()
+        if (index < accounts.size) {
+            NeteaseApi.switchToAccount(accounts[index].userId)
+            // 获取播放账号的VIP状态（缓存，供播放时本地判断）
+            viewModelScope.launch {
+                NeteaseApi.getUserProfile().fold(
+                    onSuccess = { profile -> playbackVipType = profile.vipType },
+                    onFailure = { playbackVipType = 0 }
+                )
+                // 恢复数据账号Cookie
+                val dataUserId = if (dataAccountIndex < accounts.size) accounts[dataAccountIndex].userId else null
+                if (dataUserId != null) {
+                    NeteaseApi.switchToAccount(dataUserId)
+                }
+            }
+        }
     }
 
     fun updateDataAccountIndex(index: Int) {
@@ -556,8 +590,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val accounts = NeteaseApi.getAccounts()
         if (index < accounts.size) {
             NeteaseApi.switchToAccount(accounts[index].userId)
-            // 重新加载用户信息以更新VIP状态
             loadUserInfo()
+            loadRecommendPlaylists()
+            loadUserPlaylists()
+            loadUserAlbums()
         }
     }
 
@@ -1144,6 +1180,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             loadAppleMusicCover(track)
         }
         
+        // VIP歌曲限制：纯本地判断，不发网络请求，不替换当前播放歌曲
+        if (track.isVip) {
+            if (!NeteaseApi.isLoggedIn()) {
+                _toastMessage.trySend("非VIP用户无法播放VIP歌曲")
+                return
+            }
+            if (playbackVipType == 0) {
+                _toastMessage.trySend("非VIP用户无法播放VIP歌曲")
+                return
+            }
+        }
+        
         viewModelScope.launch {
             playerState = playerState.copy(isLoading = true, error = null, currentTrack = track)
             saveLastPlayedTrack(track)
@@ -1156,41 +1204,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             // 切换到播放账号的Cookie
             val accounts = NeteaseApi.getAccounts()
             val playbackUserId = if (playbackAccountIndex < accounts.size) accounts[playbackAccountIndex].userId else null
-            val currentCookieBackup = NeteaseApi.getCookie()
             
-            // 检查是否登录
-            if (!NeteaseApi.isLoggedIn()) {
-                // 未登录状态
-                if (track.isVip) {
-                    playerState = playerState.copy(isLoading = false)
-                    _toastMessage.trySend("请登录VIP账号后重试")
-                    return@launch
-                }
-            } else {
-                // 已登录状态，切换到播放账号
-                if (playbackUserId != null) {
-                    NeteaseApi.switchToAccount(playbackUserId)
-                }
-                
-                // 检查VIP歌曲限制
-                if (track.isVip) {
-                    // 获取播放账号的VIP状态
-                    val playbackVipType = NeteaseApi.getUserProfile().fold(
-                        onSuccess = { profile -> profile.vipType },
-                        onFailure = { 0 }
-                    )
-                    if (playbackVipType == 0) {
-                        // 非VIP账号尝试播放VIP歌曲
-                        // 切换回数据账号的Cookie
-                        val dataUserId = if (dataAccountIndex < accounts.size) accounts[dataAccountIndex].userId else null
-                        if (dataUserId != null) {
-                            NeteaseApi.switchToAccount(dataUserId)
-                        }
-                        playerState = playerState.copy(isLoading = false)
-                        _toastMessage.trySend("请登录VIP账号后重试")
-                        return@launch
-                    }
-                }
+            if (NeteaseApi.isLoggedIn() && playbackUserId != null) {
+                NeteaseApi.switchToAccount(playbackUserId)
             }
 
             // 获取用户选择的音质
@@ -1467,10 +1483,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 onSuccess = { (url, _, type) ->
                     if (url.isNotEmpty()) {
                         downloadAndShareFile(url, "${track.title} - ${track.artist}.$type", "audio/$type")
+                    } else {
+                        android.widget.Toast.makeText(context, "获取下载链接失败，请检查账号权限", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 },
                 onFailure = { e ->
                     Log.e("MusicPlayerViewModel", "Failed to get download URL: ${e.message}")
+                    android.widget.Toast.makeText(context, "获取下载链接失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                 }
             )
         }
@@ -1484,7 +1503,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             android.widget.Toast.makeText(context, "正在下载，请稍等……", android.widget.Toast.LENGTH_SHORT).show()
             viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    val context = getApplication<Application>()
                     val fileName = "${track.title} - ${track.artist}_cover.jpg"
                     
                     // 下载封面到缓存目录
@@ -1517,6 +1535,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 } catch (e: Exception) {
                     Log.e("MusicPlayerViewModel", "Download and share cover failed: ${e.message}")
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(context, "下载封面并分享失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
@@ -1524,8 +1545,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun downloadAndShareFile(url: String, fileName: String, mimeType: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
             try {
-                val context = getApplication<Application>()
                 
                 // 下载文件到缓存目录
                 val urlObj = java.net.URL(url)
@@ -1557,6 +1578,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
             } catch (e: Exception) {
                 Log.e("MusicPlayerViewModel", "Download and share failed: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "下载并分享失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

@@ -90,7 +90,7 @@ fun PlaylistDetailPage(
     onBackClick: () -> Unit,
     onTrackClick: (Track) -> Unit,
     onPlayAllClick: (List<Track>) -> Unit,
-    onShare: () -> Unit = {},
+    onShare: (Track) -> Unit = {},
     onLikeTrack: () -> Unit = {},
     onDownload: () -> Unit = {},
     onDownloadCover: () -> Unit = {},
@@ -298,7 +298,7 @@ fun PlaylistDetailPage(
                             },
                             onClick = {
                                 showMoreSheet = false
-                                onShare()
+                                selectedTrack?.let { onShare(it) }
                             }
                         )
                         ArrowPreference(

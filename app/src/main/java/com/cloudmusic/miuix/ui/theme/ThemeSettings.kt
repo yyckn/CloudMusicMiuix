@@ -19,6 +19,7 @@ object ThemeSettings {
     private const val KEY_ENABLE_DYNAMIC_COVER = "enable_dynamic_cover"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_LYRIC_CENTER = "lyric_center"
+    private const val KEY_SHOW_CAST_BUTTON = "show_cast_button"
 
     // 0 = 浅色模式, 1 = 深色模式, 2 = 跟随系统
     var themeModeIndex by mutableIntStateOf(2)
@@ -58,6 +59,10 @@ object ThemeSettings {
     var lyricCenter by mutableStateOf(false)
         private set
 
+    // 显示小米秒播快捷按钮（播放页投屏按钮）
+    var showCastButton by mutableStateOf(true)
+        private set
+
     private var prefs: SharedPreferences? = null
 
     fun init(context: Context) {
@@ -72,6 +77,7 @@ object ThemeSettings {
         enableDynamicCover = prefs?.getBoolean(KEY_ENABLE_DYNAMIC_COVER, true) ?: true
         keepScreenOn = prefs?.getBoolean(KEY_KEEP_SCREEN_ON, true) ?: true
         lyricCenter = prefs?.getBoolean(KEY_LYRIC_CENTER, false) ?: false
+        showCastButton = prefs?.getBoolean(KEY_SHOW_CAST_BUTTON, true) ?: true
     }
 
     fun updateThemeModeIndex(index: Int) {
@@ -122,5 +128,10 @@ object ThemeSettings {
     fun updateLyricCenter(value: Boolean) {
         lyricCenter = value
         prefs?.edit()?.putBoolean(KEY_LYRIC_CENTER, value)?.apply()
+    }
+
+    fun updateShowCastButton(value: Boolean) {
+        showCastButton = value
+        prefs?.edit()?.putBoolean(KEY_SHOW_CAST_BUTTON, value)?.apply()
     }
 }

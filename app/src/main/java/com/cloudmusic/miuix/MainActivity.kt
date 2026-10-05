@@ -191,6 +191,14 @@ fun MainScreen(
         }
     }
 
+    // 收集ViewModel的toast消息
+    val toastContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        for (msg in viewModel.toastMessage) {
+            android.widget.Toast.makeText(toastContext, msg, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
     SharedTransitionLayout {
     Box(modifier = Modifier
         .fillMaxSize()
@@ -800,19 +808,16 @@ fun MainScreen(
                                     viewModel.playTrackWithMode(tracks.first(), tracks)
                                 }
                             },
-                            onShare = {
-                                val track = viewModel.playerState.currentTrack
-                                if (track != null) {
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, "${track.title} - ${track.artist}\n${track.sourceUrl}")
-                                    }
-                                    context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
+                            onShare = { track ->
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, "${track.title} - ${track.artist}\n${track.sourceUrl}")
                                 }
+                                context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
                             },
                             onLikeTrack = {
                                 viewModel.likeCurrentTrack { isLiked ->
-                                    val message = if (isLiked) "已收藏" else "已取消收藏"
+                                    val message = if (isLiked) "已收" else "已取消收"
                                     android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             },
@@ -1117,15 +1122,12 @@ fun MainScreen(
                         currentTrack = viewModel.playerState.currentTrack,
                         currentPlaylist = viewModel.currentPlaylist,
                         isCurrentTrackLiked = viewModel.isCurrentTrackLiked,
-                        onShare = {
-                            val track = viewModel.playerState.currentTrack
-                            if (track != null) {
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, "${track.title} - ${track.artist}\n${track.sourceUrl}")
-                                }
-                                context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
+                        onShare = { track ->
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, "${track.title} - ${track.artist}\n${track.sourceUrl}")
                             }
+                            context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
                         },
                         onLikeTrack = {
                             viewModel.likeCurrentTrack { isLiked ->
@@ -1307,15 +1309,12 @@ fun MainScreen(
                         currentTrack = viewModel.playerState.currentTrack,
                         currentPlaylist = viewModel.currentPlaylist,
                         isCurrentTrackLiked = viewModel.isCurrentTrackLiked,
-                        onShare = {
-                            val track = viewModel.playerState.currentTrack
-                            if (track != null) {
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, "${track.title} - ${track.artist}\n${track.sourceUrl}")
-                                }
-                                context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
+                        onShare = { track ->
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, "${track.title} - ${track.artist}\n${track.sourceUrl}")
                             }
+                            context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
                         },
                         onLikeTrack = {
                             viewModel.likeCurrentTrack { isLiked ->

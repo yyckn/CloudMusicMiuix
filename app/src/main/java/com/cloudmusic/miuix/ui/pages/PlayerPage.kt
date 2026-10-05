@@ -1,7 +1,11 @@
 package com.cloudmusic.miuix.ui.pages
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
 import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
@@ -54,11 +58,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -77,7 +84,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 import com.cloudmusic.miuix.data.model.Track
 import com.cloudmusic.miuix.ui.components.AnimatedCoverPlayer
 import com.cloudmusic.miuix.ui.components.LiveBadge
@@ -199,6 +208,41 @@ fun PlayerPage(
         }
     }
     
+    // 封面只联网拉取一次，之后所有位置复用同一张 Bitmap 进行渲染
+    var coverBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(track?.imgUrl) {
+        val url = track?.imgUrl
+        if (url.isNullOrEmpty()) {
+            coverBitmap = null
+            return@LaunchedEffect
+        }
+        val request = ImageRequest.Builder(context)
+            .data(url)
+            .size(1080)
+            .memoryCacheKey("player_cover_$url")
+            .diskCacheKey(url)
+            .build()
+        when (val result = context.imageLoader.execute(request)) {
+            is SuccessResult -> {
+                val drawable = result.drawable
+                val bitmap = when (drawable) {
+                    is BitmapDrawable -> drawable.bitmap
+                    else -> {
+                        val w = drawable.intrinsicWidth.coerceAtLeast(1)
+                        val h = drawable.intrinsicHeight.coerceAtLeast(1)
+                        Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { bmp ->
+                            val canvas = Canvas(bmp)
+                            drawable.setBounds(0, 0, canvas.width, canvas.height)
+                            drawable.draw(canvas)
+                        }
+                    }
+                }
+                coverBitmap = bitmap.asImageBitmap()
+            }
+            else -> { /* 保留上一张封面，渲染时使用占位图 */ }
+        }
+    }
+    
     // 音质选择
     val qualityOptions = listOf(
         "Hi-Res 无损",
@@ -252,6 +296,7 @@ fun PlayerPage(
     // 全屏封面模式下，歌词显示状态
     var showLyricsInFullScreen by remember { mutableStateOf(false) }
     val coverStyleIndex = ThemeSettings.coverStyleIndex // 0=卡片, 1=全屏渐变
+    val showCastButton = ThemeSettings.showCastButton
     
     // 歌词和蒙版动画
     val lyricsAlpha by animateFloatAsState(
@@ -376,12 +421,12 @@ fun PlayerPage(
             ) {
                 // 封面背景图片（使用Crossfade实现切换动画）
                 Crossfade(
-                    targetState = track?.imgUrl,
+                    targetState = coverBitmap,
                     animationSpec = tween(durationMillis = 500),
                     label = "bg_cover_crossfade"
-                ) { imgUrl ->
-                    AsyncImage(
-                        model = imgUrl,
+                ) { bmp ->
+                    CoverImage(
+                        bitmap = bmp,
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxSize()
@@ -390,8 +435,7 @@ fun PlayerPage(
                                 scaleY = 1.15f
                             )
                             .blur(radius = 100.dp),
-                        contentScale = ContentScale.Crop,
-                        error = painterResource(android.R.drawable.ic_menu_gallery)
+                        contentScale = ContentScale.Crop
                     )
                 }
                 // 压暗层 #000000 25%不透明度
@@ -437,12 +481,11 @@ fun PlayerPage(
                                 }
                         ) {
                             // 静态封面作为底层
-                            AsyncImage(
-                                model = track?.imgUrl,
+                            CoverImage(
+                                bitmap = coverBitmap,
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop,
-                                error = painterResource(android.R.drawable.ic_menu_gallery)
+                                contentScale = ContentScale.Crop
                             )
                         }
                         
@@ -470,8 +513,8 @@ fun PlayerPage(
                             // 只有右侧显示模糊，左侧透明显示视频
                             Box(modifier = Modifier.fillMaxSize()) {
                                 // 模糊封面图片（通过BlendMode.DstIn控制可见性）
-                                AsyncImage(
-                                    model = track?.imgUrl,
+                                CoverImage(
+                                    bitmap = coverBitmap,
                                     contentDescription = null,
                                     modifier = Modifier
                                         .fillMaxSize()
@@ -494,8 +537,7 @@ fun PlayerPage(
                                             )
                                         }
                                         .blur(radius = 100.dp),
-                                    contentScale = ContentScale.Crop,
-                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                    contentScale = ContentScale.Crop
                                 )
                                 // 压暗层（跟随透明度渐变，只在右侧生效）
                                 Box(
@@ -546,8 +588,10 @@ fun PlayerPage(
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}", fontSize = 14.sp, color = Color.White.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
                                     }
-                                    IconButton(onClick = onOpenSystemUI) {
-                                        Icon(imageVector = MiuixIcons.ScreenMirroring, contentDescription = "投屏", tint = Color.White)
+                                    if (showCastButton) {
+                                        IconButton(onClick = onOpenSystemUI) {
+                                            Icon(imageVector = MiuixIcons.ScreenMirroring, contentDescription = "投屏", tint = Color.White)
+                                        }
                                     }
                                 }
                                 
@@ -659,12 +703,14 @@ fun PlayerPage(
                             }
                             
                             // 投屏按钮
-                            IconButton(onClick = onOpenSystemUI) {
-                                Icon(
-                                    imageVector = MiuixIcons.ScreenMirroring,
-                                    contentDescription = "投屏",
-                                    tint = Color.White
-                                )
+                            if (showCastButton) {
+                                IconButton(onClick = onOpenSystemUI) {
+                                    Icon(
+                                        imageVector = MiuixIcons.ScreenMirroring,
+                                        contentDescription = "投屏",
+                                        tint = Color.White
+                                    )
+                                }
                             }
                         }
 
@@ -684,7 +730,8 @@ fun PlayerPage(
                                 Card(
                                     modifier = Modifier
                                         .size(imageSize)
-                                        .aspectRatio(1f),
+                                        .aspectRatio(1f)
+                                        .shadow(elevation = 16.dp, shape = coverShape, clip = false),
                                     cornerRadius = 24.dp,
                                     colors = CardDefaults.defaultColors(
                                         color = Color.Transparent,
@@ -695,8 +742,8 @@ fun PlayerPage(
                                 ) {
                                     Box(modifier = Modifier.fillMaxSize()) {
                                         // 静态封面作为底层（始终显示）
-                                        AsyncImage(
-                                            model = track?.imgUrl,
+                                        CoverImage(
+                                            bitmap = coverBitmap,
                                             contentDescription = track?.title,
                                             modifier = Modifier
                                                 .fillMaxSize()
@@ -704,8 +751,7 @@ fun PlayerPage(
                                                 .graphicsLayer {
                                                     rotationZ = coverRotation
                                                 },
-                                            contentScale = ContentScale.Crop,
-                                            error = painterResource(android.R.drawable.ic_menu_gallery)
+                                            contentScale = ContentScale.Crop
                                         )
                                         
                                         // 动态封面覆盖在静态封面上（首帧就绪后才显示）
@@ -969,19 +1015,18 @@ fun PlayerPage(
                         
                         // 模糊背景（全屏，覆盖状态栏区域）
                         Crossfade(
-                            targetState = track?.imgUrl,
+                            targetState = coverBitmap,
                             animationSpec = tween(durationMillis = 500),
                             label = "fullscreen_bg_crossfade"
-                        ) { imgUrl ->
-                            AsyncImage(
-                                model = imgUrl,
+                        ) { bmp ->
+                            CoverImage(
+                                bitmap = bmp,
                                 contentDescription = null,
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .graphicsLayer(scaleX = 1.15f, scaleY = 1.15f)
                                     .blur(radius = 100.dp),
-                                contentScale = ContentScale.Crop,
-                                error = painterResource(android.R.drawable.ic_menu_gallery)
+                                contentScale = ContentScale.Crop
                             )
                         }
                         // 深色蒙版
@@ -1013,8 +1058,8 @@ fun PlayerPage(
                                 
                                 // 歌词显示时的封面模糊层（在封面之上）
                                 if (lyricsAlpha > 0f) {
-                                    AsyncImage(
-                                        model = track?.imgUrl,
+                                    CoverImage(
+                                        bitmap = coverBitmap,
                                         contentDescription = null,
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1022,8 +1067,7 @@ fun PlayerPage(
                                             .offset { IntOffset(0, coverTopOffset.toInt()) }
                                             .graphicsLayer { alpha = lyricsAlpha }
                                             .blur(radius = 15.dp),
-                                        contentScale = ContentScale.Crop,
-                                        error = painterResource(android.R.drawable.ic_menu_gallery)
+                                        contentScale = ContentScale.Crop
                                     )
                                 }
                             
@@ -1057,15 +1101,14 @@ fun PlayerPage(
                                         )
                                     }
                             ) {
-                                AsyncImage(
-                                    model = track?.imgUrl,
+                                CoverImage(
+                                    bitmap = coverBitmap,
                                     contentDescription = null,
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .graphicsLayer(scaleX = 1.15f, scaleY = 1.15f)
                                         .blur(radius = 100.dp),
-                                    contentScale = ContentScale.Crop,
-                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                    contentScale = ContentScale.Crop
                                 )
                             }
                         } else {
@@ -1079,19 +1122,18 @@ fun PlayerPage(
                                     .aspectRatio(1f)
                                     .offset { IntOffset(0, coverTopOffset.toInt()) }
                             ) {
-                                AsyncImage(
-                                    model = track?.imgUrl,
+                                CoverImage(
+                                    bitmap = coverBitmap,
                                     contentDescription = null,
                                     modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop,
-                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                    contentScale = ContentScale.Crop
                                 )
                             }
                             
                             // 歌词显示时的静态封面模糊层
                             if (lyricsAlpha > 0f) {
-                                AsyncImage(
-                                    model = track?.imgUrl,
+                                CoverImage(
+                                    bitmap = coverBitmap,
                                     contentDescription = null,
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1099,8 +1141,7 @@ fun PlayerPage(
                                         .offset { IntOffset(0, coverTopOffset.toInt()) }
                                         .graphicsLayer { alpha = lyricsAlpha }
                                         .blur(radius = 15.dp),
-                                    contentScale = ContentScale.Crop,
-                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                    contentScale = ContentScale.Crop
                                 )
                             }
                             
@@ -1134,15 +1175,14 @@ fun PlayerPage(
                                         )
                                     }
                             ) {
-                                AsyncImage(
-                                    model = track?.imgUrl,
+                                CoverImage(
+                                    bitmap = coverBitmap,
                                     contentDescription = null,
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .graphicsLayer(scaleX = 1.15f, scaleY = 1.15f)
                                         .blur(radius = 100.dp),
-                                    contentScale = ContentScale.Crop,
-                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                    contentScale = ContentScale.Crop
                                 )
                             }
                         }
@@ -1169,8 +1209,10 @@ fun PlayerPage(
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}", fontSize = 14.sp, color = Color.White.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
                                 }
-                                IconButton(onClick = onOpenSystemUI) {
-                                    Icon(imageVector = MiuixIcons.ScreenMirroring, contentDescription = "投屏", tint = Color.White)
+                                if (showCastButton) {
+                                    IconButton(onClick = onOpenSystemUI) {
+                                        Icon(imageVector = MiuixIcons.ScreenMirroring, contentDescription = "投屏", tint = Color.White)
+                                    }
                                 }
                             }
                             
@@ -1309,12 +1351,14 @@ fun PlayerPage(
                         }
                         
                         // 投屏按钮
-                        IconButton(onClick = onOpenSystemUI) {
-                            Icon(
-                                imageVector = MiuixIcons.ScreenMirroring,
-                                contentDescription = "投屏",
-                                tint = Color.White
-                            )
+                        if (showCastButton) {
+                            IconButton(onClick = onOpenSystemUI) {
+                                Icon(
+                                    imageVector = MiuixIcons.ScreenMirroring,
+                                    contentDescription = "投屏",
+                                    tint = Color.White
+                                )
+                            }
                         }
                     }
 
@@ -1369,7 +1413,8 @@ fun PlayerPage(
                                         Card(
                                             modifier = Modifier
                                                 .size(imageSize)
-                                                .aspectRatio(1f),
+                                                .aspectRatio(1f)
+                                                .shadow(elevation = 16.dp, shape = coverShape, clip = false),
                                             cornerRadius = 24.dp,
                                             colors = CardDefaults.defaultColors(
                                                 color = Color.Transparent,
@@ -1380,8 +1425,8 @@ fun PlayerPage(
                                         ) {
                                             Box(modifier = Modifier.fillMaxSize()) {
                                                 // 静态封面作为底层（fallback）
-                                                AsyncImage(
-                                                    model = track?.imgUrl,
+                                                CoverImage(
+                                                    bitmap = coverBitmap,
                                                     contentDescription = track?.title,
                                                     modifier = Modifier
                                                         .fillMaxSize()
@@ -1389,8 +1434,7 @@ fun PlayerPage(
                                                         .graphicsLayer {
                                                             rotationZ = coverRotation
                                                         },
-                                                    contentScale = ContentScale.Crop,
-                                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                                    contentScale = ContentScale.Crop
                                                 )
                                                 
                                                 // 动态封面覆盖在静态封面上
@@ -2072,4 +2116,32 @@ private fun getQualityText(
         else -> ""
     }
     return if (prefix.isEmpty()) quality else "$prefix · $quality"
+}
+
+/**
+ * 使用共享的封面 Bitmap 渲染封面，避免每个位置重复联网获取封面。
+ * bitmap 为 null 时展示占位图。
+ */
+@Composable
+private fun CoverImage(
+    bitmap: ImageBitmap?,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop
+) {
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = contentDescription,
+            modifier = modifier,
+            contentScale = contentScale
+        )
+    } else {
+        Image(
+            painter = painterResource(android.R.drawable.ic_menu_gallery),
+            contentDescription = contentDescription,
+            modifier = modifier,
+            contentScale = contentScale
+        )
+    }
 }

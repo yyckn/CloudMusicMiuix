@@ -175,18 +175,18 @@ class LyriconProviderManager(private val context: Context) {
         
         // 在第一句歌词开始之前，传递"歌名 - 歌手"作为歌词
         val firstLineStart = lyrics?.lines?.firstOrNull()?.startAt ?: 0L
-        if (firstLineStart > 0) {
+        if (firstLineStart > 100L) {
             val titleText = "$songTitle - $songArtist"
             result.add(
                 RichLyricLine(
                     begin = 0L,
-                    end = firstLineStart,
+                    end = firstLineStart - 100L,
                     text = titleText,
                     words = null,
                     translation = null
                 )
             )
-            Log.d(TAG, "Added title line: $titleText, start=0, end=$firstLineStart")
+            Log.d(TAG, "Added title line: $titleText, start=0, end=${firstLineStart - 100L}")
         }
         
         if (lyrics == null || lyrics.lines.isEmpty()) {
@@ -205,9 +205,9 @@ class LyriconProviderManager(private val context: Context) {
                 )
             }
             
-            // 计算结束时间
+            // 计算结束时间（减去小段间隔避免行与行之间视觉重叠）
             val endAt = if (index < lyrics.lines.size - 1) {
-                lyrics.lines[index + 1].startAt
+                (lyrics.lines[index + 1].startAt - 100L).coerceAtLeast(line.startAt + 1L)
             } else {
                 songDuration
             }

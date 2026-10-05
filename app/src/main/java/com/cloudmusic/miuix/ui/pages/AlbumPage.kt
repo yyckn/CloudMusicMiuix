@@ -83,7 +83,7 @@ fun AlbumPage(
     currentTrack: Track? = null,
     currentPlaylist: List<Track> = emptyList(),
     isCurrentTrackLiked: Boolean = false,
-    onShare: () -> Unit = {},
+    onShare: (Track) -> Unit = {},
     onLikeTrack: () -> Unit = {},
     onDownload: () -> Unit = {},
     onDownloadCover: () -> Unit = {},
@@ -323,7 +323,7 @@ fun AlbumPage(
                             },
                             onClick = {
                                 showMoreSheet = false
-                                onShare()
+                                selectedTrack?.let { onShare(it) }
                             }
                         )
                         ArrowPreference(

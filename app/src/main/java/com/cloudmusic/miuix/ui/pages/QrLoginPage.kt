@@ -288,6 +288,40 @@ private fun StatusSection(
 
     Spacer(modifier = Modifier.height(16.dp))
 
+    // 保存二维码图片到相册
+    Button(
+        onClick = {
+            qrBitmap?.let { bitmap ->
+                try {
+                    val contentValues = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "qr_code_${System.currentTimeMillis()}.png")
+                        put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+                        put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/CloudMusic")
+                    }
+                    val uri = context.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                    if (uri != null) {
+                        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                        }
+                        Toast.makeText(context, "已保存到 /Pictures/CloudMusic/ 目录", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "保存失败", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            } ?: run {
+                Toast.makeText(context, "二维码尚未加载", Toast.LENGTH_SHORT).show()
+            }
+        },
+        colors = ButtonDefaults.buttonColors(),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(text = "保存二维码图片到相册")
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
     // 刷新按钮
     Button(
         onClick = {
