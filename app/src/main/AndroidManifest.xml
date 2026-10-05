@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -51,10 +51,10 @@
             android:name=".service.MediaPlaybackReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.cloudmusic.miuix.PLAY" />
-                <action android:name="com.cloudmusic.miuix.PAUSE" />
-                <action android:name="com.cloudmusic.miuix.NEXT" />
-                <action android:name="com.cloudmusic.miuix.PREVIOUS" />
+                <action android:name="com.musichub.miuix.PLAY" />
+                <action android:name="com.musichub.miuix.PAUSE" />
+                <action android:name="com.musichub.miuix.NEXT" />
+                <action android:name="com.musichub.miuix.PREVIOUS" />
             </intent-filter>
         </receiver>
 

@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.cloudmusic.miuix"
+    namespace = "com.musichub.miuix"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.cloudmusic.miuix"
+        applicationId = "com.musichub.miuix"
         minSdk = 33
         targetSdk = 36
-        versionCode = 48
-        versionName = "1.10.1"
+        versionCode = 49
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
