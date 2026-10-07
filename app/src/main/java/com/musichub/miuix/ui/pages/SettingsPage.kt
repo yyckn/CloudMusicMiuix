@@ -56,6 +56,7 @@ fun SettingsPage(
     onPlayPageSettingsClick: () -> Unit = {},
     onAboutClick: () -> Unit,
     onLyriconAdapterClick: () -> Unit = {},
+    onLyricSettingsClick: () -> Unit = {},
     onManageAccountsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -235,6 +236,11 @@ fun SettingsPage(
                             .padding(horizontal = 12.dp)
                             .padding(bottom = 12.dp)
                     ) {
+                        ArrowPreference(
+                            title = "歌词设置",
+                            summary = "歌词来源等",
+                            onClick = onLyricSettingsClick
+                        )
                         ArrowPreference(
                             title = "歌词接口适配",
                             onClick = onLyriconAdapterClick

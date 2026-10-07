@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +49,7 @@ import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -63,6 +65,7 @@ import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.FavoritesFill
+import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Share
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
@@ -117,6 +120,10 @@ fun ArtistPage(
     var showPlaylistSheet by remember { mutableStateOf(false) }
     var albumArtist by remember { mutableStateOf<String?>(null) }
     var albumArtistId by remember { mutableStateOf<Long?>(null) }
+    val listState = rememberLazyListState()
+    val currentTrackIndex = remember(artistSongs, currentTrack) {
+        artistSongs.indexOfFirst { it.id == currentTrack?.id }
+    }
 
     // 获取专辑歌手信息
     LaunchedEffect(selectedTrack?.albumId) {
@@ -234,9 +241,24 @@ fun ArtistPage(
                     )
                 }
             )
+        },
+        floatingActionButton = {
+            if (!isLoading && selectedTab == 0 && artistSongs.isNotEmpty() && currentTrackIndex >= 0) {
+                FloatingActionButton(
+                    onClick = { coroutineScope.launch { listState.animateScrollToItem(currentTrackIndex + 2) } },
+                    modifier = Modifier.padding(bottom = 80.dp)
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Location,
+                        contentDescription = "定位到当前歌曲",
+                        tint = MiuixTheme.colorScheme.onPrimary
+                    )
+                }
+            }
         }
     ) { paddingValues ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = paddingValues.calculateTopPadding())

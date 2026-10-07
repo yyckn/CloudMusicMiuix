@@ -11,8 +11,8 @@ android {
         applicationId = "com.musichub.miuix"
         minSdk = 33
         targetSdk = 36
-        versionCode = 49
-        versionName = "1.0.0"
+        versionCode = 50
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

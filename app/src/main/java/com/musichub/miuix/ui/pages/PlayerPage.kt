@@ -101,6 +101,7 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -1788,17 +1789,7 @@ fun PlayerPage(
                 show = showPlaylistSheet,
                 title = "播放列表",
                 insideMargin = DpSize(12.dp, 0.dp),
-                startAction = {
-                    IconButton(
-                        onClick = { shouldScrollToCurrent = true }
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Location,
-                            contentDescription = "定位到当前歌曲",
-                            tint = MiuixTheme.colorScheme.onSurface
-                        )
-                    }
-                },
+                startAction = null,
                 endAction = {
                     IconButton(
                         onClick = { showPlaylistSheet = false }
@@ -1812,49 +1803,65 @@ fun PlayerPage(
                 },
                 onDismissRequest = { showPlaylistSheet = false }
             ) {
-                if (currentPlaylist.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "暂无歌曲",
-                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        state = playlistListState,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)
-                    ) {
-                        items(currentPlaylist) { track ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                colors = CardDefaults.defaultColors(
-                                    color = MiuixTheme.colorScheme.secondaryContainer
-                                ),
-                                pressFeedbackType = PressFeedbackType.Tilt,
-                                showIndication = true,
-                                onClick = {
-                                    onPlayTrack(track)
-                                    showPlaylistSheet = false
-                                }
-                            ) {
-                                TrackItem(
-                                    track = track,
-                                    isPlaying = track.id == playerState.currentTrack?.id,
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    if (currentPlaylist.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "暂无歌曲",
+                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            state = playlistListState,
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)
+                        ) {
+                            items(currentPlaylist) { track ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    colors = CardDefaults.defaultColors(
+                                        color = MiuixTheme.colorScheme.secondaryContainer
+                                    ),
+                                    pressFeedbackType = PressFeedbackType.Tilt,
+                                    showIndication = true,
                                     onClick = {
                                         onPlayTrack(track)
                                         showPlaylistSheet = false
                                     }
-                                )
+                                ) {
+                                    TrackItem(
+                                        track = track,
+                                        isPlaying = track.id == playerState.currentTrack?.id,
+                                        onClick = {
+                                            onPlayTrack(track)
+                                            showPlaylistSheet = false
+                                        }
+                                    )
+                                }
                             }
                         }
+                    }
+
+                    // 定位到当前歌曲
+                    FloatingActionButton(
+                        onClick = { shouldScrollToCurrent = true },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 16.dp, bottom = 24.dp)
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Location,
+                            contentDescription = "定位到当前歌曲",
+                            tint = MiuixTheme.colorScheme.onPrimary
+                        )
                     }
                 }
             }
@@ -1879,7 +1886,8 @@ fun PlayerPage(
                 onDismissRequest = { showMoreSheet = false }
             ) {
                 LazyColumn(
-                    modifier = Modifier.padding(bottom = 32.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)
                 ) {
                     // 歌曲区域
                     item { SmallTitle("歌曲") }

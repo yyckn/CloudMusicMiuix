@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +49,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
@@ -61,6 +64,7 @@ import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.FavoritesFill
+import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.icon.extended.Share
@@ -77,6 +81,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.ui.unit.DpSize
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlaylistDetailPage(
@@ -113,6 +118,12 @@ fun PlaylistDetailPage(
     var showUnlikeDialog by remember { mutableStateOf(false) }
     var albumArtist by remember { mutableStateOf<String?>(null) }
     var albumArtistId by remember { mutableStateOf<Long?>(null) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    // 当前播放歌曲在本歌单中的位置（-1 表示不在）
+    val currentTrackIndex = remember(playlistDetail, currentTrack) {
+        playlistDetail?.tracks?.indexOfFirst { it.id == currentTrack?.id } ?: -1
+    }
     
     // 获取专辑歌手信息
     LaunchedEffect(selectedTrack?.albumId) {
@@ -159,9 +170,26 @@ fun PlaylistDetailPage(
                     )
                 }
             )
+        },
+        floatingActionButton = {
+            if (!isLoading && error == null && currentTrackIndex >= 0) {
+                FloatingActionButton(
+                    onClick = {
+                        scope.launch { listState.animateScrollToItem(currentTrackIndex + 1) }
+                    },
+                    modifier = Modifier.padding(bottom = 80.dp)
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Location,
+                        contentDescription = "定位到当前歌曲",
+                        tint = MiuixTheme.colorScheme.onPrimary
+                    )
+                }
+            }
         }
     ) { paddingValues ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .overScrollVertical()

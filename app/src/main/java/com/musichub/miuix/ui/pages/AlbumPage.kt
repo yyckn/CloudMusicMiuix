@@ -19,12 +19,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +48,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -60,9 +63,11 @@ import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.FavoritesFill
+import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.icon.extended.Share
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -103,6 +108,11 @@ fun AlbumPage(
     var selectedTrack by remember { mutableStateOf<Track?>(null) }
     var showUnlikeDialog by remember { mutableStateOf(false) }
     var showPlaylistSheet by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val currentTrackIndex = remember(albumSongs, currentTrack) {
+        albumSongs.indexOfFirst { it.id == currentTrack?.id }
+    }
 
     BackHandler(enabled = isBackHandlerEnabled) {
         onBackClick()
@@ -137,9 +147,24 @@ fun AlbumPage(
                     )
                 }
             )
+        },
+        floatingActionButton = {
+            if (!isLoading && albumSongs.isNotEmpty() && currentTrackIndex >= 0) {
+                FloatingActionButton(
+                    onClick = { scope.launch { listState.animateScrollToItem(currentTrackIndex + 1) } },
+                    modifier = Modifier.padding(bottom = 80.dp)
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Location,
+                        contentDescription = "定位到当前歌曲",
+                        tint = MiuixTheme.colorScheme.onPrimary
+                    )
+                }
+            }
         }
     ) { paddingValues ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = paddingValues.calculateTopPadding())
