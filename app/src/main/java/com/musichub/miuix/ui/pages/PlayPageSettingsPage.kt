@@ -56,6 +56,7 @@ fun PlayPageSettingsPage(
     var enableDynamicCover by remember { mutableStateOf(ThemeSettings.enableDynamicCover) }
     var keepScreenOn by remember { mutableStateOf(ThemeSettings.keepScreenOn) }
     var showCastButton by remember { mutableStateOf(ThemeSettings.showCastButton) }
+    var showQuality by remember { mutableStateOf(ThemeSettings.showQuality) }
     var lyricAlignmentIndex by remember { mutableIntStateOf(ThemeSettings.lyricAlignmentIndex) }
     var playerColorSchemeIndex by remember { mutableIntStateOf(ThemeSettings.playerColorSchemeIndex) }
 
@@ -321,6 +322,24 @@ fun PlayPageSettingsPage(
                         onClick = {
                             showCastButton = !showCastButton
                             ThemeSettings.updateShowCastButton(showCastButton)
+                        }
+                    )
+
+                    // 显示当前歌曲音质
+                    BasicComponent(
+                        title = "显示当前歌曲音质",
+                        endActions = {
+                            Switch(
+                                checked = showQuality,
+                                onCheckedChange = { newValue ->
+                                    showQuality = newValue
+                                    ThemeSettings.updateShowQuality(newValue)
+                                }
+                            )
+                        },
+                        onClick = {
+                            showQuality = !showQuality
+                            ThemeSettings.updateShowQuality(showQuality)
                         }
                     )
 

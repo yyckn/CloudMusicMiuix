@@ -80,6 +80,7 @@ import com.musichub.miuix.ui.pages.RecommendPage
 import com.musichub.miuix.ui.pages.SettingsPage
 import com.musichub.miuix.ui.pages.ThemeSettingsPage
 import com.musichub.miuix.ui.pages.TrackItem
+import com.musichub.miuix.ui.pages.UpdateHistoryPage
 import com.musichub.miuix.ui.components.LiquidGlassNavigationBar
 import com.musichub.miuix.ui.components.LiquidGlassNavigationBarItem
 import com.musichub.miuix.ui.components.PlayerBar
@@ -124,6 +125,7 @@ sealed class Screen {
     data class Album(val albumId: Long) : Screen()
     object LyriconAdapter : Screen()
     object ManageAccounts : Screen()
+    object UpdateHistory : Screen()
     data class Comment(val songId: String, val songTitle: String) : Screen()
 }
 
@@ -929,7 +931,18 @@ fun MainScreen(
                         // TODO: 实现开放源代码许可页面
                     },
                     viewModel = viewModel,
-                    onCheckUpdate = { viewModel.checkForUpdates(manual = true) }
+                    onCheckUpdate = { viewModel.checkForUpdates(manual = true) },
+                    onViewHistory = { navigateTo(Screen.UpdateHistory) }
+                )
+            }
+            is Screen.UpdateHistory -> {
+                UpdateHistoryPage(
+                    viewModel = viewModel,
+                    onBackClick = {
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
+                    }
                 )
             }
             is Screen.LyriconAdapter -> {

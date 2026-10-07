@@ -39,6 +39,9 @@ object NeteaseApi {
     private var cookies: String = ""
     private var context: android.content.Context? = null
     private var userId: Long? = null
+    // cookies 与 userId 的同步标记：换 cookie 时 cookieGeneration 自增，userId 更新到位后 userIdGeneration 跟上
+    private var cookieGeneration: Int = 0
+    private var userIdGeneration: Int = 0
     private var onProfileChanged: (() -> Unit)? = null
     
     // 多账号管理
@@ -134,6 +137,11 @@ object NeteaseApi {
     
     @Synchronized
     fun saveCurrentAccount() {
+        // userId 还未与当前 cookies 同步时跳过，避免用旧账号 ID 覆盖/新增错误账号
+        if (userIdGeneration != cookieGeneration) {
+            android.util.Log.d("NeteaseApi", "Skip saveCurrentAccount: userId not synced with cookies")
+            return
+        }
         // 保存当前账号到列�?
         if (cookies.contains("MUSIC_U") && userId != null) {
             val currentUserId = userId.toString()
@@ -186,6 +194,9 @@ object NeteaseApi {
         if (account != null) {
             cookies = account.cookies
             this.userId = userId.toLongOrNull()
+            // cookies 与 userId 同步设置，标记为一致
+            cookieGeneration++
+            userIdGeneration = cookieGeneration
             // 保存当前cookies
             context?.let { ctx ->
                 val prefs = ctx.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
@@ -215,6 +226,8 @@ object NeteaseApi {
 
     fun setCookie(newCookies: String) {
         cookies = newCookies
+        // 标记 cookies 已变化，userId 尚未同步
+        cookieGeneration++
         // Save to SharedPreferences
         context?.let { ctx ->
             val prefs = ctx.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
@@ -223,8 +236,11 @@ object NeteaseApi {
         android.util.Log.d("NeteaseApi", "Cookie set and saved: $cookies")
         // 获取用户ID
         kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val gen = cookieGeneration
             val oldUserId = userId
             userId = getUserId()
+            // userId 已与本次 cookies 同步
+            userIdGeneration = gen
             android.util.Log.d("NeteaseApi", "User ID: $userId")
             // 如果用户ID变化，清除旧的用户资料缓存并通知UI
             if (oldUserId != null && oldUserId != userId) {
@@ -863,6 +879,16 @@ object NeteaseApi {
             }
 
             val songsArray = json.getAsJsonArray("songs")
+            // 部分响应歌曲对象不带 fee，用 privileges 里的 fee 作为兜底
+            val privilegeFee = mutableMapOf<Long, Int>()
+            if (json.has("privileges") && json.get("privileges").isJsonArray) {
+                json.getAsJsonArray("privileges").forEach { p ->
+                    val po = p.asJsonObject
+                    if (po.has("id") && po.has("fee") && !po.get("fee").isJsonNull) {
+                        privilegeFee[po.get("id").asLong] = po.get("fee").asInt
+                    }
+                }
+            }
             val tracks = mutableListOf<Track>()
             for (i in 0 until songsArray.size()) {
                 val song = songsArray.get(i).asJsonObject
@@ -881,6 +907,12 @@ object NeteaseApi {
                 val artistName = formatArtistNames(artistNames)
                 val artistId = if (artists.size() > 0) artists.get(0).asJsonObject.get("id").asLong else 0L
                 val album = song.getAsJsonObject("al")
+                val songIdLong = song.get("id").asLong
+                val songFee = when {
+                    song.has("fee") && !song.get("fee").isJsonNull -> song.get("fee").asInt
+                    privilegeFee.containsKey(songIdLong) -> privilegeFee.getValue(songIdLong)
+                    else -> 0
+                }
 
                 tracks.add(
                     Track(
@@ -893,6 +925,7 @@ object NeteaseApi {
                         sourceUrl = "https://music.163.com/#/song?id=${song.get("id").asLong}",
                         imgUrl = album.get("picUrl").asString,
                         duration = if (song.has("dt")) song.get("dt").asLong else 0L,
+                        isVip = songFee == 1,
                         artistNames = artistNames,
                         artistIds = artistIds
                     )
@@ -2159,7 +2192,7 @@ object NeteaseApi {
             }
         }
 
-        return SongLyrics(lines = lines.sortedBy { it.startAt })
+        return SongLyrics(lines = expandIrrelevantBetween(lines.sortedBy { it.startAt }))
     }
 
     /**
@@ -2447,15 +2480,32 @@ object NeteaseApi {
     }
 
     /**
-     * 邻接扩展：前后行都是「无关歌词」（演职员表/屏蔽词）时，中间行也算无关。
-     * 例如 A/B/C，A、C 为无关 → B 一并过滤。
+     * 无关歌词过滤：
+     * - 只有单个点（. 或 。）的行算无关；
+     * - 前后行都是「无关歌词」时，中间行也算无关（A/B/C，A、C 无关 → B 无关）；
+     * - 边界：开头第一行没有上一句，只判断下一句 —— B 为无关则 A 也算无关。
+     * 判定只看原文行（非翻译行）；判定为无关的行直接过滤掉（连同其翻译）。
+     * 注意：由 parseArtistLine 识别出的真实「歌手行」不算无关，会保留。
      */
     private fun expandIrrelevantBetween(lines: List<LyricLine>): List<LyricLine> {
-        if (lines.size < 3) return lines
-        val irrelevant = lines.map { it.isArtistLine }.toMutableList()
+        if (lines.isEmpty()) return lines
+        val dotRegex = Regex("""\[\d+:\d+\.\d+]""")
+        fun isDotOnly(text: String): Boolean {
+            val t = text.replace(dotRegex, "").trim()
+            return t == "." || t == "。"
+        }
+        if (lines.size == 1) return if (isDotOnly(lines[0].text)) emptyList() else lines
+
+        val originalArtist = lines.map { it.isArtistLine }
+        val irrelevant = lines.map { it.isArtistLine || isDotOnly(it.text) }.toMutableList()
         var changed = true
         while (changed) {
             changed = false
+            // 开头第一行：没有上一句，只看下一句
+            if (!irrelevant[0] && irrelevant[1]) {
+                irrelevant[0] = true
+                changed = true
+            }
             for (i in 1 until irrelevant.size - 1) {
                 if (!irrelevant[i] && irrelevant[i - 1] && irrelevant[i + 1]) {
                     irrelevant[i] = true
@@ -2463,14 +2513,16 @@ object NeteaseApi {
                 }
             }
         }
-        return lines.mapIndexed { index, line ->
-            if (irrelevant[index] && !line.isArtistLine) line.copy(isArtistLine = true) else line
+        // 过滤掉无关行：单独点行，或由邻接扩展标记出的非歌手行
+        return lines.filterIndexed { index, line ->
+            val dot = isDotOnly(line.text)
+            !(dot || (irrelevant[index] && !originalArtist[index]))
         }
     }
 
     private fun isExcludedLyric(text: String, duration: Long = 0, songTitle: String = "", artistNames: List<String> = emptyList()): Boolean {
         val colonKeywords = listOf(
-            "编曲", "母带", "OP", "SP", "出品", "贡献者", "调教", "编写", "改编", "和声", "吉他", "鼓", "混音", "剪辑", "MV", "曲绘", "后期", "推广", "出品人", "制作人", "监制", "统筹", "平面视觉", "感谢", "录音棚", "录音", "设计", "手风琴", "巴拉莱卡", "弦乐", "小提琴", "编辑", "录音室", "工程师", "导演", "造型师", "妆发", "文案", "企划", "宣传", "艺人经纪", "经纪人", "营销", "总监", "op", "sp", "pv", "PV", "OA", "OC", "oa", "oc", "制作", "署名", "策划", "表演", "词", "曲", "发行", "原唱", "打击乐", "贝斯", "钢琴", "键盘", "Program", "合音", "合唱", "演唱", "乐谱", "提琴", "和音", "鸣谢", "运营", "执行", "拍摄", "摄影", "花絮", "助理", "服装", "顾问", "版权", "翻译", "制片", "道具师", "灯光师", "调色", "合成", "承制", "艺人", "行销", "媒介", "有限公司", "资产", "技术支持", "合作伙伴", "视频平台", "口哨", "三弦", "长笛", "黑管", "童声", "缩混", "合作", "指导", "PGM", "编舞", "舞团", "宣发", "录混", "唢呐", "萨克斯", "笛子", "声明", "古筝", "箫", "人声", "配唱", "主唱", "封面", "A&R", "乐队", "队长", "女生", "项目支持", "曼陀林", "指挥", "簧管", "独奏", "乐团", "协力", "项目", "rap", "友情客串", "二胡", "帮帮团", "Guitar", "旋律创作", "陶笛", "冬不拉", "扬琴", "卡龙", "小号", "中号", "大号", "竹笛", "音乐技术", "Producers", "采样", "Drum", "Recording Engineers", "Mixing Engineer", "Recording Studio", "Mixing Studio", "Musicians", "乐器演奏", "厂牌"
+            "编曲", "母带", "OP", "SP", "出品", "贡献者", "调教", "编写", "改编", "和声", "吉他", "鼓", "混音", "剪辑", "MV", "曲绘", "后期", "推广", "出品人", "制作人", "监制", "统筹", "平面视觉", "感谢", "录音棚", "录音", "设计", "手风琴", "巴拉莱卡", "弦乐", "小提琴", "编辑", "录音室", "工程师", "导演", "造型师", "妆发", "文案", "企划", "宣传", "艺人经纪", "经纪人", "营销", "总监", "op", "sp", "pv", "PV", "OA", "OC", "oa", "oc", "制作", "署名", "策划", "表演", "词", "曲", "发行", "原唱", "打击乐", "贝斯", "钢琴", "键盘", "Program", "合音", "合唱", "演唱", "乐谱", "提琴", "和音", "鸣谢", "运营", "执行", "拍摄", "摄影", "花絮", "助理", "服装", "顾问", "版权", "翻译", "制片", "道具师", "灯光师", "调色", "合成", "承制", "艺人", "行销", "媒介", "有限公司", "资产", "技术支持", "合作伙伴", "视频平台", "口哨", "三弦", "长笛", "黑管", "童声", "缩混", "合作", "指导", "PGM", "编舞", "舞团", "宣发", "录混", "唢呐", "萨克斯", "笛子", "声明", "古筝", "箫", "人声", "配唱", "主唱", "封面", "A&R", "乐队", "队长", "女生", "项目支持", "曼陀林", "指挥", "簧管", "独奏", "乐团", "协力", "项目", "rap", "友情客串", "二胡", "帮帮团", "Guitar", "旋律创作", "陶笛", "冬不拉", "扬琴", "卡龙", "小号", "中号", "大号", "竹笛", "音乐技术", "Producers", "采样", "Drum", "Recording Engineers", "Mixing Engineer", "Recording Studio", "Mixing Studio", "Musicians", "乐器演奏", "厂牌", "伴唱", "商务", "Arranged by", "Produced by", "果沃琴演奏Guowoqin performer", "快递员 Performer", "音乐", "彝语念白", "吴语念白", "箱琴", "收件人", "特别派送"
         )
 
         val hasColon = text.contains("：") || text.contains(":") || text.contains(" :")
@@ -2488,6 +2540,9 @@ object NeteaseApi {
             "网易云音乐ACG企划",
             "纯音乐，请欣赏",
             "未经著作权人许可",
+            "保留著作权",
+            "著作权保留",
+            "未经书面授权",
             "不得翻唱",
             "本作品经过词曲著作权利方授权",
             "ISRC ",
@@ -2518,17 +2573,21 @@ object NeteaseApi {
         // 检查是否匹配"歌手-歌名"或"歌名-歌手"格式
         if (songTitle.isNotEmpty() && artistNames.isNotEmpty()) {
             val trimmedText = text.trim()
-            for (artistName in artistNames) {
-                if (artistName.isNotEmpty()) {
-                    // 歌手-歌名
-                    if (trimmedText == "$artistName-$songTitle") return false
-                    // 歌手 - 歌名
-                    if (trimmedText == "$artistName - $songTitle") return false
-                    // 歌名 - 歌手
-                    if (trimmedText == "$songTitle - $artistName") return false
-                    // 歌名-歌手
-                    if (trimmedText == "$songTitle-$artistName") return false
-                }
+            // 多个歌手拆开逐个判断（也兼容 "A/B" 这种把多个歌手塞在一个名字里的情况）
+            val individualArtists = artistNames
+                .flatMap { it.split("/", "\\", "、", "&", "＆", ",", "，", "；", ";") }
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+            for (artistName in individualArtists) {
+                // 歌手-歌名
+                if (trimmedText == "$artistName-$songTitle") return false
+                // 歌手 - 歌名
+                if (trimmedText == "$artistName - $songTitle") return false
+                // 歌名 - 歌手
+                if (trimmedText == "$songTitle - $artistName") return false
+                // 歌名-歌手
+                if (trimmedText == "$songTitle-$artistName") return false
             }
         }
         

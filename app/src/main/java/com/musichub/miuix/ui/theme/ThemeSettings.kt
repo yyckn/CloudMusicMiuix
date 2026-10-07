@@ -24,6 +24,7 @@ object ThemeSettings {
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_LYRIC_ALIGNMENT = "lyric_alignment"
     private const val KEY_SHOW_CAST_BUTTON = "show_cast_button"
+    private const val KEY_SHOW_QUALITY = "show_quality"
     private const val KEY_PLAYER_COLOR_SCHEME = "player_color_scheme"
     private const val KEY_AUTO_CHECK_UPDATE = "auto_check_update"
 
@@ -77,6 +78,10 @@ object ThemeSettings {
     var showCastButton by mutableStateOf(true)
         private set
 
+    // 显示当前歌曲音质
+    var showQuality by mutableStateOf(true)
+        private set
+
     // 播放页背景颜色: 0=跟随深浅色设置, 1=浅色流光, 2=深色流光
     var playerColorSchemeIndex by mutableIntStateOf(2)
         private set
@@ -102,6 +107,7 @@ object ThemeSettings {
         keepScreenOn = prefs?.getBoolean(KEY_KEEP_SCREEN_ON, true) ?: true
         lyricAlignmentIndex = prefs?.getInt(KEY_LYRIC_ALIGNMENT, 0) ?: 0
         showCastButton = prefs?.getBoolean(KEY_SHOW_CAST_BUTTON, true) ?: true
+        showQuality = prefs?.getBoolean(KEY_SHOW_QUALITY, true) ?: true
         playerColorSchemeIndex = prefs?.getInt(KEY_PLAYER_COLOR_SCHEME, 2) ?: 2
         autoCheckUpdate = prefs?.getBoolean(KEY_AUTO_CHECK_UPDATE, true) ?: true
     }
@@ -169,6 +175,11 @@ object ThemeSettings {
     fun updateShowCastButton(value: Boolean) {
         showCastButton = value
         prefs?.edit()?.putBoolean(KEY_SHOW_CAST_BUTTON, value)?.apply()
+    }
+
+    fun updateShowQuality(value: Boolean) {
+        showQuality = value
+        prefs?.edit()?.putBoolean(KEY_SHOW_QUALITY, value)?.apply()
     }
 
     fun updatePlayerColorSchemeIndex(index: Int) {

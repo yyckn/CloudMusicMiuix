@@ -29,7 +29,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  */
 @Composable
 fun UpdateLogSheet(viewModel: MusicPlayerViewModel) {
-    val updateInfo = viewModel.updateState.latest ?: return
+    val updateInfo = viewModel.selectedUpdateLog ?: return
     val context = LocalContext.current
     OverlayBottomSheet(
         show = viewModel.showUpdateLog,

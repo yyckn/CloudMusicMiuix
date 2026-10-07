@@ -5,5 +5,7 @@ data class UpdateInfo(
     val version: String = "",
     val date: String = "",
     val changelog: List<String> = emptyList(),
-    val downloadUrl: String = ""
+    val downloadUrl: String = "",
+    /** 历史版本（较旧的版本列表） */
+    val history: List<UpdateInfo> = emptyList()
 )

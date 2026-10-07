@@ -614,11 +614,13 @@ fun PlayerPage(
                                 
                                 // 控制按钮（底部）
                                 Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 16.dp)) {
-                                    val progress = if (playerState.duration > 0) playerState.currentPosition.toFloat() / playerState.duration.toFloat() else 0f
-                                    Slider(value = progress, onValueChange = { newValue -> onSeekTo((newValue * playerState.duration).toLong()) }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
+                                    var seekPosition by remember { mutableStateOf<Long?>(null) }
+                                    val displayPosition = seekPosition ?: playerState.currentPosition
+                                    val progress = if (playerState.duration > 0) displayPosition.toFloat() / playerState.duration.toFloat() else 0f
+                                    Slider(value = progress, onValueChange = { newValue -> seekPosition = (newValue * playerState.duration).toLong() }, onValueChangeFinished = { seekPosition?.let { onSeekTo(it) }; seekPosition = null }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
                                     Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text(text = formatDuration(playerState.currentPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
-                                        Text(text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode), fontSize = 12.sp, color = playerText)
+                                        Text(text = formatDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
+                                        Text(text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode, ThemeSettings.showQuality), fontSize = 12.sp, color = playerText)
                                         Text(text = formatDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                                     }
                                     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -817,8 +819,10 @@ fun PlayerPage(
                         Spacer(modifier = Modifier.height(16.dp))
 
                             // 播放进度条
+                            var seekPosition by remember { mutableStateOf<Long?>(null) }
+                            val displayPosition = seekPosition ?: playerState.currentPosition
                             val progress = if (playerState.duration > 0) {
-                                playerState.currentPosition.toFloat() / playerState.duration.toFloat()
+                                displayPosition.toFloat() / playerState.duration.toFloat()
                             } else {
                                 0f
                             }
@@ -826,8 +830,11 @@ fun PlayerPage(
                             Slider(
                                 value = progress,
                                 onValueChange = { newValue ->
-                                    val newPosition = (newValue * playerState.duration).toLong()
-                                    onSeekTo(newPosition)
+                                    seekPosition = (newValue * playerState.duration).toLong()
+                                },
+                                onValueChangeFinished = {
+                                    seekPosition?.let { onSeekTo(it) }
+                                    seekPosition = null
                                 },
                                 enabled = !playerState.isLoading,
                                 modifier = Modifier
@@ -843,12 +850,12 @@ fun PlayerPage(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = formatDuration(playerState.currentPosition),
+                                    text = formatDuration(displayPosition),
                                     fontSize = 12.sp,
                                     color = playerText.copy(alpha = 0.6f)
                                 )
                                 Text(
-                                    text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode),
+                                    text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode, ThemeSettings.showQuality),
                                     fontSize = 12.sp,
                                     color = playerText
                                 )
@@ -1318,11 +1325,13 @@ fun PlayerPage(
                                         controlsTopY = topPaddingPx + coordinates.positionInParent().y
                                     }
                             ) {
-                                val progress = if (playerState.duration > 0) playerState.currentPosition.toFloat() / playerState.duration.toFloat() else 0f
-                                Slider(value = progress, onValueChange = { newValue -> onSeekTo((newValue * playerState.duration).toLong()) }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
+                                var seekPosition by remember { mutableStateOf<Long?>(null) }
+                                val displayPosition = seekPosition ?: playerState.currentPosition
+                                val progress = if (playerState.duration > 0) displayPosition.toFloat() / playerState.duration.toFloat() else 0f
+                                Slider(value = progress, onValueChange = { newValue -> seekPosition = (newValue * playerState.duration).toLong() }, onValueChangeFinished = { seekPosition?.let { onSeekTo(it) }; seekPosition = null }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
                                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = formatDuration(playerState.currentPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
-                                    Text(text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode), fontSize = 12.sp, color = playerText)
+                                    Text(text = formatDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
+                                    Text(text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode, ThemeSettings.showQuality), fontSize = 12.sp, color = playerText)
                                     Text(text = formatDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                                 }
                                 Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1554,8 +1563,10 @@ fun PlayerPage(
                     // 底部控制区域
                     Column(modifier = Modifier.padding(horizontal = 24.dp)) {
                         // 播放进度条
+                        var seekPosition by remember { mutableStateOf<Long?>(null) }
+                        val displayPosition = seekPosition ?: playerState.currentPosition
                         val progress = if (playerState.duration > 0) {
-                            playerState.currentPosition.toFloat() / playerState.duration.toFloat()
+                            displayPosition.toFloat() / playerState.duration.toFloat()
                         } else {
                             0f
                         }
@@ -1563,8 +1574,11 @@ fun PlayerPage(
                         Slider(
                             value = progress,
                             onValueChange = { newValue ->
-                                val newPosition = (newValue * playerState.duration).toLong()
-                                onSeekTo(newPosition)
+                                seekPosition = (newValue * playerState.duration).toLong()
+                            },
+                            onValueChangeFinished = {
+                                seekPosition?.let { onSeekTo(it) }
+                                seekPosition = null
                             },
                             enabled = !playerState.isLoading,
                             modifier = Modifier
@@ -1580,12 +1594,12 @@ fun PlayerPage(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                         Text(
-                            text = formatDuration(playerState.currentPosition),
+                            text = formatDuration(displayPosition),
                             fontSize = 12.sp,
                             color = playerText.copy(alpha = 0.6f)
                         )
                         Text(
-                            text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode),
+                            text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode, ThemeSettings.showQuality),
                             fontSize = 12.sp,
                             color = playerText
                         )
@@ -2153,7 +2167,8 @@ private fun formatDuration(durationMs: Long): String {
 private fun getQualityText(
     bitrate: Int,
     isFMMode: Boolean = false,
-    isIntelligenceMode: Boolean = false
+    isIntelligenceMode: Boolean = false,
+    showQuality: Boolean = true
 ): String {
     val quality = when {
         bitrate <= 0 -> "未知品质"
@@ -2167,6 +2182,8 @@ private fun getQualityText(
         isIntelligenceMode -> "心动模式"
         else -> ""
     }
+    // 关闭「显示当前歌曲音质」时只保留私人FM/心动模式文字
+    if (!showQuality) return prefix
     return if (prefix.isEmpty()) quality else "$prefix · $quality"
 }
 

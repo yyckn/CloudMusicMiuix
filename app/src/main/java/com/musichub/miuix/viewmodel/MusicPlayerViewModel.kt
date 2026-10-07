@@ -102,6 +102,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     var showUpdateLog by mutableStateOf(false)
         private set
+    var selectedUpdateLog by mutableStateOf<com.musichub.miuix.data.model.UpdateInfo?>(null)
+        private set
 
     private var updateCheckJob: Job? = null
     private var autoUpdateChecked = false
@@ -556,7 +558,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     if (manual) {
                         if (newer) {
                             _toastMessage.trySend("发现新版本 v${info.version}")
-                            showUpdateLog = true
+                            openUpdateLog(info)
                         } else {
                             _toastMessage.trySend("已是最新版本")
                         }
@@ -579,6 +581,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun openUpdateLog() {
+        updateState.latest?.let { openUpdateLog(it) }
+    }
+
+    fun openUpdateLog(info: com.musichub.miuix.data.model.UpdateInfo) {
+        selectedUpdateLog = info
         showUpdateLog = true
     }
 
@@ -595,9 +602,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private fun parseVersionParts(v: String): List<Int> {
+        // 去掉 v 前缀与 -release/-beta1/+build 等后缀，并取每段前导数字（如 3-beta1 → 3）
+        val main = v.trim().removePrefix("v").removePrefix("V")
+            .substringBefore("-").substringBefore("+")
+        return main.split(".").map { part ->
+            part.takeWhile { it.isDigit() }.toIntOrNull() ?: 0
+        }
+    }
+
     private fun isVersionNewer(latest: String, current: String): Boolean {
-        val l = latest.trim().removePrefix("v").split(".").mapNotNull { it.toIntOrNull() }
-        val c = current.trim().removePrefix("v").split(".").mapNotNull { it.toIntOrNull() }
+        val l = parseVersionParts(latest)
+        val c = parseVersionParts(current)
         val n = maxOf(l.size, c.size)
         for (i in 0 until n) {
             val lv = l.getOrElse(i) { 0 }

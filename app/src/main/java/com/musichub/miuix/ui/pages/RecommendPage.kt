@@ -3,6 +3,7 @@ package com.musichub.miuix.ui.pages
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +55,7 @@ import com.musichub.miuix.data.model.RecommendPlaylist
 import com.musichub.miuix.data.model.Track
 import com.musichub.miuix.data.model.UpdateInfo
 import com.musichub.miuix.ui.FeedBottomPads
+import com.musichub.miuix.ui.theme.ThemeSettings
 import com.musichub.miuix.viewmodel.MusicPlayerViewModel
 import com.musichub.miuix.viewmodel.RecommendState
 import top.yukonga.miuix.kmp.basic.Button
@@ -332,7 +334,20 @@ fun RecommendPage(
                         }
                     }
 
-                    // 1. 播放模式（仅卡片，无标题/解释）
+                    // 1. 专属推荐标题
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text(
+                            text = "专属推荐",
+                            style = MiuixTheme.textStyles.body1,
+                            fontWeight = FontWeight.Bold,
+                            color = MiuixTheme.colorScheme.onBackground,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // 2. 播放模式（仅卡片，无标题/解释）
                     item {
                         PlayModeRow(
                             dailySongs = recommendState.dailySongs,
@@ -380,7 +395,7 @@ fun RecommendPage(
                         item {
                             HomeSection(
                                 title = if (isLoggedIn) "专属歌单" else "推荐歌单",
-                                subtitle = if (isLoggedIn) "为你量身定制的歌单精选" else "大家都在听的热门歌单"
+                                subtitle = if (isLoggedIn) "为你量身定制的精选歌单" else "大家都在听的热门歌单"
                             ) {
                                 items(recommendState.playlists) { playlist ->
                                     CoverCard(
@@ -399,7 +414,7 @@ fun RecommendPage(
                         item {
                             HomeSection(
                                 title = "雷达歌单",
-                                subtitle = "持续推荐符合你的音乐口味"
+                                subtitle = "根据你的音乐口味持续推荐"
                             ) {
                                 items(recommendState.radarPlaylists) { playlist ->
                                     // 「私人雷达」等个性化歌单：首页只显示基础名称（如「私人雷达」），点进去再看完整歌单
@@ -513,9 +528,7 @@ private fun UpdateAvailableCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .padding(top = 8.dp)
-            .padding(bottom = 16.dp),
+            .padding(horizontal = 12.dp),
         pressFeedbackType = PressFeedbackType.Tilt,
         showIndication = true,
         onClick = onView
@@ -523,7 +536,7 @@ private fun UpdateAvailableCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -716,6 +729,21 @@ private fun PlayModeRow(
         ?: ""
     val heartSeedId = dailySongs.firstOrNull()?.id ?: ""
 
+    val dailyCover = dailySongs.firstOrNull()?.imgUrl
+    // 每日推荐始终使用「浅色模式」的主题色（不受深色模式影响）
+    val dailyColor = run {
+        val lightMode = if (ThemeSettings.followMonet) {
+            top.yukonga.miuix.kmp.theme.ColorSchemeMode.MonetLight
+        } else {
+            top.yukonga.miuix.kmp.theme.ColorSchemeMode.Light
+        }
+        val controller = remember(lightMode) { top.yukonga.miuix.kmp.theme.ThemeController(lightMode) }
+        controller.currentColors().primary
+    }
+    val randomColor = Color(0xFFB88B64)
+    val fmColor = Color(0xFF7D4F2A)
+    val heartColor = Color(0xFF6B2D38)
+
     LazyRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -723,26 +751,14 @@ private fun PlayModeRow(
     ) {
         item {
             PlayModeCard(
-                title = "随机播放",
-                subtitle = "试试手气",
-                onClick = onRandomPlayClick
-            ) {
-                GradientCover(
-                    brush = Brush.verticalGradient(listOf(Color(0xFF64B5F6), Color(0xFF1E88E5))),
-                    emoji = "🎲"
-                )
-            }
-        }
-        item {
-            PlayModeCard(
                 title = "每日推荐",
                 subtitle = "每天为你精选",
+                gradientColor = dailyColor,
                 onClick = onDailyRecommendClick
             ) {
-                val cover = dailySongs.firstOrNull()?.imgUrl
-                if (!cover.isNullOrEmpty()) {
+                if (!dailyCover.isNullOrEmpty()) {
                     AsyncImage(
-                        model = cover,
+                        model = dailyCover,
                         contentDescription = "每日推荐",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -757,13 +773,31 @@ private fun PlayModeRow(
         }
         item {
             PlayModeCard(
+                title = "随机播放",
+                subtitle = "试试手气",
+                gradientColor = randomColor,
+                onClick = onRandomPlayClick
+            ) {
+                Image(
+                    painter = painterResource(com.musichub.miuix.R.drawable.random_play),
+                    contentDescription = "随机播放",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+        }
+        item {
+            PlayModeCard(
                 title = "私人FM",
                 subtitle = "为你不停推荐",
+                gradientColor = fmColor,
                 onClick = onFmClick
             ) {
-                GradientCover(
-                    brush = Brush.verticalGradient(listOf(Color(0xFF90A4AE), Color(0xFF546E7A))),
-                    emoji = "📻"
+                Image(
+                    painter = painterResource(com.musichub.miuix.R.drawable.personal_fm),
+                    contentDescription = "私人FM",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
             }
         }
@@ -771,11 +805,14 @@ private fun PlayModeRow(
             PlayModeCard(
                 title = "心动模式",
                 subtitle = "根据喜好智能播放",
+                gradientColor = heartColor,
                 onClick = { onIntelligenceModeClick(heartSeedId, likedPlaylistId) }
             ) {
-                GradientCover(
-                    brush = Brush.verticalGradient(listOf(Color(0xFFEF9A9A), Color(0xFFE53935))),
-                    emoji = "❤"
+                Image(
+                    painter = painterResource(com.musichub.miuix.R.drawable.xindong_mode),
+                    contentDescription = "心动模式",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
             }
         }
@@ -786,12 +823,14 @@ private fun PlayModeRow(
 private fun PlayModeCard(
     title: String,
     subtitle: String,
+    gradientColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     cover: @Composable () -> Unit
 ) {
+    val onColor = Color.White
     Card(
-        modifier = modifier.width(140.dp),
+        modifier = modifier.width(210.dp),
         pressFeedbackType = PressFeedbackType.Tilt,
         showIndication = true,
         onClick = onClick
@@ -802,17 +841,29 @@ private fun PlayModeCard(
                 .aspectRatio(1f)
         ) {
             cover()
+            // 底部 80%-100% 渐变：透明 → 颜色（与下方标题区背景衔接）
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0.8f to Color.Transparent,
+                            1f to gradientColor
+                        )
+                    )
+            )
         }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp)
+                .background(gradientColor)
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
             Text(
                 text = title,
                 style = MiuixTheme.textStyles.body2,
                 fontWeight = FontWeight.Medium,
-                color = MiuixTheme.colorScheme.onSurface,
+                color = onColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
@@ -822,7 +873,7 @@ private fun PlayModeCard(
                 Text(
                     text = subtitle,
                     style = MiuixTheme.textStyles.footnote2,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    color = onColor.copy(alpha = 0.75f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()

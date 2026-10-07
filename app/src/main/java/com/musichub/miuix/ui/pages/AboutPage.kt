@@ -58,6 +58,7 @@ fun AboutPage(
     onOpenSourceClick: () -> Unit,
     viewModel: MusicPlayerViewModel,
     onCheckUpdate: () -> Unit = {},
+    onViewHistory: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -189,6 +190,10 @@ fun AboutPage(
                     ArrowPreference(
                         title = "立即检查更新",
                         onClick = onCheckUpdate
+                    )
+                    ArrowPreference(
+                        title = "查看历史版本",
+                        onClick = onViewHistory
                     )
                 }
             }
