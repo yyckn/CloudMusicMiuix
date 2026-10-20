@@ -27,6 +27,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import com.musichub.miuix.ui.components.BlurredBar
+import com.musichub.miuix.ui.components.pageLayerBackdrop
+import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
 import coil.compose.AsyncImage
 import com.musichub.miuix.R
 import top.yukonga.miuix.kmp.basic.Button
@@ -73,22 +77,27 @@ fun ManageAccountsPage(
         onBackClick()
     }
 
+    val blurBackdrop = rememberPageBlurBackdrop()
+
     Scaffold(
         topBar = {
-            SmallTopAppBar(
-                title = "管理多账号",
-                scrollBehavior = scrollBehavior,
-                defaultWindowInsetsPadding = false,
-                navigationIcon = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .clickable { onBackClick() }
-                    )
-                }
-            )
+            BlurredBar(backdrop = blurBackdrop) {
+                SmallTopAppBar(
+                    title = "管理多账号",
+                    color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
+                    scrollBehavior = scrollBehavior,
+                    defaultWindowInsetsPadding = false,
+                    navigationIcon = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .clickable { onBackClick() }
+                        )
+                    }
+                )
+            }
         }
     ) { paddingValues ->
         LazyColumn(
@@ -96,7 +105,8 @@ fun ManageAccountsPage(
                 .padding(top = paddingValues.calculateTopPadding())
                 .fillMaxSize()
                 .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .pageLayerBackdrop(blurBackdrop),
             contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = FeedBottomPads.None)
         ) {
             // 账号管理

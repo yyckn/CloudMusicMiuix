@@ -38,6 +38,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import com.musichub.miuix.ui.components.BlurredBar
+import com.musichub.miuix.ui.components.pageLayerBackdrop
+import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
 import coil.compose.AsyncImage
 import com.musichub.miuix.data.api.NeteaseApi
 import com.musichub.miuix.data.model.AlbumInfo
@@ -224,23 +228,28 @@ fun ArtistPage(
         isLoading = false
     }
 
+    val blurBackdrop = rememberPageBlurBackdrop()
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = artistInfo?.name ?: "",
-                largeTitle = "歌手",
-                scrollBehavior = scrollBehavior,
-                defaultWindowInsetsPadding = false,
-                navigationIcon = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .clickable { onBackClick() }
-                    )
-                }
-            )
+            BlurredBar(backdrop = blurBackdrop) {
+                TopAppBar(
+                    title = artistInfo?.name ?: "",
+                    largeTitle = "歌手",
+                    color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
+                    scrollBehavior = scrollBehavior,
+                    defaultWindowInsetsPadding = false,
+                    navigationIcon = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .clickable { onBackClick() }
+                        )
+                    }
+                )
+            }
         },
         floatingActionButton = {
             if (!isLoading && selectedTab == 0 && artistSongs.isNotEmpty() && currentTrackIndex >= 0) {
@@ -263,7 +272,8 @@ fun ArtistPage(
                 .fillMaxSize()
                 .padding(top = paddingValues.calculateTopPadding())
                 .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .pageLayerBackdrop(blurBackdrop),
             contentPadding = PaddingValues(bottom = FeedBottomPads.Standard),
             overscrollEffect = null
         ) {

@@ -8,6 +8,7 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,11 +19,13 @@ import com.musichub.miuix.data.model.Playlist
 import com.musichub.miuix.data.model.PlaylistDetail
 import com.musichub.miuix.data.model.RecommendPlaylist
 import com.musichub.miuix.data.model.SongLyrics
+import com.musichub.miuix.data.lyrics.LyricsRepository
 import com.musichub.miuix.data.model.Track
 import com.musichub.miuix.service.MediaPlaybackService
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlin.math.roundToInt
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
@@ -79,6 +82,8 @@ data class UpdateState(
 
 data class LyricState(
     val lyrics: SongLyrics? = null,
+    val source: String? = null,
+    val upgraded: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -143,6 +148,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         private set
     private var originalPlaylist: List<Track> = emptyList()
 
+    // 播放速度：0.1x - 5.0x，最多两位小数
+    var playbackSpeed by mutableFloatStateOf(1.0f)
+        private set
+
+    // 音质选择索引（对应 999000 / 740000 / 320000 / 128000）
+    var audioQualityIndex by mutableIntStateOf(0)
+        private set
+
     // 随身听FM模式
     var isFMMode by mutableStateOf(false)
         private set
@@ -156,33 +169,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var intelligenceIndex by mutableIntStateOf(0)
     private var intelligencePlaylistId: String = ""
     private var intelligenceSeedSongId: String = ""
-
-    // 动态封面ExoPlayer（在ViewModel中管理，切歌时才销毁）
-    var animatedCoverExoPlayer by mutableStateOf<androidx.media3.exoplayer.ExoPlayer?>(null)
-        private set
-    private var animatedCoverExoPlayerUrl: String? = null
-
-    // Apple Music封面状态（在ViewModel中管理，切歌时才重新加载）
-    var appleMusicCoverUrl by mutableStateOf<String?>(null)
-        private set
-    var appleMusicCoverIsAnimated by mutableStateOf(false)
-        private set
-    var isLoadingAppleMusicCover by mutableStateOf(false)
-        private set
-    var isAnimatedCoverReady by mutableStateOf(false)
-        private set
-    var animatedCoverError by mutableStateOf(false)
-        private set
-    var showLiveBadge by mutableStateOf(false)
-        private set
-    private var appleMusicCoverTrackId: String? = null // 跟踪当前已加载封面的歌曲ID
-
-    /**
-     * 更新Live标识显示状态
-     */
-    fun updateShowLiveBadge(show: Boolean) {
-        showLiveBadge = show
-    }
 
     private var mediaPlaybackService: MediaPlaybackService? = null
     private var isBound = false
@@ -210,12 +196,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private var pendingTrack: Track? = null
     private var lyricsLoadJob: kotlinx.coroutines.Job? = null
+    private var lyricsLoadGeneration = 0
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as MediaPlaybackService.LocalBinder
             mediaPlaybackService = binder.getService()
             isBound = true
+            mediaPlaybackService?.setPlaybackSpeed(playbackSpeed)
             
             // 设置回调，处理系统控制器的上一首/下一首
             mediaPlaybackService?.onTrackChangedListener = object : MediaPlaybackService.OnTrackChangedListener {
@@ -257,41 +245,81 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         // 加载保存的账号索引
         playbackAccountIndex = prefs.getInt("playback_account_index", 0)
         dataAccountIndex = prefs.getInt("data_account_index", 0)
-        // 初始化播放账号VIP状态
-        val savedAccounts = NeteaseApi.getAccounts()
-        if (playbackAccountIndex < savedAccounts.size) {
-            viewModelScope.launch {
-                NeteaseApi.switchToAccount(savedAccounts[playbackAccountIndex].userId)
-                NeteaseApi.getUserProfile().fold(
-                    onSuccess = { profile -> playbackVipType = profile.vipType },
-                    onFailure = { playbackVipType = 0 }
-                )
-                val dataUserId = if (dataAccountIndex < savedAccounts.size) savedAccounts[dataAccountIndex].userId else null
-                if (dataUserId != null) {
-                    NeteaseApi.switchToAccount(dataUserId)
-                }
-            }
-        }
         // 加载保存的播放模式
         playMode = prefs.getInt("play_mode", 0)
-        
-        loadLastPlayedTrack()
-        loadLastPlaylist()
-        loadRecommendPlaylists()
-        loadDailyRecommendSongs()
-        loadUserPlaylists()
-        loadRadarPlaylists()
-        loadTopArtists()
-        loadNewAlbums()
-        // 打开应用时自动检查更新（可在关于页关闭）
-        if (com.musichub.miuix.ui.theme.ThemeSettings.autoCheckUpdate && !autoUpdateChecked) {
-            autoUpdateChecked = true
-            checkForUpdates()
-        }
+        playbackSpeed = prefs.getFloat("playback_speed", 1.0f).coerceIn(0.1f, 5f)
+        audioQualityIndex = prefs.getInt("audio_quality_index", 0)
+
         bindMediaService()
         startProgressUpdate()
-        
-        // 恢复FM模式或心动模式
+
+        // 先应用保存的账号，再发起所有依赖登录态的数据/播放请求，
+        // 否则启动瞬间仍会使用最后登录账号（NeteaseApi.init 载入的 cookies）。
+        viewModelScope.launch {
+            applySavedAccounts()
+            loadUserInfo()
+
+            loadLastPlayedTrack()
+            loadLastPlaylist()
+            loadRecommendPlaylists()
+            loadDailyRecommendSongs()
+            loadUserPlaylists()
+            loadRadarPlaylists()
+            loadTopArtists()
+            loadNewAlbums()
+
+            // 打开应用时自动检查更新（可在关于页关闭）
+            if (com.musichub.miuix.ui.theme.ThemeSettings.autoCheckUpdate && !autoUpdateChecked) {
+                autoUpdateChecked = true
+                checkForUpdates()
+            }
+
+            restorePlaybackMode()
+        }
+    }
+
+    /** 应用保存的播放账号 / 数据账号，并刷新播放账号的 VIP 状态。 */
+    private suspend fun applySavedAccounts() {
+        val savedAccounts = NeteaseApi.getAccounts()
+        if (savedAccounts.isEmpty()) return
+
+        // 账号列表可能变化（删除账号等），越界时回退到第一个账号
+        if (playbackAccountIndex !in savedAccounts.indices) playbackAccountIndex = 0
+        if (dataAccountIndex !in savedAccounts.indices) dataAccountIndex = 0
+
+        if (playbackAccountIndex < savedAccounts.size) {
+            NeteaseApi.switchToAccount(savedAccounts[playbackAccountIndex].userId)
+            NeteaseApi.getUserProfile().fold(
+                onSuccess = { profile -> playbackVipType = profile.vipType },
+                onFailure = { playbackVipType = 0 }
+            )
+        }
+
+        val dataUserId = if (dataAccountIndex < savedAccounts.size) {
+            savedAccounts[dataAccountIndex].userId
+        } else {
+            null
+        }
+        if (dataUserId != null) {
+            NeteaseApi.switchToAccount(dataUserId)
+        }
+    }
+
+    /**
+     * 登录完成 / 账号列表变化后刷新账号状态：
+     * 重新应用播放账号（读取 VIP）、加载用户信息与收藏。
+     */
+    fun refreshAccountState() {
+        viewModelScope.launch {
+            applySavedAccounts()
+            loadUserInfo()
+            loadRecommendPlaylists()
+            loadUserPlaylists()
+        }
+    }
+
+    /** 恢复私人FM / 心动模式，需在账号应用完成后调用。 */
+    private fun restorePlaybackMode() {
         val savedMode = prefs.getString("play_mode_type", "normal")
         when (savedMode) {
             "fm" -> {
@@ -383,12 +411,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             try {
                 val track = gson.fromJson(trackJson, Track::class.java)
                 playerState = playerState.copy(currentTrack = track, isPlaying = false)
-                // 自动准备播放
-                prepareTrack(track)
-                // 加载歌词
+                // 加载歌词、检查喜欢状态（使用数据账号）
                 loadLyrics()
-                // 检查是否已喜欢
                 checkIfCurrentTrackLiked()
+                // 最后再准备播放地址（内部会临时切换到播放账号）
+                prepareTrack(track)
             } catch (e: Exception) {
                 // Ignore parse errors
             }
@@ -406,7 +433,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
         viewModelScope.launch {
-            NeteaseApi.getSongUrl(track.id).fold(
+            // 用播放账号的 Cookie 获取播放地址，不切换全局账号，避免影响并发中的数据请求
+            val accounts = NeteaseApi.getAccounts()
+            val playbackUserId = if (playbackAccountIndex < accounts.size) accounts[playbackAccountIndex].userId else null
+            val playbackCookie = playbackUserId?.let { NeteaseApi.getAccountCookie(it) }
+
+            NeteaseApi.getSongUrl(track.id, accountCookie = playbackCookie).fold(
                 onSuccess = { (url, bitrate, _) ->
                     try {
                         mediaPlaybackService?.let { service ->
@@ -418,9 +450,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         // Ignore errors
                     }
                 },
-                onFailure = { e ->
-                    // Ignore errors
-                }
+                onFailure = { }
             )
         }
     }
@@ -1372,14 +1402,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playTrack(track: Track) {
-        // 切歌时释放动态封面ExoPlayer
-        releaseAnimatedCoverPlayer()
-        
-        // 切歌时加载Apple Music封面（如果歌曲ID变化了）
-        if (appleMusicCoverTrackId != track.id) {
-            loadAppleMusicCover(track)
-        }
-        
         // VIP歌曲限制：纯本地判断，不发网络请求，不替换当前播放歌曲
         if (track.isVip) {
             if (!NeteaseApi.isLoggedIn()) {
@@ -1401,28 +1423,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             loadLyrics()
             checkIfCurrentTrackLiked()
 
-            // 切换到播放账号的Cookie
+            // 使用播放账号的 Cookie 获取播放地址，避免临时切换全局账号影响其他请求
             val accounts = NeteaseApi.getAccounts()
             val playbackUserId = if (playbackAccountIndex < accounts.size) accounts[playbackAccountIndex].userId else null
-            
-            if (NeteaseApi.isLoggedIn() && playbackUserId != null) {
-                NeteaseApi.switchToAccount(playbackUserId)
-            }
+            val playbackCookie = playbackUserId?.let { NeteaseApi.getAccountCookie(it) }
 
             // 获取用户选择的音质
             val qualityBitrates = listOf(999000, 999000, 740000, 320000, 128000)
-            val qualityIndex = prefs.getInt("audio_quality_index", 0)
+            val qualityIndex = audioQualityIndex
             val selectedBitrate = if (qualityIndex < qualityBitrates.size) qualityBitrates[qualityIndex] else 999000
 
-            NeteaseApi.getSongUrl(track.id, selectedBitrate).fold(
+            NeteaseApi.getSongUrl(track.id, selectedBitrate, accountCookie = playbackCookie).fold(
                 onSuccess = { (url, bitrate, _) ->
                     try {
-                        // 切换回数据账号的Cookie
-                        val dataUserId = if (dataAccountIndex < accounts.size) accounts[dataAccountIndex].userId else null
-                        if (dataUserId != null) {
-                            NeteaseApi.switchToAccount(dataUserId)
-                        }
-                        
                         mediaPlaybackService?.let { service ->
                             service.setPlaylist(currentPlaylist)
                             service.playTrackWithUrl(track, url)
@@ -1440,11 +1453,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 },
                 onFailure = { e ->
-                    // 切换回数据账号的Cookie
-                    val dataUserId = if (dataAccountIndex < accounts.size) accounts[dataAccountIndex].userId else null
-                    if (dataUserId != null) {
-                        NeteaseApi.switchToAccount(dataUserId)
-                    }
                     playerState = playerState.copy(
                         isLoading = false,
                         error = e.message
@@ -1454,127 +1462,24 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    /**
-     * 创建或更新动态封面ExoPlayer
-     */
-    fun createAnimatedCoverPlayer(videoUrl: String) {
-        // 如果URL没有变化，不重新创建
-        if (animatedCoverExoPlayer != null && animatedCoverExoPlayerUrl == videoUrl) {
-            return
-        }
-        
-        // 释放旧的播放器
-        releaseAnimatedCoverPlayer()
-        
-        try {
-            val context = getApplication<Application>()
-            val dataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
-                .setDefaultRequestProperties(
-                    mapOf(
-                        "Referer" to "https://music.apple.com/",
-                        "Origin" to "https://music.apple.com"
-                    )
-                )
-                .setAllowCrossProtocolRedirects(true)
-
-            val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context)
-                .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-                .setEnableDecoderFallback(true)
-
-            // 轨道选择器：强制最高质量
-            val trackSelector = androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context).apply {
-                setParameters(
-                    buildUponParameters()
-                        .setMaxVideoSize(Int.MAX_VALUE, Int.MAX_VALUE)
-                )
-            }
-
-            val mediaSourceFactory = androidx.media3.exoplayer.hls.HlsMediaSource.Factory(dataSourceFactory)
-
-            val player = androidx.media3.exoplayer.ExoPlayer.Builder(context)
-                .setTrackSelector(trackSelector)
-                .setRenderersFactory(renderersFactory)
-                .setMediaSourceFactory(mediaSourceFactory)
-                .build()
-                .apply {
-                    videoScalingMode = androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-
-                    val mediaItem = androidx.media3.common.MediaItem.Builder()
-                        .setUri(videoUrl)
-                        .setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
-                        .build()
-
-                    setMediaItem(mediaItem)
-                    repeatMode = androidx.media3.exoplayer.ExoPlayer.REPEAT_MODE_ONE
-                    volume = 0f
-                    prepare()
-                    playWhenReady = true
-                }
-            
-            animatedCoverExoPlayer = player
-            animatedCoverExoPlayerUrl = videoUrl
-            Log.d("MusicPlayerViewModel", "动态封面ExoPlayer创建成功: $videoUrl")
-        } catch (e: Exception) {
-            Log.e("MusicPlayerViewModel", "动态封面ExoPlayer创建失败: ${e.message}", e)
-        }
+    /** 按最新歌词设置重新同步当前歌词到词幕。 */
+    fun resyncLyricsToLyricon() {
+        lyricState.lyrics?.let { mediaPlaybackService?.updateLyrics(it) }
     }
 
-    /**
-     * 释放动态封面ExoPlayer
-     */
-    fun releaseAnimatedCoverPlayer() {
-        animatedCoverExoPlayer?.release()
-        animatedCoverExoPlayer = null
-        animatedCoverExoPlayerUrl = null
+    /** 设置播放速度，限制在 0.1x - 5.0x，并保留最多两位小数。 */
+    fun updatePlaybackSpeed(speed: Float) {
+        val normalized = (speed.coerceIn(0.1f, 5f) * 100f).roundToInt() / 100f
+        if (normalized == playbackSpeed) return
+        playbackSpeed = normalized
+        prefs.edit().putFloat("playback_speed", normalized).apply()
+        mediaPlaybackService?.setPlaybackSpeed(normalized)
     }
 
-    /**
-     * 加载Apple Music封面
-     */
-    private fun loadAppleMusicCover(track: Track) {
-        // 重置状态
-        appleMusicCoverUrl = null
-        appleMusicCoverIsAnimated = false
-        isAnimatedCoverReady = false
-        animatedCoverError = false
-        showLiveBadge = false
-        appleMusicCoverTrackId = track.id
-        
-        // 检查是否启用了动态封面
-        if (!com.musichub.miuix.ui.theme.ThemeSettings.enableDynamicCover) {
-            return
-        }
-        
-        if (track.title.isEmpty() || track.artist.isEmpty()) {
-            return
-        }
-        
-        viewModelScope.launch {
-            isLoadingAppleMusicCover = true
-            try {
-                val cover = com.musichub.miuix.data.api.AppleMusicApi.searchCover(
-                    songName = track.title,
-                    artistName = track.artist
-                )
-                // 检查歌曲是否已切换
-                if (appleMusicCoverTrackId == track.id) {
-                    if (cover != null) {
-                        appleMusicCoverUrl = cover.artworkUrl
-                        appleMusicCoverIsAnimated = cover.isAnimated
-                        if (cover.isAnimated) {
-                            showLiveBadge = true
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("MusicPlayerViewModel", "Apple Music封面加载异常: ${e.message}")
-            } finally {
-                if (appleMusicCoverTrackId == track.id) {
-                    isLoadingAppleMusicCover = false
-                }
-            }
-        }
+    /** 设置音质选择索引。 */
+    fun updateAudioQualityIndex(index: Int) {
+        audioQualityIndex = index
+        prefs.edit().putInt("audio_quality_index", index).apply()
     }
 
     fun togglePlayPause() {
@@ -1597,6 +1502,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun seekTo(position: Long) {
         mediaPlaybackService?.seekTo(position)
         playerState = playerState.copy(currentPosition = position)
+    }
+
+    /** 供歌词引擎逐帧读取的实时播放位置（毫秒）。 */
+    fun getPlaybackPositionMs(): Long {
+        return mediaPlaybackService?.getCurrentPosition() ?: playerState.currentPosition
     }
 
     fun playNext() {
@@ -1635,22 +1545,30 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun loadLyrics() {
         val track = playerState.currentTrack ?: return
         lyricsLoadJob?.cancel() // 取消之前的歌词加载任务
+        val generation = ++lyricsLoadGeneration
         lyricState = lyricState.copy(isLoading = true, error = null)
         lyricsLoadJob = viewModelScope.launch {
-            NeteaseApi.getSongLyric(track.id, track.title, track.artist, track.duration, track.artistNames).fold(
-                onSuccess = { lyrics ->
-                    // 检查歌曲是否已切换
-                    if (playerState.currentTrack?.id == track.id) {
-                        lyricState = lyricState.copy(lyrics = lyrics, isLoading = false)
+            LyricsRepository.load(track).fold(
+                onSuccess = { result ->
+                    // 检查歌曲是否已切换，以及是否有更新的加载请求
+                    if (generation == lyricsLoadGeneration && playerState.currentTrack?.id == track.id) {
+                        lyricState = lyricState.copy(
+                            lyrics = result.lyrics,
+                            source = result.source,
+                            upgraded = result.upgraded,
+                            isLoading = false
+                        )
                         // 同步歌词到Lyricon
-                        mediaPlaybackService?.updateLyrics(lyrics)
-                        Log.d("MusicPlayerViewModel", "Lyrics loaded and synced: ${lyrics.lines.size} lines")
+                        mediaPlaybackService?.updateLyrics(result.lyrics)
+                        Log.d("MusicPlayerViewModel", "Lyrics loaded and synced: ${result.lyrics.lines.size} lines, source=${result.source}")
                     } else {
-                        Log.d("MusicPlayerViewModel", "Lyrics loaded but track changed, skipping sync")
+                        Log.d("MusicPlayerViewModel", "Lyrics loaded but stale or track changed, skipping sync")
                     }
                 },
                 onFailure = { e ->
-                    lyricState = lyricState.copy(isLoading = false, error = e.message)
+                    if (generation == lyricsLoadGeneration) {
+                        lyricState = lyricState.copy(isLoading = false, error = e.message)
+                    }
                     Log.e("MusicPlayerViewModel", "Failed to load lyrics: ${e.message}")
                 }
             )

@@ -31,6 +31,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import com.musichub.miuix.ui.components.BlurredBar
+import com.musichub.miuix.ui.components.pageLayerBackdrop
+import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
 import coil.compose.AsyncImage
 import com.musichub.miuix.data.model.AlbumInfo
 import com.musichub.miuix.data.model.RecommendPlaylist
@@ -103,21 +107,27 @@ fun PlaylistPage(
         isCloudDisk = true
     )
 
+    val blurBackdrop = rememberPageBlurBackdrop()
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = "我的收藏",
-                largeTitle = "我的收藏",
-                scrollBehavior = scrollBehavior,
-                defaultWindowInsetsPadding = false
-            )
+            BlurredBar(backdrop = blurBackdrop) {
+                TopAppBar(
+                    title = "我的收藏",
+                    largeTitle = "我的收藏",
+                    color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
+                    scrollBehavior = scrollBehavior,
+                    defaultWindowInsetsPadding = false
+                )
+            }
         }
     ) { paddingValues ->
         if (!isLoggedIn) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = paddingValues.calculateTopPadding()),
+                    .padding(top = paddingValues.calculateTopPadding())
+                    .pageLayerBackdrop(blurBackdrop),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -138,7 +148,9 @@ fun PlaylistPage(
                     "正在刷新...",
                     "刷新成功"
                 ),
-                modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
+                modifier = Modifier
+                    .padding(top = paddingValues.calculateTopPadding())
+                    .pageLayerBackdrop(blurBackdrop)
             ) {
                 LazyColumn(
                     modifier = Modifier

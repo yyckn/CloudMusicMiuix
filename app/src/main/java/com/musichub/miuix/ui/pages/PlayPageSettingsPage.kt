@@ -2,6 +2,8 @@ package com.musichub.miuix.ui.pages
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,36 +11,47 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.musichub.miuix.ui.FeedBottomPads
+import com.musichub.miuix.ui.components.BlurredBar
+import com.musichub.miuix.ui.components.pageLayerBackdrop
+import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
+import com.musichub.miuix.ui.theme.KeyboardShortcutSettings
+import com.musichub.miuix.ui.theme.ShortcutAction
+import com.musichub.miuix.ui.theme.ThemeSettings
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.SliderDefaults
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.TabRow
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.Switch
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import com.musichub.miuix.ui.FeedBottomPads
-import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
-import com.musichub.miuix.ui.theme.ThemeSettings
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 @Composable
 fun PlayPageSettingsPage(
@@ -53,19 +66,13 @@ fun PlayPageSettingsPage(
     var smallScreenCoverStyle by remember { mutableIntStateOf(ThemeSettings.smallScreenCoverStyle) }
     var largeScreenCoverStyle by remember { mutableIntStateOf(ThemeSettings.largeScreenCoverStyle) }
     var coverStyleTab by remember { mutableIntStateOf(0) } // 0=小屏布局, 1=大屏布局
-    var enableDynamicCover by remember { mutableStateOf(ThemeSettings.enableDynamicCover) }
     var keepScreenOn by remember { mutableStateOf(ThemeSettings.keepScreenOn) }
     var showCastButton by remember { mutableStateOf(ThemeSettings.showCastButton) }
     var showQuality by remember { mutableStateOf(ThemeSettings.showQuality) }
-    var lyricAlignmentIndex by remember { mutableIntStateOf(ThemeSettings.lyricAlignmentIndex) }
     var playerColorSchemeIndex by remember { mutableIntStateOf(ThemeSettings.playerColorSchemeIndex) }
 
     val coverRotationOptions = remember {
         listOf("静止", "播放时旋转", "始终旋转")
-    }
-
-    val lyricAlignmentOptions = remember {
-        listOf("靠左", "靠右")
     }
 
     val playerColorSchemeOptions = remember {
@@ -76,22 +83,51 @@ fun PlayPageSettingsPage(
         onBackClick()
     }
 
-    Scaffold(
+    val blurBackdrop = rememberPageBlurBackdrop()
+    var shortcutsEnabled by remember { mutableStateOf(KeyboardShortcutSettings.enabled) }
+    var rebindingAction by remember { mutableStateOf<ShortcutAction?>(null) }
+    val shortcutFocusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+
+    LaunchedEffect(rebindingAction) {
+        if (rebindingAction != null) {
+            shortcutFocusRequester.requestFocus()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .focusRequester(shortcutFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val action = rebindingAction ?: return@onPreviewKeyEvent false
+                if (event.nativeKeyEvent.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                KeyboardShortcutSettings.updateKey(action, event.nativeKeyEvent.keyCode)
+                rebindingAction = null
+                focusManager.clearFocus()
+                true
+            }
+    ) {
+        Scaffold(
         topBar = {
-            SmallTopAppBar(
-                title = "播放页设置",
-                scrollBehavior = scrollBehavior,
-                defaultWindowInsetsPadding = false,
-                navigationIcon = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .clickable { onBackClick() }
-                    )
-                }
-            )
+            BlurredBar(backdrop = blurBackdrop) {
+                SmallTopAppBar(
+                    title = "播放页设置",
+                    color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
+                    scrollBehavior = scrollBehavior,
+                    defaultWindowInsetsPadding = false,
+                    navigationIcon = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .clickable { onBackClick() }
+                        )
+                    }
+                )
+            }
         }
     ) { paddingValues ->
         LazyColumn(
@@ -99,7 +135,8 @@ fun PlayPageSettingsPage(
                 .fillMaxSize()
                 .padding(top = paddingValues.calculateTopPadding())
                 .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .pageLayerBackdrop(blurBackdrop),
             contentPadding = PaddingValues(bottom = FeedBottomPads.None),
             overscrollEffect = null
         ) {
@@ -130,17 +167,6 @@ fun PlayPageSettingsPage(
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 12.dp)
                 ) {
-                    // 歌词对齐方式
-                    WindowDropdownPreference(
-                        title = "歌词对齐方式",
-                        items = lyricAlignmentOptions,
-                        selectedIndex = lyricAlignmentIndex,
-                        onSelectedIndexChange = { newIndex ->
-                            lyricAlignmentIndex = newIndex
-                            ThemeSettings.updateLyricAlignment(newIndex)
-                        }
-                    )
-
                     // 歌词文本大小
                     BasicComponent(
                         title = "歌词文本大小",
@@ -151,20 +177,21 @@ fun PlayPageSettingsPage(
                                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         },
-                        onClick = {}
-                    )
-                    Slider(
-                        value = lyricFontSize,
-                        onValueChange = { newValue ->
-                            val rounded = newValue.toInt()
-                            lyricFontSize = rounded.toFloat()
-                            ThemeSettings.updateLyricFontSize(rounded)
-                        },
-                        valueRange = 10f..40f,
-                        steps = 29,
-                        magnetThreshold = 0.1f,
-                        hapticEffect = SliderDefaults.SliderHapticEffect.Step,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                        bottomAction = {
+                            Slider(
+                                value = lyricFontSize,
+                                onValueChange = { newValue ->
+                                    val rounded = newValue.toInt()
+                                    lyricFontSize = rounded.toFloat()
+                                    ThemeSettings.updateLyricFontSize(rounded)
+                                },
+                                valueRange = 10f..40f,
+                                steps = 29,
+                                magnetThreshold = 0.1f,
+                                hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
                     )
 
                     // 翻译歌词大小
@@ -177,21 +204,22 @@ fun PlayPageSettingsPage(
                                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         },
-                        onClick = {}
-                    )
-                    Slider(
-                        value = translationRatio,
-                        onValueChange = { newValue ->
-                            // 每10个单位为0.1倍
-                            val rounded = (newValue / 10).toInt() * 10
-                            translationRatio = rounded.toFloat()
-                            ThemeSettings.updateLyricTranslationRatio(rounded)
-                        },
-                        valueRange = 50f..100f,
-                        steps = 5,
-                        magnetThreshold = 0.1f,
-                        hapticEffect = SliderDefaults.SliderHapticEffect.Step,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                        bottomAction = {
+                            Slider(
+                                value = translationRatio,
+                                onValueChange = { newValue ->
+                                    // 每10个单位为0.1倍
+                                    val rounded = (newValue / 10).toInt() * 10
+                                    translationRatio = rounded.toFloat()
+                                    ThemeSettings.updateLyricTranslationRatio(rounded)
+                                },
+                                valueRange = 50f..100f,
+                                steps = 5,
+                                magnetThreshold = 0.1f,
+                                hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
                     )
                 }
             }
@@ -264,7 +292,6 @@ fun PlayPageSettingsPage(
                         if (useRoundCover) {
                             WindowDropdownPreference(
                                 title = "封面旋转",
-                                summary = if (enableDynamicCover && coverRotationIndex > 0) "*动态Live封面不支持封面旋转" else null,
                                 items = coverRotationOptions,
                                 selectedIndex = coverRotationIndex,
                                 onSelectedIndexChange = { newIndex ->
@@ -277,7 +304,8 @@ fun PlayPageSettingsPage(
                 }
             }
 
-            // 动态Live封面（单独包裹）
+            // 快捷键
+            item { SmallTitle("快捷键") }
             item {
                 Card(
                     modifier = Modifier
@@ -285,17 +313,47 @@ fun PlayPageSettingsPage(
                         .padding(bottom = 12.dp)
                 ) {
                     BasicComponent(
-                        title = "动态Live封面",
-                        summary = "功能维护中，暂不可用",
+                        title = "键盘快捷键",
                         endActions = {
                             Switch(
-                                checked = false,
-                                enabled = false,
-                                onCheckedChange = { }
+                                checked = shortcutsEnabled,
+                                onCheckedChange = { newValue ->
+                                    shortcutsEnabled = newValue
+                                    KeyboardShortcutSettings.updateEnabled(newValue)
+                                    if (!newValue) rebindingAction = null
+                                }
                             )
                         },
-                        onClick = { }
+                        onClick = {
+                            shortcutsEnabled = !shortcutsEnabled
+                            KeyboardShortcutSettings.updateEnabled(shortcutsEnabled)
+                            if (!shortcutsEnabled) rebindingAction = null
+                        }
                     )
+
+                    if (shortcutsEnabled) {
+                        ShortcutAction.entries.forEach { action ->
+                            BasicComponent(
+                                title = action.title,
+                                endActions = {
+                                    Text(
+                                        text = if (rebindingAction == action) {
+                                            "点击键盘按键进行重设"
+                                        } else {
+                                            KeyboardShortcutSettings.keyLabel(action)
+                                        },
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = if (rebindingAction == action) {
+                                            MiuixTheme.colorScheme.primary
+                                        } else {
+                                            MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        }
+                                    )
+                                },
+                                onClick = { rebindingAction = action }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -307,7 +365,7 @@ fun PlayPageSettingsPage(
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 12.dp)
                 ) {
-                    // 显示小米秒播快捷按钮
+                    // 显示小米妙播快捷按钮
                     BasicComponent(
                         title = "显示小米妙播快捷按钮",
                         endActions = {
@@ -363,5 +421,6 @@ fun PlayPageSettingsPage(
                 }
             }
         }
+    }
     }
 }

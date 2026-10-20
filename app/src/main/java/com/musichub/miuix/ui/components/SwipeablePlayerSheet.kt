@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -37,6 +40,7 @@ fun SwipeablePlayerSheet(
     val screenHeight = with(density) { configuration.screenHeightDp.dp.toPx() }
     // 初始值为屏幕高度，避免组件显示在屏幕中间
     val offsetY = remember { Animatable(screenHeight) }
+    var lastScreenHeight by remember { mutableFloatStateOf(screenHeight) }
 
     // 处理系统返回手势 - 优先级高于其他BackHandler
     BackHandler(enabled = isVisible) {
@@ -46,20 +50,32 @@ fun SwipeablePlayerSheet(
         }
     }
 
-    // 监听isVisible变化，执行动画
-    LaunchedEffect(isVisible) {
+    // 监听可见性与屏幕高度变化，执行动画
+    LaunchedEffect(isVisible, screenHeight) {
+        val heightChanged = screenHeight != lastScreenHeight
+        lastScreenHeight = screenHeight
         if (isVisible) {
-            // 从屏幕下方滑入
-            offsetY.snapTo(screenHeight)
-            offsetY.animateTo(0f, tween(300))
+            if (heightChanged) {
+                // 横竖屏切换：直接贴住顶部，避免停留在旧屏幕高度处
+                offsetY.snapTo(0f)
+            } else {
+                // 从屏幕下方滑入
+                offsetY.snapTo(screenHeight)
+                offsetY.animateTo(0f, tween(300))
+            }
         } else {
-            // 滑出到屏幕下方
-            offsetY.animateTo(screenHeight, tween(300))
+            if (heightChanged) {
+                // 隐藏状态下尺寸变化：移动到新的屏幕底部，避免残留在可视区域
+                offsetY.snapTo(screenHeight)
+            } else {
+                // 滑出到屏幕下方
+                offsetY.animateTo(screenHeight, tween(300))
+            }
         }
     }
 
     // 仅在可见或关闭动画进行中时加入布局树
-    if (isVisible || offsetY.value < screenHeight) {
+    if (isVisible || offsetY.value < lastScreenHeight) {
         Box(
             modifier = modifier
                 .fillMaxSize()

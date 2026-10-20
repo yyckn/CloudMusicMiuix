@@ -40,6 +40,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import com.musichub.miuix.ui.components.BlurredBar
+import com.musichub.miuix.ui.components.pageLayerBackdrop
+import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
 import coil.compose.AsyncImage
 import com.musichub.miuix.data.api.NeteaseApi
 import com.musichub.miuix.data.model.UserProfile
@@ -179,51 +183,56 @@ fun ProfilePage(
         }
     }
 
+    val blurBackdrop = rememberPageBlurBackdrop()
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = "我的资料",
-                largeTitle = "我的资料",
-                scrollBehavior = scrollBehavior,
-                defaultWindowInsetsPadding = false,
-                navigationIcon = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .clickable { onBackClick() }
-                    )
-                },
-                actions = {
-                    OverlayIconDropdownMenu(
-                        entry = DropdownEntry(
-                            items = listOf(
-                                DropdownItem(
-                                    text = "复制登录凭证到剪贴板",
-                                    onClick = {
-                                        exportType = "clipboard"
-                                        showExportWarning = true
-                                    }
-                                ),
-                                DropdownItem(
-                                    text = "将登录凭证导出为文件",
-                                    onClick = {
-                                        exportType = "file"
-                                        showExportWarning = true
-                                    }
+            BlurredBar(backdrop = blurBackdrop) {
+                TopAppBar(
+                    title = "我的资料",
+                    largeTitle = "我的资料",
+                    color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
+                    scrollBehavior = scrollBehavior,
+                    defaultWindowInsetsPadding = false,
+                    navigationIcon = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .clickable { onBackClick() }
+                        )
+                    },
+                    actions = {
+                        OverlayIconDropdownMenu(
+                            entry = DropdownEntry(
+                                items = listOf(
+                                    DropdownItem(
+                                        text = "复制登录凭证到剪贴板",
+                                        onClick = {
+                                            exportType = "clipboard"
+                                            showExportWarning = true
+                                        }
+                                    ),
+                                    DropdownItem(
+                                        text = "将登录凭证导出为文件",
+                                        onClick = {
+                                            exportType = "file"
+                                            showExportWarning = true
+                                        }
+                                    )
                                 )
                             )
-                        )
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Share,
-                            contentDescription = "导出",
-                            tint = MiuixTheme.colorScheme.onSurface
-                        )
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.Share,
+                                contentDescription = "导出",
+                                tint = MiuixTheme.colorScheme.onSurface
+                            )
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     ) { paddingValues ->
         PullToRefresh(
@@ -237,7 +246,9 @@ fun ProfilePage(
                 "正在刷新...",
                 "刷新成功"
             ),
-            modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
+            modifier = Modifier
+                .padding(top = paddingValues.calculateTopPadding())
+                .pageLayerBackdrop(blurBackdrop)
         ) {
             if (isLoading) {
                 Box(

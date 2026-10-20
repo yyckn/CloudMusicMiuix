@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -38,6 +39,10 @@ import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.ProgressIndicatorDefaults
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurColors
+import top.yukonga.miuix.kmp.blur.LayerBackdrop
+import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.ListView
@@ -56,6 +61,7 @@ fun PlayerBar(
     hasBottomBar: Boolean = true,
     isFloatingStyle: Boolean = false,
     hidePlaylistButton: Boolean = false,
+    blurBackdrop: LayerBackdrop? = null,
     modifier: Modifier = Modifier
 ) {
     if (playerState.currentTrack != null) {
@@ -63,6 +69,22 @@ fun PlayerBar(
             WindowInsets.navigationBars.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()
         } else {
             0.dp
+        }
+
+        val surfaceShape = if (isFloatingStyle) RoundedCornerShape(16.dp) else RoundedCornerShape(0.dp)
+        val blurModifier = if (blurBackdrop != null) {
+            Modifier.textureBlur(
+                backdrop = blurBackdrop,
+                shape = surfaceShape,
+                blurRadius = 25f,
+                colors = BlurColors(
+                    blendColors = listOf(
+                        BlendColorEntry(color = MiuixTheme.colorScheme.surfaceVariant.copy(0.87f)),
+                    ),
+                ),
+            )
+        } else {
+            Modifier
         }
 
         Column(modifier = modifier.fillMaxWidth()) {
@@ -91,9 +113,10 @@ fun PlayerBar(
                                     }
                                 }
                             )
-                        },
-                    shape = if (isFloatingStyle) RoundedCornerShape(16.dp) else RoundedCornerShape(0.dp),
-                    color = MiuixTheme.colorScheme.surfaceVariant
+                        }
+                        .then(blurModifier),
+                    shape = surfaceShape,
+                    color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surfaceVariant
                 ) {
                     Column {
                         // 顶部进度条

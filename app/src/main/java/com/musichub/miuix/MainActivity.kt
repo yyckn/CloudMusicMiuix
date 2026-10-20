@@ -32,8 +32,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -50,8 +53,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,6 +68,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.musichub.miuix.data.api.NeteaseApi
+import com.musichub.miuix.data.lyrics.LyricUpgradeBlacklist
 import com.musichub.miuix.ui.components.PlayerBar
 import com.musichub.miuix.ui.pages.AboutPage
 import com.musichub.miuix.ui.pages.AccountInfo
@@ -71,6 +78,7 @@ import com.musichub.miuix.ui.pages.CommentPage
 import com.musichub.miuix.ui.pages.LoginPage
 import com.musichub.miuix.ui.pages.LyriconAdapterPage
 import com.musichub.miuix.ui.pages.LyricSettingsPage
+import com.musichub.miuix.ui.pages.LyricUpgradeManagePage
 import com.musichub.miuix.ui.pages.ManageAccountsPage
 import com.musichub.miuix.ui.pages.PlayPageSettingsPage
 import com.musichub.miuix.ui.pages.PlayerPage
@@ -80,18 +88,23 @@ import com.musichub.miuix.ui.pages.ProfilePage
 import com.musichub.miuix.ui.pages.QrLoginPage
 import com.musichub.miuix.ui.pages.RecommendPage
 import com.musichub.miuix.ui.pages.SettingsPage
+import com.musichub.miuix.ui.pages.SongSettingsPage
 import com.musichub.miuix.ui.pages.ThemeSettingsPage
 import com.musichub.miuix.ui.pages.TrackItem
 import com.musichub.miuix.ui.pages.UpdateHistoryPage
-import com.musichub.miuix.ui.components.LiquidGlassNavigationBar
-import com.musichub.miuix.ui.components.LiquidGlassNavigationBarItem
+import com.musichub.miuix.ui.components.BlurredBar
+import com.musichub.miuix.ui.components.FloatingBottomBar
+import com.musichub.miuix.ui.components.FloatingBottomBarItem
+import com.musichub.miuix.ui.components.rememberBlurBackdrop
+import com.musichub.miuix.ui.theme.LocalEnableBlur
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import com.musichub.miuix.ui.components.PlayerBar
 import com.musichub.miuix.ui.components.SwipeablePlayerSheet
 import com.musichub.miuix.ui.theme.CloudMusicMiuixTheme
+import com.musichub.miuix.ui.theme.KeyboardShortcutSettings
 import com.musichub.miuix.ui.theme.ThemeSettings
 import com.musichub.miuix.viewmodel.MusicPlayerViewModel
-import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
-import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.NavigationBar
@@ -121,12 +134,14 @@ sealed class Screen {
     object QrLogin : Screen()
     object ThemeSettings : Screen()
     object PlayPageSettings : Screen()
+    object SongSettings : Screen()
     object About : Screen()
     object Profile : Screen()
     data class Artist(val artistId: String) : Screen()
     data class Album(val albumId: Long) : Screen()
     object LyriconAdapter : Screen()
     object LyricSettings : Screen()
+    object LyricUpgradeManage : Screen()
     object ManageAccounts : Screen()
     object UpdateHistory : Screen()
     data class Comment(val songId: String, val songTitle: String) : Screen()
@@ -138,6 +153,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         NeteaseApi.init(applicationContext)
         ThemeSettings.init(applicationContext)
+        LyricUpgradeBlacklist.init(applicationContext)
+        KeyboardShortcutSettings.init(applicationContext)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -171,6 +188,15 @@ fun MainScreen(
     val configuration = LocalConfiguration.current
     val useNavigationRail = configuration.screenWidthDp > 600
 
+    // 底栏模糊 / 液态玻璃所需的背景层
+    val enableBlur = LocalEnableBlur.current
+    val blurBackdrop = rememberBlurBackdrop(enableBlur)
+    val surfaceColor = MiuixTheme.colorScheme.surface
+    val liquidBackdrop = rememberLayerBackdrop {
+        drawRect(surfaceColor)
+        drawContent()
+    }
+
     // 导航到新页面的函数
     fun navigateTo(screen: Screen) {
         isNavigatingBack = false
@@ -193,10 +219,7 @@ fun MainScreen(
     LaunchedEffect(Unit) {
         NeteaseApi.setOnProfileChangedListener {
             profileVersion++
-        }
-        // 如果已登录，加载用户信息
-        if (isLoggedIn) {
-            viewModel.loadUserInfo()
+            viewModel.refreshAccountState()
         }
     }
 
@@ -418,6 +441,9 @@ fun MainScreen(
                                     onPlayPageSettingsClick = {
                                         navigateTo(Screen.PlayPageSettings)
                                     },
+                                    onSongSettingsClick = {
+                                        navigateTo(Screen.SongSettings)
+                                    },
                                     onAboutClick = {
                                         navigateTo(Screen.About)
                                     },
@@ -450,42 +476,76 @@ fun MainScreen(
                                         animatedVisibilityScope = this@AnimatedContent,
                                         hasBottomBar = !ThemeSettings.useFloatingBar,
                                         isFloatingStyle = ThemeSettings.useFloatingBar,
-                                        hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode
+                                        hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
+                                        blurBackdrop = if (ThemeSettings.useFloatingBar) blurBackdrop else null
                                     )
                                     if (ThemeSettings.useFloatingBar) {
-                                        // 悬浮底栏
-                                        LiquidGlassNavigationBar {
-                                            tabs.forEachIndexed { index, tab ->
-                                                LiquidGlassNavigationBarItem(
-                                                    selected = selectedTab == index,
-                                                    onClick = { selectedTab = index },
-                                                    icon = {
-                                                        Icon(
-                                                            imageVector = icons[index],
-                                                            contentDescription = tab
-                                                        )
-                                                    },
-                                                    label = {
-                                                        Text(
-                                                            text = tab,
-                                                            fontSize = 11.sp
-                                                        )
-                                                    }
+                                        // 液态玻璃悬浮底栏
+                                        val navBarBottomPadding = WindowInsets.navigationBars
+                                            .asPaddingValues()
+                                            .calculateBottomPadding()
+                                        val bottomPadding = if (navBarBottomPadding != 0.dp) {
+                                            8.dp + navBarBottomPadding
+                                        } else {
+                                            28.dp
+                                        }
+                                        FloatingBottomBar(
+                                            modifier = Modifier
+                                                .pointerInput(Unit) {
+                                                    detectTapGestures { }
+                                                }
+                                                .padding(
+                                                    start = 28.dp,
+                                                    end = 28.dp,
+                                                    bottom = bottomPadding
                                                 )
+                                                .align(Alignment.CenterHorizontally),
+                                            selectedIndex = selectedTab,
+                                            onSelected = { selectedTab = it },
+                                            backdrop = liquidBackdrop,
+                                            tabsCount = tabs.size,
+                                            isBlurEnabled = enableBlur
+                                        ) { activateTab ->
+                                            tabs.forEachIndexed { index, tab ->
+                                                FloatingBottomBarItem(
+                                                    selected = selectedTab == index,
+                                                    onClick = { activateTab(index) },
+                                                    modifier = Modifier.defaultMinSize(minWidth = 76.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = icons[index],
+                                                        contentDescription = tab
+                                                    )
+                                                    Text(
+                                                        text = tab,
+                                                        fontSize = 11.sp,
+                                                        lineHeight = 14.sp,
+                                                        maxLines = 1,
+                                                        softWrap = false,
+                                                        overflow = TextOverflow.Visible
+                                                    )
+                                                }
                                             }
                                         }
                                     } else {
-                                        // 普通底栏
-                                        NavigationBar(
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            tabs.forEachIndexed { index, tab ->
-                                                NavigationBarItem(
-                                                    selected = selectedTab == index,
-                                                    onClick = { selectedTab = index },
-                                                    icon = icons[index],
-                                                    label = tab
-                                                )
+                                        // 普通底栏（半透明模糊）
+                                        BlurredBar(backdrop = blurBackdrop) {
+                                            NavigationBar(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                color = if (blurBackdrop != null) {
+                                                    Color.Transparent
+                                                } else {
+                                                    MiuixTheme.colorScheme.surface
+                                                }
+                                            ) {
+                                                tabs.forEachIndexed { index, tab ->
+                                                    NavigationBarItem(
+                                                        selected = selectedTab == index,
+                                                        onClick = { selectedTab = index },
+                                                        icon = icons[index],
+                                                        label = tab
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -595,6 +655,17 @@ fun MainScreen(
                             }
                             AnimatedContent(
                                 targetState = selectedTab,
+                                modifier = Modifier
+                                    .then(
+                                        if (blurBackdrop != null) {
+                                            Modifier.layerBackdrop(blurBackdrop)
+                                        } else Modifier
+                                    )
+                                    .then(
+                                        if (ThemeSettings.useFloatingBar && enableBlur) {
+                                            Modifier.layerBackdrop(liquidBackdrop)
+                                        } else Modifier
+                                    ),
                                 transitionSpec = {
                                     if (targetState > initialState) {
                                         slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
@@ -650,6 +721,9 @@ fun MainScreen(
                                     },
                                     onPlayPageSettingsClick = {
                                         navigateTo(Screen.PlayPageSettings)
+                                    },
+                                    onSongSettingsClick = {
+                                        navigateTo(Screen.SongSettings)
                                     },
                                     onAboutClick = {
                                         navigateTo(Screen.About)
@@ -923,6 +997,16 @@ fun MainScreen(
                     }
                 )
             }
+            is Screen.SongSettings -> {
+                SongSettingsPage(
+                    viewModel = viewModel,
+                    onBackClick = {
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
+                    }
+                )
+            }
             is Screen.About -> {
                 AboutPage(
                     onBackClick = {
@@ -962,6 +1046,29 @@ fun MainScreen(
                     onBackClick = {
                         if (!navigateBack()) {
                             currentScreen = Screen.Main
+                        }
+                    },
+                    onWordByWordLyricsChanged = {
+                        viewModel.resyncLyricsToLyricon()
+                    },
+                    onLyricSettingsChanged = {
+                        viewModel.loadLyrics()
+                    },
+                    onManageLyricUpgradesClick = {
+                        navigateTo(Screen.LyricUpgradeManage)
+                    }
+                )
+            }
+            is Screen.LyricUpgradeManage -> {
+                LyricUpgradeManagePage(
+                    onBackClick = {
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
+                    },
+                    onEntryRemoved = { removedId ->
+                        if (viewModel.playerState.currentTrack?.id == removedId) {
+                            viewModel.loadLyrics()
                         }
                     }
                 )

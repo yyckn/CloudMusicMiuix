@@ -14,6 +14,8 @@ gson = "2.11.0"
 coil = "2.7.0"
 coroutines = "1.8.1"
 navigationevent = "1.1.2"
+lyricsUi = "2.0.0-rc.1"
+lyricsCore = "0.4.7"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -39,6 +41,8 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+accompanist-lyrics-ui = { group = "com.mocharealm.accompanist", name = "lyrics-ui", version.ref = "lyricsUi" }
+accompanist-lyrics-core = { group = "com.mocharealm.accompanist", name = "lyrics-core", version.ref = "lyricsCore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

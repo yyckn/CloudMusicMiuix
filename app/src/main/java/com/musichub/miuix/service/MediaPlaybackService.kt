@@ -10,7 +10,6 @@ import android.graphics.BitmapFactory
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.media.MediaPlayer
 import android.os.Binder
 import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
@@ -20,25 +19,103 @@ import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.media.MediaBrowserServiceCompat
+import androidx.media3.common.AudioAttributes as Media3AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.musichub.miuix.MainActivity
 import com.musichub.miuix.R
 import com.musichub.miuix.data.model.Track
+import com.musichub.miuix.ui.theme.ThemeSettings
 import kotlinx.coroutines.*
+import okhttp3.OkHttpClient
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.TimeUnit
 
 class MediaPlaybackService : MediaBrowserServiceCompat() {
 
     private lateinit var mediaSession: MediaSessionCompat
     private lateinit var audioManager: AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
-    private var mediaPlayer: MediaPlayer? = null
+    private var player: ExoPlayer? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private var currentTrack: Track? = null
+    private var currentUrl: String? = null
     private var playlist: List<Track> = emptyList()
     private var isPlaying = false
     private var playbackPosition = 0L
+    private var playbackSpeed = 1.0f
+    private var completionHandled = false
+    private var errorRetryCount = 0
+    private var fadeJob: Job? = null
+    private var pendingFadeIn = false
+
+    private val media3AudioAttributes = Media3AudioAttributes.Builder()
+        .setUsage(C.USAGE_MEDIA)
+        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+        .build()
+
+    private val okHttpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
+
+    private val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            when (playbackState) {
+                Player.STATE_BUFFERING -> {
+                    updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
+                }
+                Player.STATE_READY -> {
+                    val state = if (isPlaying) {
+                        PlaybackStateCompat.STATE_PLAYING
+                    } else {
+                        PlaybackStateCompat.STATE_PAUSED
+                    }
+                    updatePlaybackState(state)
+                    if (pendingFadeIn && isPlaying) {
+                        pendingFadeIn = false
+                        player?.volume = 0f
+                        fadeToVolume(1f)
+                    }
+                }
+                Player.STATE_ENDED -> {
+                    if (!completionHandled) {
+                        completionHandled = true
+                        Log.d(TAG, "Track completed normally")
+                        isPlaying = false
+                        onPlaybackStateChanged?.invoke(false)
+                        updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
+                        lyriconManager?.setPlaybackState(false)
+                        playNext()
+                    }
+                }
+                Player.STATE_IDLE -> Unit
+            }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            Log.e(
+                TAG,
+                "onPlayerError: ${error.errorCodeName} (${error.errorCode}) at ${player?.currentPosition}",
+                error
+            )
+            isPlaying = false
+            onPlaybackStateChanged?.invoke(false)
+            updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+            lyriconManager?.setPlaybackState(false)
+            recoverFromError()
+        }
+    }
     private var currentBitmap: Bitmap? = null
     private var currentLyrics: com.musichub.miuix.data.model.SongLyrics? = null
     private var wasPlayingBeforeFocusLoss = false
@@ -73,6 +150,11 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         const val ACTION_NEXT = "com.musichub.miuix.NEXT"
         const val ACTION_PREVIOUS = "com.musichub.miuix.PREVIOUS"
         private const val TAG = "MediaPlaybackService"
+        private const val MAX_ERROR_RETRIES = 2
+        private const val FADE_DURATION_MS = 300L
+        private const val FADE_STEP_MS = 16L
+        private const val USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
     override fun onBind(intent: Intent): android.os.IBinder {
@@ -81,6 +163,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
 
     override fun onCreate() {
         super.onCreate()
+        ThemeSettings.init(this)
         createNotificationChannel()
         initializeMediaSession()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -172,50 +255,15 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
 
     fun playTrackWithUrl(track: Track, url: String) {
         currentTrack = track
+        errorRetryCount = 0
         serviceScope.launch {
             try {
                 if (requestAudioFocus()) {
-                    updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
-                    
                     // 第一阶段：立即用元数据（无歌词）更新 Lyricon
                     lyriconManager?.setTrack(track)
                     lyriconManager?.setPlaybackState(true)
-                    
-                    mediaPlayer?.release()
-                    mediaPlayer = MediaPlayer().apply {
-                        setDataSource(url)
-                        setAudioAttributes(
-                            android.media.AudioAttributes.Builder()
-                                .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-                                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
-                                .build()
-                        )
-                        setOnPreparedListener {
-                            start()
-                            this@MediaPlaybackService.isPlaying = true
-                            updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
-                        }
-                        setOnCompletionListener {
-                            val duration = this.duration.toLong()
-                            val position = this.currentPosition.toLong()
-                            val isStillPlaying = this.isPlaying
-                            // 只有当播放位置接近总时长（允许100ms误差）且实际已停止播放时才认为是正常完成
-                            // 避免因流媒体问题导致的误触发
-                            if (duration > 0 && position >= duration - 100 && !isStillPlaying) {
-                                Log.d(TAG, "Track completed normally: position=$position, duration=$duration")
-                                playNext()
-                            } else {
-                                Log.d(TAG, "Track completion ignored: position=$position, duration=$duration, isStillPlaying=$isStillPlaying")
-                            }
-                        }
-                        setOnErrorListener { _, _, _ ->
-                            this@MediaPlaybackService.isPlaying = false
-                            updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
-                            true
-                        }
-                        prepareAsync()
-                    }
-                    
+
+                    startPlayback(track, url, autoplay = true)
                     loadAlbumArtAndShowNotification(track)
                 }
             } catch (e: Exception) {
@@ -226,50 +274,95 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
 
     fun prepareTrackWithUrl(track: Track, url: String) {
         currentTrack = track
+        errorRetryCount = 0
         serviceScope.launch {
             try {
-                updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
-                
                 // 设置词幕歌曲信息
                 lyriconManager?.setTrack(track)
-                
-                mediaPlayer?.release()
-                mediaPlayer = MediaPlayer().apply {
-                    setDataSource(url)
-                    setAudioAttributes(
-                        android.media.AudioAttributes.Builder()
-                            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
-                            .build()
-                    )
-                    setOnPreparedListener {
-                        // 准备完成，但不自动播放
-                        updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
-                    }
-                    setOnCompletionListener {
-                        val duration = this.duration.toLong()
-                        val position = this.currentPosition.toLong()
-                        val isStillPlaying = this.isPlaying
-                        // 只有当播放位置接近总时长（允许100ms误差）且实际已停止播放时才认为是正常完成
-                        if (duration > 0 && position >= duration - 100 && !isStillPlaying) {
-                            Log.d(TAG, "Track completed normally: position=$position, duration=$duration")
-                            playNext()
-                        } else {
-                            Log.d(TAG, "Track completion ignored: position=$position, duration=$duration, isStillPlaying=$isStillPlaying")
-                        }
-                    }
-                    setOnErrorListener { _, _, _ ->
-                        this@MediaPlaybackService.isPlaying = false
-                        updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
-                        true
-                    }
-                    prepareAsync()
-                }
-                
+                startPlayback(track, url, autoplay = false)
                 loadAlbumArtAndShowNotification(track)
             } catch (e: Exception) {
                 Log.e(TAG, "prepareTrackWithUrl error", e)
             }
+        }
+    }
+
+    /**
+     * 使用 ExoPlayer 加载一首歌，可复用于首次播放、错误重试和播放结束后重新开始。
+     */
+    private fun startPlayback(
+        track: Track,
+        url: String,
+        autoplay: Boolean,
+        startPosition: Long = 0L
+    ) {
+        currentTrack = track
+        currentUrl = url
+        playbackPosition = startPosition
+        completionHandled = false
+        isPlaying = autoplay
+
+        releasePlayer()
+        val newPlayer = createPlayer()
+        player = newPlayer
+        pendingFadeIn = autoplay && ThemeSettings.fadeEnabled
+        newPlayer.volume = if (pendingFadeIn) 0f else 1f
+
+        updatePlaybackState(
+            if (autoplay) PlaybackStateCompat.STATE_BUFFERING
+            else PlaybackStateCompat.STATE_PAUSED
+        )
+
+        newPlayer.setMediaItem(MediaItem.fromUri(url))
+        if (startPosition > 0L) {
+            newPlayer.seekTo(startPosition)
+        }
+        newPlayer.prepare()
+        newPlayer.playWhenReady = autoplay
+
+        if (autoplay) {
+            onPlaybackStateChanged?.invoke(true)
+        }
+    }
+
+    private fun createPlayer(): ExoPlayer {
+        val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
+            .setUserAgent(USER_AGENT)
+            .setDefaultRequestProperties(mapOf("Referer" to "https://music.163.com"))
+        return ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .build()
+            .apply {
+                setAudioAttributes(media3AudioAttributes, false)
+                setWakeMode(C.WAKE_MODE_NETWORK)
+                setHandleAudioBecomingNoisy(true)
+                setPlaybackSpeed(playbackSpeed)
+                addListener(playerListener)
+            }
+    }
+
+    private fun releasePlayer() {
+        cancelFade()
+        pendingFadeIn = false
+        player?.removeListener(playerListener)
+        player?.release()
+        player = null
+    }
+
+    private fun recoverFromError() {
+        val track = currentTrack ?: return
+        val url = currentUrl ?: return
+        if (errorRetryCount >= MAX_ERROR_RETRIES) {
+            Log.e(TAG, "Playback failed after $errorRetryCount retries")
+            return
+        }
+        val retryPosition = player?.currentPosition ?: playbackPosition
+        errorRetryCount++
+        serviceScope.launch {
+            delay(800)
+            if (currentTrack?.id != track.id) return@launch
+            Log.d(TAG, "Retrying playback ($errorRetryCount/$MAX_ERROR_RETRIES) from $retryPosition")
+            startPlayback(track, url, autoplay = true, startPosition = retryPosition)
         }
     }
 
@@ -283,52 +376,163 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     fun getCurrentPosition(): Long {
-        return mediaPlayer?.currentPosition?.toLong() ?: 0L
+        return player?.currentPosition ?: playbackPosition
     }
 
     fun getDuration(): Long {
-        return mediaPlayer?.duration?.toLong() ?: 0L
+        val duration = player?.duration ?: C.TIME_UNSET
+        return if (duration == C.TIME_UNSET || duration <= 0L) {
+            currentTrack?.duration ?: 0L
+        } else {
+            duration
+        }
     }
 
+    /** 设置播放速度（ExoPlayer 支持 0.1x - 5.0x）。 */
+    fun setPlaybackSpeed(speed: Float) {
+        playbackSpeed = speed.coerceIn(0.1f, 5f)
+        player?.setPlaybackSpeed(playbackSpeed)
+        updatePlaybackState(
+            if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+        )
+    }
+
+    fun getPlaybackSpeed(): Float = playbackSpeed
+
     fun isPlaying(): Boolean {
-        return mediaPlayer?.isPlaying ?: false
+        return this.isPlaying
+    }
+
+    /**
+     * 播放/暂停时的音量渐变：取消上一次渐变，从当前音量平滑过渡到目标音量。
+     */
+    private fun fadeToVolume(target: Float) {
+        val current = player ?: return
+        cancelFade()
+        if (!ThemeSettings.fadeEnabled) {
+            current.volume = target
+            return
+        }
+        val startVolume = current.volume
+        if (startVolume == target) return
+        fadeJob = serviceScope.launch {
+            val steps = (FADE_DURATION_MS / FADE_STEP_MS).toInt().coerceAtLeast(1)
+            for (i in 1..steps) {
+                if (player !== current || !isActive) return@launch
+                val t = i.toFloat() / steps
+                val eased = t * t * (3f - 2f * t)
+                current.volume = startVolume + (target - startVolume) * eased
+                delay(FADE_STEP_MS)
+            }
+            if (player === current) current.volume = target
+        }
+    }
+
+    /**
+     * 暂停时先淡出再真正暂停；淡出期间若恢复播放会取消该任务并淡入。
+     */
+    private fun fadeOutThenPause(current: ExoPlayer) {
+        cancelFade()
+        val startVolume = current.volume
+        fadeJob = serviceScope.launch {
+            val steps = (FADE_DURATION_MS / FADE_STEP_MS).toInt().coerceAtLeast(1)
+            for (i in 1..steps) {
+                if (player !== current || !isActive) return@launch
+                val t = i.toFloat() / steps
+                val eased = t * t * (3f - 2f * t)
+                current.volume = startVolume * (1f - eased)
+                delay(FADE_STEP_MS)
+            }
+            if (player === current) {
+                current.volume = 0f
+                if (!isPlaying) {
+                    current.playWhenReady = false
+                }
+            }
+        }
+    }
+
+    private fun cancelFade() {
+        fadeJob?.cancel()
+        fadeJob = null
     }
 
     private fun resumePlayback() {
         Log.d(TAG, "resumePlayback")
-        mediaPlayer?.let { player ->
-            if (!player.isPlaying) {
-                player.start()
-                isPlaying = true
-                updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+        val current = player
+        if (current == null ||
+            current.playbackState == Player.STATE_IDLE ||
+            current.playbackState == Player.STATE_ENDED
+        ) {
+            val track = currentTrack
+            val url = currentUrl
+            if (track != null && url != null) {
+                requestAudioFocus()
+                val fromStart = current?.playbackState == Player.STATE_ENDED
+                startPlayback(
+                    track,
+                    url,
+                    autoplay = true,
+                    startPosition = if (fromStart) 0L else playbackPosition
+                )
                 showNotification()
-                
-                // 通知ViewModel播放状态变化
                 onPlaybackStateChanged?.invoke(true)
-                
-                // 同步播放状态到Lyricon
                 lyriconManager?.setPlaybackState(true)
             }
+            return
         }
+
+        cancelFade()
+        if (ThemeSettings.fadeEnabled) {
+            current.volume = 0f
+            if (current.playbackState == Player.STATE_READY) {
+                pendingFadeIn = false
+                fadeToVolume(1f)
+            } else {
+                pendingFadeIn = true
+            }
+        } else {
+            pendingFadeIn = false
+            current.volume = 1f
+        }
+        current.playWhenReady = true
+        isPlaying = true
+        updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+        showNotification()
+
+        // 通知ViewModel播放状态变化
+        onPlaybackStateChanged?.invoke(true)
+
+        // 同步播放状态到Lyricon
+        lyriconManager?.setPlaybackState(true)
     }
 
     private fun pausePlayback() {
         Log.d(TAG, "pausePlayback")
-        mediaPlayer?.let { player ->
-            if (player.isPlaying) {
-                player.pause()
-                playbackPosition = player.currentPosition.toLong()
-                isPlaying = false
-                updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
-                showNotification()
-                
-                // 通知ViewModel播放状态变化
-                onPlaybackStateChanged?.invoke(false)
-                
-                // 同步播放状态到Lyricon
-                lyriconManager?.setPlaybackState(false)
+        val current = player
+        val wasPlaying = isPlaying
+        isPlaying = false
+        pendingFadeIn = false
+        if (current != null) {
+            playbackPosition = current.currentPosition
+            if (wasPlaying && ThemeSettings.fadeEnabled) {
+                fadeOutThenPause(current)
+            } else {
+                cancelFade()
+                current.volume = 1f
+                current.playWhenReady = false
             }
+        } else {
+            cancelFade()
         }
+        updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
+        showNotification()
+
+        // 通知ViewModel播放状态变化
+        onPlaybackStateChanged?.invoke(false)
+
+        // 同步播放状态到Lyricon
+        lyriconManager?.setPlaybackState(false)
     }
 
     private fun playNext() {
@@ -344,8 +548,8 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun stopPlayback() {
-        mediaPlayer?.release()
-        mediaPlayer = null
+        releasePlayer()
+        currentUrl = null
         isPlaying = false
         playbackPosition = 0
         updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
@@ -356,19 +560,18 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
 
     fun seekTo(position: Long) {
         Log.d(TAG, "seekTo: position=$position, isPlaying=$isPlaying")
-        mediaPlayer?.let { player ->
-            try {
-                player.seekTo(position.toInt())
-                playbackPosition = position
-                updatePlaybackState(
-                    if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
-                )
-                
-                // 同步进度到Lyricon
-                lyriconManager?.seekTo(position)
-            } catch (e: Exception) {
-                Log.e(TAG, "seekTo failed: ${e.message}")
-            }
+        val current = player ?: return
+        try {
+            current.seekTo(position)
+            playbackPosition = position
+            updatePlaybackState(
+                if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+            )
+
+            // 同步进度到Lyricon
+            lyriconManager?.seekTo(position)
+        } catch (e: Exception) {
+            Log.e(TAG, "seekTo failed: ${e.message}")
         }
     }
 
@@ -395,7 +598,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun requestAudioFocus(): Boolean {
-        val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).run {
+        val focusRequest = audioFocusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).run {
             setAudioAttributes(
                 AudioAttributes.Builder().run {
                     setUsage(AudioAttributes.USAGE_MEDIA)
@@ -405,10 +608,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
             )
             setOnAudioFocusChangeListener(audioFocusChangeListener)
             build()
-        }
+        }.also { audioFocusRequest = it }
 
         val result = audioManager.requestAudioFocus(focusRequest)
-        audioFocusRequest = focusRequest
         return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
     }
 
@@ -429,10 +631,12 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 pausePlayback()
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                mediaPlayer?.setVolume(0.3f, 0.3f)
+                cancelFade()
+                player?.volume = 0.3f
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
-                mediaPlayer?.setVolume(1.0f, 1.0f)
+                cancelFade()
+                player?.volume = 1.0f
                 if (wasPlayingBeforeFocusLoss) {
                     resumePlayback()
                     wasPlayingBeforeFocusLoss = false
@@ -442,7 +646,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun updatePlaybackState(state: Int) {
-        val position = mediaPlayer?.currentPosition?.toLong() ?: playbackPosition
+        val position = player?.currentPosition ?: playbackPosition
         val playbackState = PlaybackStateCompat.Builder()
             .setActions(
                 PlaybackStateCompat.ACTION_PLAY or
@@ -451,7 +655,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
                 PlaybackStateCompat.ACTION_SEEK_TO
             )
-            .setState(state, position, 1.0f)
+            .setState(state, position, playbackSpeed)
             .build()
         mediaSession.setPlaybackState(playbackState)
     }
@@ -606,8 +810,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     fun releaseMediaPlayer() {
-        mediaPlayer?.release()
-        mediaPlayer = null
+        releasePlayer()
     }
 
     override fun onGetRoot(
@@ -629,7 +832,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         super.onDestroy()
         serviceScope.cancel()
         mediaSession.release()
-        releaseMediaPlayer()
+        releasePlayer()
         abandonAudioFocus()
         currentBitmap?.recycle()
         currentBitmap = null

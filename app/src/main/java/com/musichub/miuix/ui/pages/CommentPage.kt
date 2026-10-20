@@ -37,6 +37,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import com.musichub.miuix.ui.components.BlurredBar
+import com.musichub.miuix.ui.components.pageLayerBackdrop
+import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
 import coil.compose.AsyncImage
 import com.musichub.miuix.R
 import com.musichub.miuix.data.api.NeteaseApi
@@ -131,20 +135,25 @@ fun CommentPage(
         }
     }
 
+    val blurBackdrop = rememberPageBlurBackdrop()
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = "歌曲评论",
-                scrollBehavior = scrollBehavior,
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
-                        )
+            BlurredBar(backdrop = blurBackdrop) {
+                TopAppBar(
+                    title = "歌曲评论",
+                    color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
+                    scrollBehavior = scrollBehavior,
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回"
+                            )
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     ) { paddingValues ->
         PullToRefresh(
@@ -158,7 +167,9 @@ fun CommentPage(
                 "正在刷新...",
                 "刷新成功"
             ),
-            modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
+            modifier = Modifier
+                .padding(top = paddingValues.calculateTopPadding())
+                .pageLayerBackdrop(blurBackdrop)
         ) {
             Column(
                 modifier = Modifier

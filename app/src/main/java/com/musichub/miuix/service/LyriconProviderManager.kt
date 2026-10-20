@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.musichub.miuix.data.model.SongLyrics
 import com.musichub.miuix.data.model.Track
+import com.musichub.miuix.ui.theme.ThemeSettings
 import io.github.proify.lyricon.lyric.model.LyricWord
 import io.github.proify.lyricon.lyric.model.RichLyricLine
 import io.github.proify.lyricon.lyric.model.Song
@@ -196,13 +197,18 @@ class LyriconProviderManager(private val context: Context) {
         Log.d(TAG, "Parsing ${lyrics.lines.size} lyrics, first line start: ${lyrics.lines.firstOrNull()?.startAt}")
         
         lyrics.lines.forEachIndexed { index, line ->
-            // 转换逐字歌词
-            val words = line.words?.map { word ->
-                LyricWord(
-                    text = word.text,
-                    begin = word.startAt,
-                    end = word.endAt
-                )
+            // 转换逐字歌词（绝对时间戳）；关闭“逐字歌词”时不向词幕传逐字数据
+            val words = if (ThemeSettings.wordByWordLyrics) {
+                line.words?.map { word ->
+                    LyricWord(
+                        begin = word.startAt,
+                        end = word.endAt,
+                        duration = (word.endAt - word.startAt).coerceAtLeast(0L),
+                        text = word.text
+                    )
+                }
+            } else {
+                null
             }
             
             // 计算结束时间（减去小段间隔避免行与行之间视觉重叠）
@@ -227,6 +233,7 @@ class LyriconProviderManager(private val context: Context) {
                 RichLyricLine(
                     begin = line.startAt,
                     end = endAt,
+                    duration = (endAt - line.startAt).coerceAtLeast(0L),
                     text = lineText,
                     words = words,
                     translation = line.translation.takeIf { it.isNotEmpty() }

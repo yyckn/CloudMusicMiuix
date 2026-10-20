@@ -38,6 +38,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import com.musichub.miuix.ui.components.BlurredBar
+import com.musichub.miuix.ui.components.pageLayerBackdrop
+import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -150,12 +153,16 @@ fun RecommendPage(
         }
     }
 
+    val blurBackdrop = rememberPageBlurBackdrop()
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = "推荐",
-                largeTitle = "推荐",
-                scrollBehavior = scrollBehavior,
+            BlurredBar(backdrop = blurBackdrop) {
+                TopAppBar(
+                    title = "推荐",
+                    largeTitle = "推荐",
+                    color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
+                    scrollBehavior = scrollBehavior,
                 defaultWindowInsetsPadding = false,
                 bottomContent = {
                     SearchBar(
@@ -290,6 +297,7 @@ fun RecommendPage(
                     }
                 }
             )
+            }
         }
     ) { paddingValues ->
         PullToRefresh(
@@ -303,7 +311,9 @@ fun RecommendPage(
                 "正在刷新...",
                 "刷新成功"
             ),
-            modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
+            modifier = Modifier
+                .padding(top = paddingValues.calculateTopPadding())
+                .pageLayerBackdrop(blurBackdrop)
         ) {
             if (recommendState.isLoading && !isRefreshing) {
                 Box(

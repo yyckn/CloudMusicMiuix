@@ -8,6 +8,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import com.musichub.miuix.R
 
 object ThemeSettings {
     private const val PREFS_NAME = "theme_settings"
@@ -20,13 +24,17 @@ object ThemeSettings {
     private const val KEY_COVER_ROTATION = "cover_rotation"
     private const val KEY_SMALL_SCREEN_COVER_STYLE = "small_screen_cover_style"
     private const val KEY_LARGE_SCREEN_COVER_STYLE = "large_screen_cover_style"
-    private const val KEY_ENABLE_DYNAMIC_COVER = "enable_dynamic_cover"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
-    private const val KEY_LYRIC_ALIGNMENT = "lyric_alignment"
+    private const val KEY_WORD_BY_WORD_LYRICS = "word_by_word_lyrics"
     private const val KEY_SHOW_CAST_BUTTON = "show_cast_button"
     private const val KEY_SHOW_QUALITY = "show_quality"
     private const val KEY_PLAYER_COLOR_SCHEME = "player_color_scheme"
     private const val KEY_AUTO_CHECK_UPDATE = "auto_check_update"
+    private const val KEY_FADE_ENABLED = "fade_enabled"
+    private const val KEY_LYRIC_SOURCE = "lyric_source_preference"
+    private const val KEY_AUTO_UPGRADE_LYRICS = "auto_upgrade_lyrics"
+    private const val KEY_QQ_LYRICS_ENABLED = "qq_lyrics_enabled"
+    private const val KEY_KUGOU_LYRICS_ENABLED = "kugou_lyrics_enabled"
 
     // 0 = 浅色模式, 1 = 深色模式, 2 = 跟随系统
     var themeModeIndex by mutableIntStateOf(2)
@@ -39,11 +47,30 @@ object ThemeSettings {
     var followMonet by mutableStateOf(true)
         private set
 
-    var lyricFontSize by mutableIntStateOf(28)
+    var lyricFontSize by mutableIntStateOf(32)
         private set
 
-    // 翻译歌词倍率 (0.5-1.0)，默认0.7
-    var lyricTranslationRatio by mutableIntStateOf(70) // 存储为百分比，70表示0.7
+    // 翻译歌词倍率 (0.5-1.0)，默认0.6
+    var lyricTranslationRatio by mutableIntStateOf(60) // 存储为百分比，60表示0.6
+        private set
+
+    // 逐字歌词：有 YRC 时显示逐字扫光，并同步给词幕
+    var wordByWordLyrics by mutableStateOf(true)
+        private set
+
+    // 歌词来源偏好: 0=智能选择, 1=优先网易云音乐, 2=优先QQ音乐, 3=优先酷狗音乐
+    var lyricSourcePreferenceIndex by mutableIntStateOf(0)
+        private set
+
+    // 当前歌词非逐字时，尝试从其他平台获取逐字歌词覆盖
+    var autoUpgradeLyrics by mutableStateOf(true)
+        private set
+
+    // 各平台歌词开关（网易云音乐始终启用）
+    var qqLyricsEnabled by mutableStateOf(true)
+        private set
+
+    var kugouLyricsEnabled by mutableStateOf(true)
         private set
 
     // 是否使用圆形封面
@@ -62,16 +89,8 @@ object ThemeSettings {
     var largeScreenCoverStyle by mutableIntStateOf(1)
         private set
 
-    // 是否启用动态Live封面
-    var enableDynamicCover by mutableStateOf(true)
-        private set
-
     // 播放页保持屏幕常亮
     var keepScreenOn by mutableStateOf(true)
-        private set
-
-    // 歌词对齐方式: 0=靠左, 1=靠右
-    var lyricAlignmentIndex by mutableIntStateOf(0)
         private set
 
     // 显示小米秒播快捷按钮（播放页投屏按钮）
@@ -90,6 +109,10 @@ object ThemeSettings {
     var autoCheckUpdate by mutableStateOf(true)
         private set
 
+    // 播放/暂停时音频渐入渐出
+    var fadeEnabled by mutableStateOf(false)
+        private set
+
     private var prefs: SharedPreferences? = null
 
     fun init(context: Context) {
@@ -97,19 +120,23 @@ object ThemeSettings {
         themeModeIndex = prefs?.getInt(KEY_THEME_MODE, 2) ?: 2
         useFloatingBar = prefs?.getBoolean(KEY_USE_FLOATING_BAR, false) ?: false
         followMonet = prefs?.getBoolean(KEY_FOLLOW_MONET, true) ?: true
-        lyricFontSize = prefs?.getInt(KEY_LYRIC_FONT_SIZE, 28) ?: 28
-        lyricTranslationRatio = prefs?.getInt(KEY_LYRIC_TRANSLATION_RATIO, 70) ?: 70
+        lyricFontSize = prefs?.getInt(KEY_LYRIC_FONT_SIZE, 32) ?: 32
+        lyricTranslationRatio = prefs?.getInt(KEY_LYRIC_TRANSLATION_RATIO, 60) ?: 60
         useRoundCover = prefs?.getBoolean(KEY_USE_ROUND_COVER, false) ?: false
         coverRotationIndex = prefs?.getInt(KEY_COVER_ROTATION, 0) ?: 0
         smallScreenCoverStyle = prefs?.getInt(KEY_SMALL_SCREEN_COVER_STYLE, 0) ?: 0
         largeScreenCoverStyle = prefs?.getInt(KEY_LARGE_SCREEN_COVER_STYLE, 1) ?: 1
-        enableDynamicCover = prefs?.getBoolean(KEY_ENABLE_DYNAMIC_COVER, true) ?: true
         keepScreenOn = prefs?.getBoolean(KEY_KEEP_SCREEN_ON, true) ?: true
-        lyricAlignmentIndex = prefs?.getInt(KEY_LYRIC_ALIGNMENT, 0) ?: 0
+        wordByWordLyrics = prefs?.getBoolean(KEY_WORD_BY_WORD_LYRICS, true) ?: true
+        lyricSourcePreferenceIndex = prefs?.getInt(KEY_LYRIC_SOURCE, 0) ?: 0
+        autoUpgradeLyrics = prefs?.getBoolean(KEY_AUTO_UPGRADE_LYRICS, true) ?: true
+        qqLyricsEnabled = prefs?.getBoolean(KEY_QQ_LYRICS_ENABLED, true) ?: true
+        kugouLyricsEnabled = prefs?.getBoolean(KEY_KUGOU_LYRICS_ENABLED, true) ?: true
         showCastButton = prefs?.getBoolean(KEY_SHOW_CAST_BUTTON, true) ?: true
         showQuality = prefs?.getBoolean(KEY_SHOW_QUALITY, true) ?: true
         playerColorSchemeIndex = prefs?.getInt(KEY_PLAYER_COLOR_SCHEME, 2) ?: 2
         autoCheckUpdate = prefs?.getBoolean(KEY_AUTO_CHECK_UPDATE, true) ?: true
+        fadeEnabled = prefs?.getBoolean(KEY_FADE_ENABLED, false) ?: false
     }
 
     fun updateThemeModeIndex(index: Int) {
@@ -157,19 +184,34 @@ object ThemeSettings {
         prefs?.edit()?.putInt(KEY_LARGE_SCREEN_COVER_STYLE, index)?.apply()
     }
 
-    fun updateEnableDynamicCover(value: Boolean) {
-        enableDynamicCover = value
-        prefs?.edit()?.putBoolean(KEY_ENABLE_DYNAMIC_COVER, value)?.apply()
-    }
-
     fun updateKeepScreenOn(value: Boolean) {
         keepScreenOn = value
         prefs?.edit()?.putBoolean(KEY_KEEP_SCREEN_ON, value)?.apply()
     }
 
-    fun updateLyricAlignment(index: Int) {
-        lyricAlignmentIndex = index
-        prefs?.edit()?.putInt(KEY_LYRIC_ALIGNMENT, index)?.apply()
+    fun updateWordByWordLyrics(value: Boolean) {
+        wordByWordLyrics = value
+        prefs?.edit()?.putBoolean(KEY_WORD_BY_WORD_LYRICS, value)?.apply()
+    }
+
+    fun updateLyricSourcePreferenceIndex(index: Int) {
+        lyricSourcePreferenceIndex = index
+        prefs?.edit()?.putInt(KEY_LYRIC_SOURCE, index)?.apply()
+    }
+
+    fun updateAutoUpgradeLyrics(value: Boolean) {
+        autoUpgradeLyrics = value
+        prefs?.edit()?.putBoolean(KEY_AUTO_UPGRADE_LYRICS, value)?.apply()
+    }
+
+    fun updateQqLyricsEnabled(value: Boolean) {
+        qqLyricsEnabled = value
+        prefs?.edit()?.putBoolean(KEY_QQ_LYRICS_ENABLED, value)?.apply()
+    }
+
+    fun updateKugouLyricsEnabled(value: Boolean) {
+        kugouLyricsEnabled = value
+        prefs?.edit()?.putBoolean(KEY_KUGOU_LYRICS_ENABLED, value)?.apply()
     }
 
     fun updateShowCastButton(value: Boolean) {
@@ -191,6 +233,11 @@ object ThemeSettings {
         autoCheckUpdate = value
         prefs?.edit()?.putBoolean(KEY_AUTO_CHECK_UPDATE, value)?.apply()
     }
+
+    fun updateFadeEnabled(value: Boolean) {
+        fadeEnabled = value
+        prefs?.edit()?.putBoolean(KEY_FADE_ENABLED, value)?.apply()
+    }
 }
 
 /** 播放页是否使用深色：0=跟随深浅色设置, 1=浅色流光, 2=深色流光 */
@@ -206,3 +253,14 @@ fun rememberPlayerDark(): Boolean {
         }
     }
 }
+
+private val SanFranciscoFontFamily: FontFamily by lazy {
+    FontFamily(Font(R.font.sf_pro_display_bold, weight = FontWeight.Bold))
+}
+
+/**
+ * Apple Music 歌词引擎使用的 San Francisco 字体（仅含英文/符号，中文等自动回退系统字体）。
+ * 内置渲染引擎使用系统字体。
+ */
+val AppleMusicLyricsFontFamily: FontFamily
+    get() = SanFranciscoFontFamily

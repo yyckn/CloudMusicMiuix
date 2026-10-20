@@ -34,6 +34,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color as ComposeColor
+import com.musichub.miuix.ui.components.BlurredBar
+import com.musichub.miuix.ui.components.pageLayerBackdrop
+import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
 import androidx.compose.ui.unit.sp
 import com.musichub.miuix.data.api.NeteaseApi
 import com.google.gson.JsonParser
@@ -81,22 +85,27 @@ fun QrLoginPage(
         onBackClick()
     }
 
+    val blurBackdrop = rememberPageBlurBackdrop()
+
     Scaffold(
         topBar = {
-            SmallTopAppBar(
-                title = "登录方式",
-                scrollBehavior = scrollBehavior,
-                defaultWindowInsetsPadding = false,
-                navigationIcon = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .clickable { onBackClick() }
-                    )
-                }
-            )
+            BlurredBar(backdrop = blurBackdrop) {
+                SmallTopAppBar(
+                    title = "登录方式",
+                    color = if (blurBackdrop != null) ComposeColor.Transparent else MiuixTheme.colorScheme.surface,
+                    scrollBehavior = scrollBehavior,
+                    defaultWindowInsetsPadding = false,
+                    navigationIcon = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .clickable { onBackClick() }
+                        )
+                    }
+                )
+            }
         }
     ) { paddingValues ->
         Column(
@@ -105,6 +114,7 @@ fun QrLoginPage(
                 .padding(top = paddingValues.calculateTopPadding())
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .pageLayerBackdrop(blurBackdrop)
         ) {
             // TabRow
             TabRow(

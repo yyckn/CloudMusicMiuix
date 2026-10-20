@@ -19,6 +19,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import com.musichub.miuix.ui.components.BlurredBar
+import com.musichub.miuix.ui.components.pageLayerBackdrop
+import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
 import com.musichub.miuix.data.model.UpdateInfo
 import com.musichub.miuix.ui.FeedBottomPads
 import com.musichub.miuix.viewmodel.MusicPlayerViewModel
@@ -62,22 +66,27 @@ fun UpdateHistoryPage(
 
     BackHandler { onBackClick() }
 
+    val blurBackdrop = rememberPageBlurBackdrop()
+
     Scaffold(
         topBar = {
-            SmallTopAppBar(
-                title = "历史版本",
-                scrollBehavior = scrollBehavior,
-                defaultWindowInsetsPadding = false,
-                navigationIcon = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .clickable { onBackClick() }
-                    )
-                }
-            )
+            BlurredBar(backdrop = blurBackdrop) {
+                SmallTopAppBar(
+                    title = "历史版本",
+                    color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
+                    scrollBehavior = scrollBehavior,
+                    defaultWindowInsetsPadding = false,
+                    navigationIcon = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .clickable { onBackClick() }
+                        )
+                    }
+                )
+            }
         }
     ) { paddingValues ->
         PullToRefresh(
@@ -91,7 +100,9 @@ fun UpdateHistoryPage(
                 "正在刷新...",
                 "刷新成功"
             ),
-            modifier = modifier.padding(top = paddingValues.calculateTopPadding())
+            modifier = modifier
+                .padding(top = paddingValues.calculateTopPadding())
+                .pageLayerBackdrop(blurBackdrop)
         ) {
             val latest = viewModel.updateState.latest
             val versions: List<UpdateInfo> = buildList {

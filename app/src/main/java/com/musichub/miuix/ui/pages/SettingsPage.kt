@@ -29,6 +29,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import com.musichub.miuix.ui.components.BlurredBar
+import com.musichub.miuix.ui.components.pageLayerBackdrop
+import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
 import coil.compose.AsyncImage
 import com.musichub.miuix.data.api.NeteaseApi
 import com.musichub.miuix.data.model.UserProfile
@@ -54,6 +58,7 @@ fun SettingsPage(
     onProfileClick: () -> Unit,
     onThemeSettingsClick: () -> Unit,
     onPlayPageSettingsClick: () -> Unit = {},
+    onSongSettingsClick: () -> Unit = {},
     onAboutClick: () -> Unit,
     onLyriconAdapterClick: () -> Unit = {},
     onLyricSettingsClick: () -> Unit = {},
@@ -120,14 +125,19 @@ fun SettingsPage(
         }
     }
 
+    val blurBackdrop = rememberPageBlurBackdrop()
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = "设置",
-                largeTitle = "设置",
-                scrollBehavior = scrollBehavior,
-                defaultWindowInsetsPadding = false
-            )
+            BlurredBar(backdrop = blurBackdrop) {
+                TopAppBar(
+                    title = "设置",
+                    largeTitle = "设置",
+                    color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
+                    scrollBehavior = scrollBehavior,
+                    defaultWindowInsetsPadding = false
+                )
+            }
         }
     ) { paddingValues ->
         PullToRefresh(
@@ -141,7 +151,9 @@ fun SettingsPage(
                 "正在刷新...",
                 "刷新成功"
             ),
-            modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
+            modifier = Modifier
+                .padding(top = paddingValues.calculateTopPadding())
+                .pageLayerBackdrop(blurBackdrop)
         ) {
             LazyColumn(
                 modifier = Modifier
@@ -229,13 +241,18 @@ fun SettingsPage(
                         )
                     }
                 }
-                item { SmallTitle("歌词") }
+                item { SmallTitle("播放") }
                 item {
                     Card(
                         modifier = Modifier
                             .padding(horizontal = 12.dp)
                             .padding(bottom = 12.dp)
                     ) {
+                        ArrowPreference(
+                            title = "歌曲设置",
+                            summary = "音质、播放速度",
+                            onClick = onSongSettingsClick
+                        )
                         ArrowPreference(
                             title = "歌词设置",
                             summary = "歌词来源等",

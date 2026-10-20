@@ -29,13 +29,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.runtime.DisposableEffect
-import com.musichub.miuix.ui.components.AnimatedCoverPlayer
-import com.musichub.miuix.ui.components.LiveBadge
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import com.musichub.miuix.ui.theme.KeyboardShortcutSettings
+import com.musichub.miuix.ui.theme.ShortcutAction
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -87,8 +92,7 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.musichub.miuix.data.model.Track
-import com.musichub.miuix.ui.components.AnimatedCoverPlayer
-import com.musichub.miuix.ui.components.LiveBadge
+import com.musichub.miuix.data.lyrics.LyricUpgradeBlacklist
 import com.musichub.miuix.ui.components.LyricsView
 import com.musichub.miuix.ui.theme.ThemeSettings
 import com.musichub.miuix.ui.theme.rememberPlayerDark
@@ -96,6 +100,7 @@ import com.musichub.miuix.viewmodel.LyricState
 import com.musichub.miuix.viewmodel.MusicPlayerViewModel
 import com.musichub.miuix.viewmodel.PlayerState
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -106,9 +111,11 @@ import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Slider
+import top.yukonga.miuix.kmp.basic.SliderDefaults
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.DropdownImpl
@@ -118,6 +125,7 @@ import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
@@ -132,6 +140,7 @@ import top.yukonga.miuix.kmp.icon.extended.ListView
 import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.icon.extended.Merge
 import top.yukonga.miuix.kmp.icon.extended.More
+import top.yukonga.miuix.kmp.icon.extended.Music
 import top.yukonga.miuix.kmp.icon.extended.Notes
 import top.yukonga.miuix.kmp.icon.extended.NotesFill
 import top.yukonga.miuix.kmp.icon.extended.Pause
@@ -187,7 +196,10 @@ fun PlayerPage(
     var showMoreMenu by remember { mutableStateOf(false) }
     var showPlaylistSheet by remember { mutableStateOf(false) }
     var showMoreSheet by remember { mutableStateOf(false) }
+    var showLyricUpgradeSheet by remember { mutableStateOf(false) }
     var showUnlikeDialog by remember { mutableStateOf(false) }
+    var showSpeedDialog by remember { mutableStateOf(false) }
+    var speedInput by remember { mutableStateOf("") }
     val playlistListState = rememberLazyListState()
     val isPureMusic = lyricState.lyrics?.isPureMusic == true
     var albumArtist by remember { mutableStateOf<String?>(null) }
@@ -199,21 +211,12 @@ fun PlayerPage(
     val playerText = if (playerDark) Color.White else Color.Black
     val playerDim = if (playerDark) Color(0x40000000) else Color(0x80FFFFFF)
 
-    // 使用ViewModel中的Apple Music封面状态
-    val appleMusicCoverUrl = viewModel.appleMusicCoverUrl
-    val appleMusicCoverIsAnimated = viewModel.appleMusicCoverIsAnimated
-    val isLoadingAppleMusicCover = viewModel.isLoadingAppleMusicCover
-    var isAnimatedCoverReady by remember { mutableStateOf(false) }
-    var animatedCoverError by remember { mutableStateOf(false) }
-    val showLiveBadge = viewModel.showLiveBadge
-    
-    // 创建/更新ExoPlayer（由ViewModel管理）
-    LaunchedEffect(appleMusicCoverUrl, appleMusicCoverIsAnimated, animatedCoverError) {
-        if (appleMusicCoverUrl != null && appleMusicCoverIsAnimated && !animatedCoverError) {
-            viewModel.createAnimatedCoverPlayer(appleMusicCoverUrl!!)
-        }
-    }
-    
+    // Apple Music 歌词引擎自带左右内边距，外层保留 16dp
+    val lyricHorizontalPadding = 16.dp
+
+    // 歌词引擎逐帧读取的实时播放位置，避免使用 100ms 刷新的 playerState 而造成卡顿
+    val liveLyricsPositionProvider = remember { { viewModel.getPlaybackPositionMs() } }
+
     // 封面只联网拉取一次，之后所有位置复用同一张 Bitmap 进行渲染
     var coverBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(track?.imgUrl) {
@@ -257,13 +260,6 @@ fun PlayerPage(
         "标准品质",
         "低品质"
     )
-    val qualityBitrates = listOf(999000, 999000, 740000, 320000, 128000)
-    var selectedQualityIndex by remember { 
-        mutableStateOf(
-            context.getSharedPreferences("player_prefs", android.content.Context.MODE_PRIVATE)
-                .getInt("audio_quality_index", 0)
-        ) 
-    }
 
     // 获取专辑歌手信息
     LaunchedEffect(track?.albumId) {
@@ -291,8 +287,8 @@ fun PlayerPage(
     }
 
     // 通知外部抽屉状态变化
-    LaunchedEffect(showPlaylistSheet, showMoreSheet) {
-        onDrawerStateChanged(showPlaylistSheet || showMoreSheet)
+    LaunchedEffect(showPlaylistSheet, showMoreSheet, showLyricUpgradeSheet) {
+        onDrawerStateChanged(showPlaylistSheet || showMoreSheet || showLyricUpgradeSheet)
     }
     // 始终有2页（封面+歌词），纯音乐时歌词页显示"纯音乐，请欣赏"
     val pageCount = 2
@@ -302,7 +298,7 @@ fun PlayerPage(
     // 全屏封面模式下，歌词显示状态
     var showLyricsInFullScreen by remember { mutableStateOf(false) }
     val coverStyleIndex = ThemeSettings.smallScreenCoverStyle // 小屏: 0=卡片, 1=全屏渐变
-    val largeScreenCoverStyle = ThemeSettings.largeScreenCoverStyle // 大屏: 0=卡片, 1=全屏渐变
+    val largeScreenCoverStyleSetting = ThemeSettings.largeScreenCoverStyle // 大屏: 0=卡片, 1=全屏渐变
     val showCastButton = ThemeSettings.showCastButton
     
     // 歌词和蒙版动画
@@ -392,7 +388,64 @@ fun PlayerPage(
         onBackClick()
     }
 
-    Scaffold(
+    val shortcutFocusRequester = remember { FocusRequester() }
+    val keyboardShortcutsEnabled = KeyboardShortcutSettings.enabled
+    LaunchedEffect(keyboardShortcutsEnabled) {
+        if (keyboardShortcutsEnabled) {
+            shortcutFocusRequester.requestFocus()
+        }
+    }
+
+    // 弹窗/抽屉（如输入播放速度的输入框）会抢走焦点，关闭后把焦点还给播放页，
+    // 否则键盘快捷键会失效。
+    LaunchedEffect(showSpeedDialog, showUnlikeDialog, showMoreSheet, showPlaylistSheet, showLyricUpgradeSheet) {
+        if (!showSpeedDialog && !showUnlikeDialog && !showMoreSheet && !showPlaylistSheet && !showLyricUpgradeSheet) {
+            shortcutFocusRequester.requestFocus()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .focusRequester(shortcutFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (!KeyboardShortcutSettings.enabled) return@onPreviewKeyEvent false
+                if (event.nativeKeyEvent.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                when (event.nativeKeyEvent.keyCode) {
+                    KeyboardShortcutSettings.keyFor(ShortcutAction.PlayPause) -> {
+                        onTogglePlayPause()
+                        true
+                    }
+                    KeyboardShortcutSettings.keyFor(ShortcutAction.Previous) -> {
+                        onPrevious()
+                        true
+                    }
+                    KeyboardShortcutSettings.keyFor(ShortcutAction.Next) -> {
+                        onNext()
+                        true
+                    }
+                    KeyboardShortcutSettings.keyFor(ShortcutAction.SeekBackward) -> {
+                        onSeekTo((playerState.currentPosition - 10_000L).coerceAtLeast(0L))
+                        true
+                    }
+                    KeyboardShortcutSettings.keyFor(ShortcutAction.SeekForward) -> {
+                        val target = playerState.currentPosition + 10_000L
+                        onSeekTo(
+                            if (playerState.duration > 0L) target.coerceAtMost(playerState.duration)
+                            else target
+                        )
+                        true
+                    }
+                    KeyboardShortcutSettings.keyFor(ShortcutAction.Like) -> {
+                        onLikeTrack()
+                        true
+                    }
+                    else -> false
+                }
+            }
+    ) {
+        Scaffold(
         topBar = {
             // 空的TopBar，只保留状态栏间距
             Spacer(
@@ -408,6 +461,12 @@ fun PlayerPage(
         val topPadding = paddingValues.calculateTopPadding()
         // 判断是否是平板（宽度大于600dp）
         val isTablet = screenWidth > 600.dp
+        // 大屏“全屏渐变”布局在宽高比小于 4:3（更接近正方形/竖屏）时强制回退到卡片布局
+        val screenAspectRatio =
+            configuration.screenWidthDp.toFloat() / configuration.screenHeightDp.toFloat()
+        val largeScreenCoverStyle =
+            if (largeScreenCoverStyleSetting == 1 && screenAspectRatio < 4f / 3f) 0
+            else largeScreenCoverStyleSetting
         // 预留底部控件高度：Slider区域 + 按钮区域 + 底部间距
         val bottomReserved = if (isTablet) 186.dp else 186.dp
         // 标题区域高度（歌曲名称 + 歌手专辑 + 间距）
@@ -457,10 +516,6 @@ fun PlayerPage(
                 // 平板布局
                 if (largeScreenCoverStyle == 1) {
                     // 全屏渐变封面样式（平板）
-                    val useAnimatedCover = appleMusicCoverIsAnimated && 
-                        appleMusicCoverUrl != null && 
-                        !animatedCoverError
-                    
                     Box(modifier = Modifier.fillMaxSize()) {
                         // 封面层（覆盖全屏高度，包括状态栏）
                         Box(
@@ -495,84 +550,7 @@ fun PlayerPage(
                                 contentScale = ContentScale.Crop
                             )
                         }
-                        
-                        // 动态封面（在静态封面上方）
-                        if (useAnimatedCover) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(0.55f)
-                                    .align(Alignment.CenterStart)
-                            ) {
-                                AnimatedCoverPlayer(
-                                    exoPlayer = viewModel.animatedCoverExoPlayer,
-                                    modifier = Modifier.fillMaxSize(),
-                                    onFirstFrameReady = {
-                                        isAnimatedCoverReady = true
-                                    },
-                                    onError = {
-                                        animatedCoverError = true
-                                    }
-                                )
-                            }
-                            
-                            // 模糊封面蒙版（铺满全屏，覆盖在视频上方，文字下方）
-                            // 只有右侧显示模糊，左侧透明显示视频
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                // 模糊封面图片（通过BlendMode.DstIn控制可见性）
-                                CoverImage(
-                                    bitmap = coverBitmap,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer {
-                                            scaleX = 1.15f
-                                            scaleY = 1.15f
-                                            compositingStrategy = CompositingStrategy.Offscreen
-                                        }
-                                        .drawWithContent {
-                                            drawContent()
-                                            // 左侧透明，右侧不透明
-                                            drawRect(
-                                                brush = Brush.horizontalGradient(
-                                                    0f to Color.Transparent,
-                                                    0.4f to Color.Transparent,
-                                                    0.55f to Color.Black,
-                                                    1f to Color.Black
-                                                ),
-                                                blendMode = androidx.compose.ui.graphics.BlendMode.DstIn
-                                            )
-                                        }
-                                        .blur(radius = 100.dp),
-                                    contentScale = ContentScale.Crop
-                                )
-                                // 压暗层（跟随透明度渐变，只在右侧生效）
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            Brush.horizontalGradient(
-                                                0f to Color.Transparent,
-                                                0.4f to Color.Transparent,
-                                                0.55f to playerDim,
-                                                1f to playerDim
-                                            )
-                                        )
-                                )
-                            }
-                        }
-                        
-                        // Live标识 - 左上角（留出状态栏距离）
-                        if (appleMusicCoverIsAnimated && !animatedCoverError) {
-                            LiveBadge(
-                                visible = showLiveBadge,
-                                modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .padding(start = 16.dp, top = topPadding + 8.dp),
-                                onClick = { viewModel.updateShowLiveBadge(true) }
-                            )
-                        }
-                        
+
                         // 右侧内容区域（50%宽度）
                         Box(
                             modifier = Modifier
@@ -609,7 +587,7 @@ fun PlayerPage(
                                             Text(text = "纯音乐，请欣赏", fontSize = 16.sp, color = playerText.copy(alpha = 0.5f))
                                         }
                                     } else {
-                                        LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp))
+                                        LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = lyricHorizontalPadding), source = lyricState.source, sourceColor = playerText.copy(alpha = 0.5f), sourceStartPadding = 24.dp - lyricHorizontalPadding, showSourceHelp = true, onSourceClick = { showLyricUpgradeSheet = true }, positionProvider = liveLyricsPositionProvider)
                                     }
                                 }
                                 
@@ -734,11 +712,6 @@ fun PlayerPage(
 
                         // 封面（小屏模式下隐藏）
                         if (!isSmallScreen) {
-                            // 判断是否使用动态封面
-                            val useAnimatedCover = appleMusicCoverIsAnimated && 
-                                appleMusicCoverUrl != null && 
-                                !animatedCoverError
-                            
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -755,10 +728,10 @@ fun PlayerPage(
                                         contentColor = playerText
                                     ),
                                     pressFeedbackType = PressFeedbackType.Tilt,
-                                    onClick = { viewModel.updateShowLiveBadge(true) }
+                                    onClick = {}
                                 ) {
                                     Box(modifier = Modifier.fillMaxSize()) {
-                                        // 静态封面作为底层（始终显示）
+                                        // 静态封面
                                         CoverImage(
                                             bitmap = coverBitmap,
                                             contentDescription = track?.title,
@@ -770,48 +743,6 @@ fun PlayerPage(
                                                 },
                                             contentScale = ContentScale.Crop
                                         )
-                                        
-                                        // 动态封面覆盖在静态封面上（首帧就绪后才显示）
-                                        if (useAnimatedCover && isAnimatedCoverReady) {
-                                            AnimatedCoverPlayer(
-                                                exoPlayer = viewModel.animatedCoverExoPlayer,
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .clip(coverShape),
-                                                onFirstFrameReady = {
-                                                    isAnimatedCoverReady = true
-                                                },
-                                                onError = {
-                                                    animatedCoverError = true
-                                                }
-                                            )
-                                        }
-                                        
-                                        // 动态封面加载中（首帧未就绪时，显示加载状态）
-                                        if (useAnimatedCover && !isAnimatedCoverReady && !animatedCoverError) {
-                                            Box(
-                                                modifier = Modifier.fillMaxSize(),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                InfiniteProgressIndicator(
-                                                    modifier = Modifier.size(32.dp)
-                                                )
-                                            }
-                                        }
-                                        
-                                        // Live标识 - 右上角（叠加在封面上方）
-                                        if (appleMusicCoverIsAnimated && !animatedCoverError) {
-                                            Box(
-                                                modifier = Modifier.fillMaxSize(),
-                                                contentAlignment = Alignment.TopEnd
-                                            ) {
-                                                LiveBadge(
-                                                    visible = showLiveBadge,
-                                                    modifier = Modifier.padding(8.dp),
-                                    onClick = { viewModel.updateShowLiveBadge(true) }
-                                                )
-                                            }
-                                        }
                                     }
                                 }
                             }
@@ -992,6 +923,9 @@ fun PlayerPage(
                                 .weight(1f)
                                 .fillMaxHeight()
                                 .padding(start = 16.dp, end = 24.dp)
+                                .windowInsetsPadding(
+                                    WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)
+                                )
                         ) {
                             if (isPureMusic) {
                                 // 纯音乐显示提示
@@ -1012,7 +946,12 @@ fun PlayerPage(
                                     currentPosition = playerState.currentPosition,
                                     onSeekTo = onSeekTo,
                                     isPlaying = playerState.isPlaying,
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier.fillMaxSize(),
+                                    source = lyricState.source,
+                                    sourceColor = playerText.copy(alpha = 0.5f),
+                                    showSourceHelp = true,
+                                    onSourceClick = { showLyricUpgradeSheet = true },
+                                    positionProvider = liveLyricsPositionProvider
                                 )
                             }
                         }
@@ -1023,10 +962,6 @@ fun PlayerPage(
                 // 手机布局
                 if (coverStyleIndex == 1) {
                     // 全屏渐变封面样式（手机）
-                    val useAnimatedCover = appleMusicCoverIsAnimated && 
-                        appleMusicCoverUrl != null && 
-                        !animatedCoverError
-                    
                     // 用于记录标题栏和控件区域的实际位置
                     var titleBottomY by remember { mutableFloatStateOf(0f) }
                     var controlsTopY by remember { mutableFloatStateOf(Float.MAX_VALUE) }
@@ -1063,92 +998,6 @@ fun PlayerPage(
                         // 深色蒙版
                         Box(modifier = Modifier.fillMaxSize().background(playerDim))
                         
-                            // 动态封面层（在所有UI组件下方，背景上方）
-                            if (useAnimatedCover) {
-                                // 封面居中在标题栏下方到控件上方的区域
-                                val coverCenterY = (titleBottomY + controlsTopY) / 2
-                                val coverTopOffset = coverCenterY - coverHeightPx / 2
-                                
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(1f)
-                                        .offset { IntOffset(0, coverTopOffset.toInt()) }
-                                ) {
-                                    AnimatedCoverPlayer(
-                                        exoPlayer = viewModel.animatedCoverExoPlayer,
-                                        modifier = Modifier.fillMaxSize(),
-                                        onFirstFrameReady = {
-                                            isAnimatedCoverReady = true
-                                        },
-                                        onError = {
-                                            animatedCoverError = true
-                                        }
-                                    )
-                                }
-                                
-                                // 歌词显示时的封面模糊层（在封面之上）
-                                if (lyricsAlpha > 0f) {
-                                    CoverImage(
-                                        bitmap = coverBitmap,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .aspectRatio(1f)
-                                            .offset { IntOffset(0, coverTopOffset.toInt()) }
-                                            .graphicsLayer { alpha = lyricsAlpha }
-                                            .blur(radius = 15.dp),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                }
-                            
-                            // 蒙版层（模糊封面图片，叠在动态封面上方）
-                            // 如果封面上边界比标题栏低，就用封面的上边界；否则用标题栏
-                            // 如果封面下边界比播放栏高，就用封面的下边界；否则用播放栏
-                            val maskTop = if (coverTopPx > titleBottomY) coverTopPx else titleBottomY
-                            val maskBottom = if (coverBottomPx < controlsTopY) coverBottomPx else controlsTopY
-                            val maskHeight = (maskBottom - maskTop).coerceAtLeast(1f)
-                            val mask15Percent = maskTop + maskHeight * 0.15f
-                            val mask85Percent = maskTop + maskHeight * 0.85f
-                            
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer {
-                                        compositingStrategy = CompositingStrategy.Offscreen
-                                    }
-                                    .drawWithContent {
-                                        drawContent()
-                                        drawRect(
-                                            brush = Brush.verticalGradient(
-                                                0f to Color.Black,
-                                                (maskTop / containerHeightPx).coerceIn(0f, 1f) to Color.Black,
-                                                (mask15Percent / containerHeightPx).coerceIn(0f, 1f) to Color.Transparent,
-                                                (mask85Percent / containerHeightPx).coerceIn(0f, 1f) to Color.Transparent,
-                                                (maskBottom / containerHeightPx).coerceIn(0f, 1f) to Color.Black,
-                                                1f to Color.Black
-                                            ),
-                                            blendMode = androidx.compose.ui.graphics.BlendMode.DstIn
-                                        )
-                                    }
-                            ) {
-                                CoverImage(
-                                    bitmap = coverBitmap,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer(scaleX = 1.15f, scaleY = 1.15f)
-                                        .blur(radius = 100.dp),
-                                    contentScale = ContentScale.Crop
-                                )
-                                // 压暗层（跟随蒙版区域，随 DstIn 渐变生效）
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(playerDim)
-                                )
-                            }
-                        } else {
                             // 静态封面
                             val coverCenterY = (titleBottomY + controlsTopY) / 2
                             val coverTopOffset = coverCenterY - coverHeightPx / 2
@@ -1228,7 +1077,6 @@ fun PlayerPage(
                                         .background(playerDim)
                                 )
                             }
-                        }
                         
                         // 内容层（在封面和蒙版上方）
                         Column(
@@ -1258,17 +1106,7 @@ fun PlayerPage(
                                     }
                                 }
                             }
-                            
-                            // Live标识 - 标题栏下方靠左（歌词显示时隐藏）
-                            if (appleMusicCoverIsAnimated && !animatedCoverError && !showLyricsInFullScreen) {
-                                LiveBadge(
-                                    visible = showLiveBadge,
-                                    modifier = Modifier.padding(start = 24.dp, bottom = 8.dp),
-                                    compact = true,
-                                    onClick = { viewModel.updateShowLiveBadge(true) }
-                                )
-                            }
-                            
+
                             // 中间区域：歌词（封面已在背景层）
                             Box(
                                 modifier = Modifier.weight(1f).fillMaxWidth()
@@ -1312,7 +1150,7 @@ fun PlayerPage(
                                                 Text(text = "纯音乐，请欣赏", fontSize = 16.sp, color = playerText.copy(alpha = 0.5f))
                                             }
                                         } else {
-                                            LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp))
+                                            LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = lyricHorizontalPadding), source = lyricState.source, sourceColor = playerText.copy(alpha = 0.5f), sourceStartPadding = 24.dp - lyricHorizontalPadding, showSourceHelp = true, onSourceClick = { showLyricUpgradeSheet = true }, positionProvider = liveLyricsPositionProvider)
                                         }
                                     }
                                 }
@@ -1459,11 +1297,6 @@ fun PlayerPage(
                                         modifier = Modifier.fillMaxSize(),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        // 判断是否使用动态封面
-                                        val useAnimatedCover = appleMusicCoverIsAnimated && 
-                                            appleMusicCoverUrl != null && 
-                                            !animatedCoverError
-                                        
                                         Card(
                                             modifier = Modifier
                                                 .size(imageSize)
@@ -1477,7 +1310,7 @@ fun PlayerPage(
                                             onClick = {}
                                         ) {
                                             Box(modifier = Modifier.fillMaxSize()) {
-                                                // 静态封面作为底层（fallback）
+                                                // 静态封面
                                                 CoverImage(
                                                     bitmap = coverBitmap,
                                                     contentDescription = track?.title,
@@ -1489,42 +1322,6 @@ fun PlayerPage(
                                                         },
                                                     contentScale = ContentScale.Crop
                                                 )
-                                                
-                                                // 动态封面覆盖在静态封面上
-                                                if (useAnimatedCover) {
-                                                    AnimatedCoverPlayer(
-                                                exoPlayer = viewModel.animatedCoverExoPlayer,
-                                                        modifier = Modifier
-                                                            .fillMaxSize()
-                                                            .clip(coverShape)
-                                                            .graphicsLayer {
-                                                                // 首帧就绪前透明，避免黑屏
-                                                                alpha = if (isAnimatedCoverReady) 1f else 0f
-                                                            },
-                                                        onFirstFrameReady = {
-                                                            isAnimatedCoverReady = true
-                                                        },
-                                                        onError = {
-                                                            animatedCoverError = true
-                                                            Log.e("PlayerPage", "动态封面播放失败，回退到静态封面")
-                                                        }
-                                                    )
-                                                }
-                                                
-                                                // Live标识 - 右上角（叠加在封面上方）
-                                                if (appleMusicCoverIsAnimated && !animatedCoverError) {
-                                                    Box(
-                                                        modifier = Modifier.fillMaxSize(),
-                                                        contentAlignment = Alignment.TopEnd
-                                                    ) {
-                                                        LiveBadge(
-                                                            visible = showLiveBadge,
-                                                            modifier = Modifier.padding(8.dp),
-                                                            compact = true,
-                                onClick = { viewModel.updateShowLiveBadge(true) }
-                                                        )
-                                                    }
-                                                }
                                             }
                                         }
                                     }
@@ -1554,7 +1351,13 @@ fun PlayerPage(
                                         isPlaying = playerState.isPlaying,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .padding(horizontal = 24.dp)
+                                            .padding(horizontal = lyricHorizontalPadding),
+                                        source = lyricState.source,
+                                        sourceColor = playerText.copy(alpha = 0.5f),
+                                        sourceStartPadding = 24.dp - lyricHorizontalPadding,
+                                        showSourceHelp = true,
+                                        onSourceClick = { showLyricUpgradeSheet = true },
+                                        positionProvider = liveLyricsPositionProvider
                                     )
                                 }
                             }
@@ -1905,20 +1708,29 @@ fun PlayerPage(
                                     title = "音质",
                                     summary = "*选择的音质仅代表可获取的最高音质，实际音频音质可能因歌曲质量而不同",
                                     items = qualityOptions,
-                                    selectedIndex = selectedQualityIndex,
+                                    selectedIndex = viewModel.audioQualityIndex,
+                                    startAction = {
+                                        Icon(
+                                            imageVector = MiuixIcons.Music,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    },
                                     onSelectedIndexChange = { newIndex ->
-                                        selectedQualityIndex = newIndex
-                                        // 保存到SharedPreferences
-                                        context.getSharedPreferences("player_prefs", android.content.Context.MODE_PRIVATE)
-                                            .edit()
-                                            .putInt("audio_quality_index", newIndex)
-                                            .apply()
+                                        viewModel.updateAudioQualityIndex(newIndex)
                                     }
                                 )
                             } else {
                                 BasicComponent(
                                     title = "音质",
                                     summary = "登录VIP账号后可享受更高音质",
+                                    startAction = {
+                                        Icon(
+                                            imageVector = MiuixIcons.Music,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    },
                                     endActions = {
                                         Text(
                                             text = "低品质",
@@ -1928,17 +1740,33 @@ fun PlayerPage(
                                     }
                                 )
                             }
-                        }
-                    }
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .padding(horizontal = 12.dp)
-                                .padding(bottom = 12.dp),
-                            colors = CardDefaults.defaultColors(
-                                color = MiuixTheme.colorScheme.secondaryContainer
+                            BasicComponent(
+                                title = "播放速度",
+                                endActions = {
+                                    Text(
+                                        text = "${formatSpeedValue(viewModel.playbackSpeed)}x",
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    )
+                                },
+                                bottomAction = {
+                                    Slider(
+                                        value = viewModel.playbackSpeed,
+                                        onValueChange = { newValue ->
+                                            viewModel.updatePlaybackSpeed(newValue)
+                                        },
+                                        valueRange = 0.1f..5f,
+                                        steps = 48,
+                                        magnetThreshold = 0.1f,
+                                        hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    )
+                                },
+                                onClick = {
+                                    speedInput = formatSpeedValue(viewModel.playbackSpeed)
+                                    showSpeedDialog = true
+                                }
                             )
-                        ) {
                             ArrowPreference(
                                 title = "分享",
                                 startAction = {
@@ -2133,6 +1961,70 @@ fun PlayerPage(
             }
         }
 
+        // 自动升级歌词格式说明
+        OverlayBottomSheet(
+            show = showLyricUpgradeSheet,
+            title = "自动升级歌词格式",
+            insideMargin = DpSize(12.dp, 0.dp),
+            startAction = null,
+            endAction = {
+                IconButton(onClick = { showLyricUpgradeSheet = false }) {
+                    Icon(
+                        imageVector = MiuixIcons.Close,
+                        contentDescription = "关闭",
+                        tint = MiuixTheme.colorScheme.onSurface
+                    )
+                }
+            },
+            onDismissRequest = { showLyricUpgradeSheet = false }
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)
+            ) {
+                item {
+                    Text(
+                        text = "此歌曲已为您替换为其他平台的逐字歌词，如果您不需要此功能，可以在设置中关闭“自动升级为逐字歌词”。",
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+                item {
+                    Card(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .padding(bottom = 12.dp)
+                    ) {
+                        val track = playerState.currentTrack
+                        val blacklisted = track?.let { LyricUpgradeBlacklist.contains(it.id) } == true
+                        SwitchPreference(
+                            title = "此歌曲识别有误，恢复原歌词",
+                            checked = blacklisted,
+                            onCheckedChange = { checked ->
+                                if (track != null) {
+                                    if (checked) {
+                                        LyricUpgradeBlacklist.add(
+                                            LyricUpgradeBlacklist.Entry(
+                                                id = track.id,
+                                                title = track.title,
+                                                artist = track.artist,
+                                                album = track.album
+                                            )
+                                        )
+                                    } else {
+                                        LyricUpgradeBlacklist.remove(track.id)
+                                    }
+                                    showLyricUpgradeSheet = false
+                                    viewModel.loadLyrics()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
         // 取消收藏确认对话框
         OverlayDialog(
             show = showUnlikeDialog,
@@ -2161,6 +2053,60 @@ fun PlayerPage(
                 }
             },
         )
+
+        // 调节播放速度对话框
+        OverlayDialog(
+            show = showSpeedDialog,
+            title = "调节播放速度",
+            summary = "输入0.1-5之间的数字",
+            onDismissRequest = { showSpeedDialog = false },
+            onDismissFinished = { shortcutFocusRequester.requestFocus() },
+            content = {
+                Column {
+                    TextField(
+                        value = speedInput,
+                        onValueChange = { newValue ->
+                            if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d*$"))) {
+                                speedInput = newValue
+                            }
+                        },
+                        label = "0.1 - 5",
+                        useLabelAsPlaceholder = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        TextButton(
+                            text = "取消",
+                            onClick = { showSpeedDialog = false },
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(20.dp))
+                        TextButton(
+                            text = "确定",
+                            onClick = {
+                                speedInput.toFloatOrNull()?.let { viewModel.updatePlaybackSpeed(it) }
+                                showSpeedDialog = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary(),
+                        )
+                    }
+                }
+            },
+        )
+    }
+    }
+}
+
+private fun formatSpeedValue(speed: Float): String {
+    val hundredths = (speed * 100f).roundToInt()
+    return if (hundredths % 10 == 0) {
+        String.format(java.util.Locale.US, "%.1f", speed)
+    } else {
+        String.format(java.util.Locale.US, "%.2f", speed)
     }
 }
 
