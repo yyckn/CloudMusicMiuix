@@ -5,6 +5,8 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -94,6 +96,7 @@ fun AboutPage(
     viewModel: MusicPlayerViewModel,
     onCheckUpdate: () -> Unit = {},
     onViewHistory: () -> Unit = {},
+    onDeveloperOptionsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val topAppBarScrollBehavior = MiuixScrollBehavior()
@@ -157,6 +160,7 @@ fun AboutPage(
                 viewModel = viewModel,
                 onCheckUpdate = onCheckUpdate,
                 onViewHistory = onViewHistory,
+                onDeveloperOptionsClick = onDeveloperOptionsClick,
                 innerPadding = innerPadding,
                 topAppBarScrollBehavior = topAppBarScrollBehavior,
                 lazyListState = lazyListState,
@@ -175,6 +179,7 @@ private fun AboutContent(
     viewModel: MusicPlayerViewModel,
     onCheckUpdate: () -> Unit,
     onViewHistory: () -> Unit,
+    onDeveloperOptionsClick: () -> Unit,
     innerPadding: PaddingValues,
     topAppBarScrollBehavior: top.yukonga.miuix.kmp.basic.ScrollBehavior,
     lazyListState: LazyListState,
@@ -185,6 +190,21 @@ private fun AboutContent(
     val layoutDirection = LocalLayoutDirection.current
     val density = LocalDensity.current
     var autoCheckUpdate by remember { mutableStateOf(ThemeSettings.autoCheckUpdate) }
+    var versionTapCount by remember { mutableStateOf(0) }
+    var versionLastTapAt by remember { mutableStateOf(0L) }
+    fun onSecretTap() {
+        val now = System.currentTimeMillis()
+        if (now - versionLastTapAt > 1000L) {
+            versionTapCount = 0
+        }
+        versionLastTapAt = now
+        versionTapCount += 1
+        if (versionTapCount >= 5) {
+            versionTapCount = 0
+            onDeveloperOptionsClick()
+        }
+    }
+    val secretTapInteraction = remember { MutableInteractionSource() }
 
     val versionName = remember {
         try {
@@ -317,7 +337,7 @@ private fun AboutContent(
                     },
             ) {
                 val logoModifier = Modifier
-                    .requiredSize(220.dp)
+                    .size(100.dp)
                     .then(
                         if (enableBlur) {
                             Modifier.textureBlur(
@@ -332,7 +352,7 @@ private fun AboutContent(
                     )
                 Image(
                     modifier = logoModifier,
-                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                    painter = painterResource(id = R.drawable.ic_music_note),
                     contentDescription = null,
                     colorFilter = if (!enableBlur) {
                         ColorFilter.tint(MiuixTheme.colorScheme.onBackground)
@@ -410,6 +430,10 @@ private fun AboutContent(
                 Box(
                     Modifier
                         .fillMaxWidth()
+                        .clickable(
+                            interactionSource = secretTapInteraction,
+                            indication = null
+                        ) { onSecretTap() }
                         .height(
                             logoHeightDp + 52.dp + logoPadding.calculateTopPadding() - scrollPadding.calculateTopPadding() + 126.dp,
                         )

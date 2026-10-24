@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import com.musichub.miuix.data.lyrics.LyricUpgradeBlacklist
+import com.musichub.miuix.data.lyrics.LyricUpgradeRequiredList
 import com.musichub.miuix.ui.FeedBottomPads
 import com.musichub.miuix.ui.components.BlurredBar
 import com.musichub.miuix.ui.components.pageLayerBackdrop
@@ -28,6 +29,7 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
@@ -36,7 +38,8 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 fun LyricUpgradeManagePage(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onEntryRemoved: (String) -> Unit = {}
+    onEntryRemoved: (String) -> Unit = {},
+    onRequiredEntryRemoved: (String) -> Unit = {}
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     val blurBackdrop = rememberPageBlurBackdrop()
@@ -47,7 +50,7 @@ fun LyricUpgradeManagePage(
         topBar = {
             BlurredBar(backdrop = blurBackdrop) {
                 SmallTopAppBar(
-                    title = "管理歌曲",
+                    title = "管理歌词升级",
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                     scrollBehavior = scrollBehavior,
                     defaultWindowInsetsPadding = false,
@@ -75,6 +78,54 @@ fun LyricUpgradeManagePage(
         ) {
             item { Spacer(modifier = Modifier.height(12.dp)) }
 
+            // ---------------- 需要升级 ----------------
+            item { SmallTitle("需要升级逐字歌词的歌曲") }
+
+            if (LyricUpgradeRequiredList.entries.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .padding(bottom = 12.dp)
+                    ) {
+                        BasicComponent(
+                            title = "暂无需要升级逐字歌词的歌曲",
+                            summary = "在播放页点击歌词来源标识，可将歌曲设为升级至其他平台逐字歌词"
+                        )
+                    }
+                }
+            } else {
+                items(LyricUpgradeRequiredList.entries, key = { "required-${it.id}" }) { entry ->
+                    Card(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .padding(bottom = 12.dp)
+                    ) {
+                        BasicComponent(
+                            title = "${entry.title} - ${entry.artist}",
+                            summary = entry.album,
+                            endActions = {
+                                IconButton(
+                                    onClick = {
+                                        LyricUpgradeRequiredList.remove(entry.id)
+                                        onRequiredEntryRemoved(entry.id)
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Delete,
+                                        contentDescription = "移除",
+                                        tint = MiuixTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // ---------------- 不需要升级 ----------------
+            item { SmallTitle("不需要升级逐字歌词的歌曲") }
+
             if (LyricUpgradeBlacklist.entries.isEmpty()) {
                 item {
                     Card(
@@ -84,12 +135,12 @@ fun LyricUpgradeManagePage(
                     ) {
                         BasicComponent(
                             title = "暂无不需要升级逐字歌词的歌曲",
-                            summary = "在播放页点击歌词来源提示，可将识别错误的歌曲加入黑名单"
+                            summary = "在播放页点击歌词来源标识，可将歌曲设为恢复原歌词"
                         )
                     }
                 }
             } else {
-                items(LyricUpgradeBlacklist.entries, key = { it.id }) { entry ->
+                items(LyricUpgradeBlacklist.entries, key = { "blacklist-${it.id}" }) { entry ->
                     Card(
                         modifier = Modifier
                             .padding(horizontal = 12.dp)

@@ -148,6 +148,7 @@ object QqMusicLyricsApi {
                 tlyric = translation,
                 songTitle = track.title,
                 songArtist = track.artist,
+                songAlbum = track.album,
                 artistNames = track.artistNames
             )
         } else {
@@ -157,6 +158,7 @@ object QqMusicLyricsApi {
                 yrc = "",
                 songTitle = track.title,
                 songArtist = track.artist,
+                songAlbum = track.album,
                 artistNames = track.artistNames
             )
         }
@@ -185,6 +187,7 @@ object QqMusicLyricsApi {
             yrc = "",
             songTitle = track.title,
             songArtist = track.artist,
+            songAlbum = track.album,
             artistNames = track.artistNames
         )
         if (lyrics.lines.isEmpty()) return null

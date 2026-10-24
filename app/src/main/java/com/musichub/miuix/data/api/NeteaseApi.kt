@@ -135,7 +135,8 @@ object NeteaseApi {
                 obj.addProperty("cookies", account.cookies)
                 jsonArray.add(obj)
             }
-            prefs.edit().putString("accounts", jsonArray.toString()).apply()
+            // 同步写入，确保删除/新增账号在进程被杀前已落盘
+            prefs.edit().putString("accounts", jsonArray.toString()).commit()
         }
     }
     
@@ -1404,9 +1405,23 @@ object NeteaseApi {
         }
     }
 
-    suspend fun logout() {
+    @Synchronized
+    fun logoutCurrentAccount(): Boolean {
+        // 只移除当前账号，其他已保存账号保留
+        val currentId = userId?.toString()
+            ?: accounts.firstOrNull { it.cookies == cookies }?.userId
+        if (currentId != null) {
+            val remaining = accounts.filterNot { it.userId == currentId }
+            if (remaining.size != accounts.size) {
+                accounts = remaining.toMutableList()
+            }
+        }
+
+        // 清除当前会话与资料缓存
         cookies = ""
         userId = null
+        cookieGeneration++
+        userIdGeneration = cookieGeneration
         context?.let { ctx ->
             val prefs = ctx.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
             prefs.edit().apply {
@@ -1429,6 +1444,20 @@ object NeteaseApi {
                 apply()
             }
         }
+
+        // 立即持久化账号列表（同步写入，避免重启后已删除账号又出现）
+        saveAccounts()
+
+        android.util.Log.d("NeteaseApi", "Logged out current account: $currentId, remaining: ${accounts.size}")
+
+        // 若还有其他账号，自动切换到其中一个并保持登录
+        val next = accounts.firstOrNull() ?: return false
+        return switchToAccount(next.userId)
+    }
+
+    /** 兼容旧调用：退出当前账号。 */
+    fun logout() {
+        logoutCurrentAccount()
     }
 
     suspend fun getUserId(): Long? = withContext(Dispatchers.IO) {
@@ -2023,7 +2052,7 @@ object NeteaseApi {
         }
     }
 
-    suspend fun getSongLyric(songId: String, songTitle: String = "", songArtist: String = "", songDuration: Long = 0, artistNames: List<String> = emptyList()): Result<SongLyrics> = withContext(Dispatchers.IO) {
+    suspend fun getSongLyric(songId: String, songTitle: String = "", songArtist: String = "", songAlbum: String = "", songDuration: Long = 0, artistNames: List<String> = emptyList()): Result<SongLyrics> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()
             val id = songId.removePrefix("netrack_")
@@ -2050,6 +2079,7 @@ object NeteaseApi {
                 yrc = yrc,
                 songTitle = songTitle,
                 songArtist = songArtist,
+                songAlbum = songAlbum,
                 artistNames = artistNames
             )
 
@@ -2061,6 +2091,35 @@ object NeteaseApi {
             Result.success(result)
         } catch (e: Exception) {
             android.util.Log.e("NeteaseApi", "getSongLyric error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /** 未经解析的原始歌词字段（开发者选项使用）。 */
+    data class RawLyrics(
+        val lrc: String = "",
+        val yrc: String = "",
+        val tlyric: String = "",
+        val ytlrc: String = ""
+    )
+
+    /** 获取网易云原始歌词（不经过任何处理）。 */
+    suspend fun getRawLyric(songId: String): Result<RawLyrics> = withContext(Dispatchers.IO) {
+        try {
+            ensureCookie()
+            val id = songId.removePrefix("netrack_")
+            val json = fetchLyricJson(id)
+                ?: return@withContext Result.failure(Exception("Empty response"))
+            Result.success(
+                RawLyrics(
+                    lrc = json.lyricField("lrc"),
+                    yrc = json.lyricField("yrc"),
+                    tlyric = json.lyricField("tlyric"),
+                    ytlrc = json.lyricField("ytlrc")
+                )
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("NeteaseApi", "getRawLyric error: ${e.message}")
             Result.failure(e)
         }
     }

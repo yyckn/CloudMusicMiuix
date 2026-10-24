@@ -57,6 +57,7 @@ fun SettingsPage(
     onLoginClick: () -> Unit,
     onProfileClick: () -> Unit,
     onThemeSettingsClick: () -> Unit,
+    onAppIconClick: () -> Unit = {},
     onPlayPageSettingsClick: () -> Unit = {},
     onSongSettingsClick: () -> Unit = {},
     onAboutClick: () -> Unit,
@@ -233,6 +234,11 @@ fun SettingsPage(
                             title = "界面设置",
                             summary = "主题色、底栏等",
                             onClick = onThemeSettingsClick
+                        )
+                        ArrowPreference(
+                            title = "应用图标",
+                            summary = "音符、网易云图标",
+                            onClick = onAppIconClick
                         )
                         ArrowPreference(
                             title = "播放页设置",

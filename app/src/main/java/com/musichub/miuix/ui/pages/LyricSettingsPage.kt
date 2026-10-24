@@ -24,6 +24,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.musichub.miuix.ui.FeedBottomPads
 import com.musichub.miuix.ui.theme.ThemeSettings
 import com.musichub.miuix.data.lyrics.LyricUpgradeBlacklist
+import com.musichub.miuix.data.lyrics.LyricUpgradeRequiredList
+import com.musichub.miuix.data.lyrics.LyricExclusionRules
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -43,7 +45,8 @@ fun LyricSettingsPage(
     modifier: Modifier = Modifier,
     onWordByWordLyricsChanged: () -> Unit = {},
     onLyricSettingsChanged: () -> Unit = {},
-    onManageLyricUpgradesClick: () -> Unit = {}
+    onManageLyricUpgradesClick: () -> Unit = {},
+    onExclusionRulesClick: () -> Unit = {}
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     var wordByWord by remember { mutableStateOf(ThemeSettings.wordByWordLyrics) }
@@ -51,6 +54,7 @@ fun LyricSettingsPage(
     var autoUpgrade by remember { mutableStateOf(ThemeSettings.autoUpgradeLyrics) }
     var qqEnabled by remember { mutableStateOf(ThemeSettings.qqLyricsEnabled) }
     var kugouEnabled by remember { mutableStateOf(ThemeSettings.kugouLyricsEnabled) }
+    var exclusionEnabled by remember { mutableStateOf(LyricExclusionRules.enabled) }
 
     // 网易云音乐始终启用；QQ/酷狗关闭后不在偏好选项中出现
     val sourceOptions = buildList {
@@ -185,14 +189,40 @@ fun LyricSettingsPage(
                         .padding(bottom = 12.dp)
                 ) {
                     ArrowPreference(
-                        title = "管理不需要升级逐字歌词的歌曲",
-                        summary = if (LyricUpgradeBlacklist.entries.isEmpty()) {
-                            "暂无"
-                        } else {
-                            "已加入 ${LyricUpgradeBlacklist.entries.size} 首"
-                        },
+                        title = "管理歌曲是否需要升级逐字歌词",
+                        summary = "需要升级 ${LyricUpgradeRequiredList.entries.size} 首 · " +
+                            "不需要升级 ${LyricUpgradeBlacklist.entries.size} 首",
                         onClick = onManageLyricUpgradesClick
                     )
+                }
+            }
+
+            item { SmallTitle("歌词处理") }
+            item {
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp)
+                ) {
+                    SwitchPreference(
+                        title = "启用歌词排除",
+                        summary = "自动清理放在歌词头尾的元数据行（如词、曲、编曲、制作人等）",
+                        checked = exclusionEnabled,
+                        onCheckedChange = { enabled ->
+                            exclusionEnabled = enabled
+                            LyricExclusionRules.updateEnabled(enabled)
+                            onLyricSettingsChanged()
+                        }
+                    )
+                    if (exclusionEnabled) {
+                        ArrowPreference(
+                            title = "歌词排除规则",
+                            summary = "默认规则已启用 ${LyricExclusionRules.enabledDefaultRuleCount}/" +
+                                "${LyricExclusionRules.defaultRules.size} 条 · " +
+                                "用户规则 ${LyricExclusionRules.userRules.size} 条",
+                            onClick = onExclusionRulesClick
+                        )
+                    }
                 }
             }
         }

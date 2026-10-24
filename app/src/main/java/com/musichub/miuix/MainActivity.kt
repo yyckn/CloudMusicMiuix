@@ -69,15 +69,21 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.musichub.miuix.data.api.NeteaseApi
 import com.musichub.miuix.data.lyrics.LyricUpgradeBlacklist
+import com.musichub.miuix.data.lyrics.LyricUpgradeRequiredList
+import com.musichub.miuix.data.lyrics.LyricExclusionRules
 import com.musichub.miuix.ui.components.PlayerBar
 import com.musichub.miuix.ui.pages.AboutPage
 import com.musichub.miuix.ui.pages.AccountInfo
 import com.musichub.miuix.ui.pages.AlbumPage
+import com.musichub.miuix.ui.pages.AppIconPage
 import com.musichub.miuix.ui.pages.ArtistPage
 import com.musichub.miuix.ui.pages.CommentPage
 import com.musichub.miuix.ui.pages.LoginPage
 import com.musichub.miuix.ui.pages.LyriconAdapterPage
 import com.musichub.miuix.ui.pages.LyricSettingsPage
+import com.musichub.miuix.ui.pages.DeveloperOptionsPage
+import com.musichub.miuix.ui.pages.UserAgreementPage
+import com.musichub.miuix.ui.pages.LyricExclusionRulesPage
 import com.musichub.miuix.ui.pages.LyricUpgradeManagePage
 import com.musichub.miuix.ui.pages.ManageAccountsPage
 import com.musichub.miuix.ui.pages.PlayPageSettingsPage
@@ -102,8 +108,10 @@ import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import com.musichub.miuix.ui.components.PlayerBar
 import com.musichub.miuix.ui.components.SwipeablePlayerSheet
 import com.musichub.miuix.ui.theme.CloudMusicMiuixTheme
+import com.musichub.miuix.ui.theme.AgreementSettings
 import com.musichub.miuix.ui.theme.KeyboardShortcutSettings
 import com.musichub.miuix.ui.theme.ThemeSettings
+import com.musichub.miuix.ui.theme.AppIconSettings
 import com.musichub.miuix.viewmodel.MusicPlayerViewModel
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
@@ -142,6 +150,9 @@ sealed class Screen {
     object LyriconAdapter : Screen()
     object LyricSettings : Screen()
     object LyricUpgradeManage : Screen()
+    object LyricRules : Screen()
+    object DeveloperOptions : Screen()
+    object AppIcon : Screen()
     object ManageAccounts : Screen()
     object UpdateHistory : Screen()
     data class Comment(val songId: String, val songTitle: String) : Screen()
@@ -153,15 +164,26 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         NeteaseApi.init(applicationContext)
         ThemeSettings.init(applicationContext)
+        AppIconSettings.init(applicationContext)
+        AppIconSettings.applySaved(applicationContext)
         LyricUpgradeBlacklist.init(applicationContext)
+        LyricUpgradeRequiredList.init(applicationContext)
+        LyricExclusionRules.init(applicationContext)
         KeyboardShortcutSettings.init(applicationContext)
+        AgreementSettings.init(applicationContext)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         setContent {
             CloudMusicMiuixTheme {
-                val windowSizeClass = calculateWindowSizeClass(this)
-                MainScreen(windowSizeClass)
+                if (!AgreementSettings.accepted) {
+                    UserAgreementPage(
+                        onAccept = { AgreementSettings.accept() }
+                    )
+                } else {
+                    val windowSizeClass = calculateWindowSizeClass(this)
+                    MainScreen(windowSizeClass)
+                }
             }
         }
     }
@@ -437,6 +459,9 @@ fun MainScreen(
                                     },
                                     onThemeSettingsClick = {
                                         navigateTo(Screen.ThemeSettings)
+                                    },
+                                    onAppIconClick = {
+                                        navigateTo(Screen.AppIcon)
                                     },
                                     onPlayPageSettingsClick = {
                                         navigateTo(Screen.PlayPageSettings)
@@ -719,6 +744,9 @@ fun MainScreen(
                                     onThemeSettingsClick = {
                                         navigateTo(Screen.ThemeSettings)
                                     },
+                                    onAppIconClick = {
+                                        navigateTo(Screen.AppIcon)
+                                    },
                                     onPlayPageSettingsClick = {
                                         navigateTo(Screen.PlayPageSettings)
                                     },
@@ -988,6 +1016,15 @@ fun MainScreen(
                     }
                 )
             }
+            is Screen.AppIcon -> {
+                AppIconPage(
+                    onBackClick = {
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
+                    }
+                )
+            }
             is Screen.PlayPageSettings -> {
                 PlayPageSettingsPage(
                     onBackClick = {
@@ -1019,7 +1056,18 @@ fun MainScreen(
                     },
                     viewModel = viewModel,
                     onCheckUpdate = { viewModel.checkForUpdates(manual = true) },
-                    onViewHistory = { navigateTo(Screen.UpdateHistory) }
+                    onViewHistory = { navigateTo(Screen.UpdateHistory) },
+                    onDeveloperOptionsClick = { navigateTo(Screen.DeveloperOptions) }
+                )
+            }
+            is Screen.DeveloperOptions -> {
+                DeveloperOptionsPage(
+                    currentTrack = viewModel.playerState.currentTrack,
+                    onBackClick = {
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
+                    }
                 )
             }
             is Screen.UpdateHistory -> {
@@ -1056,6 +1104,9 @@ fun MainScreen(
                     },
                     onManageLyricUpgradesClick = {
                         navigateTo(Screen.LyricUpgradeManage)
+                    },
+                    onExclusionRulesClick = {
+                        navigateTo(Screen.LyricRules)
                     }
                 )
             }
@@ -1070,6 +1121,23 @@ fun MainScreen(
                         if (viewModel.playerState.currentTrack?.id == removedId) {
                             viewModel.loadLyrics()
                         }
+                    },
+                    onRequiredEntryRemoved = { removedId ->
+                        if (viewModel.playerState.currentTrack?.id == removedId) {
+                            viewModel.loadLyrics()
+                        }
+                    }
+                )
+            }
+            is Screen.LyricRules -> {
+                LyricExclusionRulesPage(
+                    onBackClick = {
+                        if (!navigateBack()) {
+                            currentScreen = Screen.Main
+                        }
+                    },
+                    onRulesChanged = {
+                        viewModel.loadLyrics()
                     }
                 )
             }
@@ -1121,7 +1189,11 @@ fun MainScreen(
                         }
                     },
                     onLogout = {
-                        isLoggedIn = false
+                        val stillLoggedIn = NeteaseApi.logoutCurrentAccount()
+                        isLoggedIn = stillLoggedIn
+                        if (stillLoggedIn) {
+                            viewModel.refreshAccountState()
+                        }
                         currentScreen = Screen.Main
                     },
                     isLoggedIn = isLoggedIn,

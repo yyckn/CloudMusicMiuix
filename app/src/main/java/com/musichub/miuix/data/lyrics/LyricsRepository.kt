@@ -53,11 +53,13 @@ object LyricsRepository {
                 )
             }
 
+            // 需要升级列表：强制优先其他平台的逐字歌词（即使网易云已有逐字歌词）
+            val forceUpgrade = LyricUpgradeRequiredList.contains(track.id)
             val preference = ThemeSettings.lyricSourcePreferenceIndex
             val outcome = if (preference == 0) {
-                loadSmart(track)
+                loadSmart(track, forceUpgrade)
             } else {
-                loadPreferred(track, preference)
+                loadPreferred(track, preference, forceUpgrade)
             }
 
             if (outcome != null) {
@@ -65,7 +67,7 @@ object LyricsRepository {
                     LyricsLoadResult(
                         lyrics = outcome.result.lyrics,
                         source = platformLabel(outcome.result.platform),
-                        upgraded = outcome.upgraded
+                        upgraded = outcome.upgraded || outcome.result.platform != "netease"
                     )
                 )
             } else {
@@ -77,17 +79,19 @@ object LyricsRepository {
         }
     }
 
-    private fun platformLabel(platform: String): String? = when (platform) {
+    private fun platformLabel(platform: String): String = when (platform) {
         "qq" -> "QQ音乐"
         "kugou" -> "酷狗音乐"
-        else -> null
+        else -> "网易云音乐"
     }
 
     /** 智能选择：优先网易云；开启自动升级时，若无逐字歌词则尝试其他平台。 */
-    private suspend fun loadSmart(track: Track): LoadOutcome? {
-        val wantWordLyrics = ThemeSettings.wordByWordLyrics && ThemeSettings.autoUpgradeLyrics
+    private suspend fun loadSmart(track: Track, forceUpgrade: Boolean): LoadOutcome? {
+        val wantWordLyrics = forceUpgrade ||
+            (ThemeSettings.wordByWordLyrics && ThemeSettings.autoUpgradeLyrics)
         val netease = fetch(Platform.NETEASE, track)
-        if (netease != null && (!wantWordLyrics || netease.hasWordLines)) {
+        // 强制升级时不因网易云已有逐字歌词而提前返回
+        if (!forceUpgrade && netease != null && (!wantWordLyrics || netease.hasWordLines)) {
             return LoadOutcome(netease, upgraded = false)
         }
 
@@ -99,7 +103,7 @@ object LyricsRepository {
 
         if (wantWordLyrics) {
             others.firstOrNull { it.hasWordLines }?.let {
-                return LoadOutcome(it, upgraded = netease != null)
+                return LoadOutcome(it, upgraded = true)
             }
         }
         val fallback = netease ?: others.firstOrNull() ?: return null
@@ -107,9 +111,10 @@ object LyricsRepository {
     }
 
     /** 优先指定平台，失败时按顺序回退；可按设置升级为逐字歌词。 */
-    private suspend fun loadPreferred(track: Track, preference: Int): LoadOutcome? {
+    private suspend fun loadPreferred(track: Track, preference: Int, forceUpgrade: Boolean): LoadOutcome? {
         val order = platformOrder(preference)
-        val upgrade = ThemeSettings.wordByWordLyrics && ThemeSettings.autoUpgradeLyrics
+        val upgrade = forceUpgrade ||
+            (ThemeSettings.wordByWordLyrics && ThemeSettings.autoUpgradeLyrics)
 
         var first: PlatformLyricResult? = null
         var firstPlatform: Platform? = null
@@ -123,7 +128,7 @@ object LyricsRepository {
         }
         if (first == null) return null
 
-        if (upgrade && !first.hasWordLines) {
+        if (upgrade && (forceUpgrade || !first.hasWordLines)) {
             for (platform in order) {
                 if (platform == firstPlatform) continue
                 val upgraded = fetch(platform, track)
@@ -158,6 +163,7 @@ object LyricsRepository {
                     songId = track.id,
                     songTitle = track.title,
                     songArtist = track.artist,
+                    songAlbum = track.album,
                     songDuration = track.duration,
                     artistNames = track.artistNames
                 ).getOrNull()?.let { lyrics ->

@@ -93,6 +93,7 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.musichub.miuix.data.model.Track
 import com.musichub.miuix.data.lyrics.LyricUpgradeBlacklist
+import com.musichub.miuix.data.lyrics.LyricUpgradeRequiredList
 import com.musichub.miuix.ui.components.LyricsView
 import com.musichub.miuix.ui.theme.ThemeSettings
 import com.musichub.miuix.ui.theme.rememberPlayerDark
@@ -125,7 +126,7 @@ import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
@@ -197,6 +198,14 @@ fun PlayerPage(
     var showPlaylistSheet by remember { mutableStateOf(false) }
     var showMoreSheet by remember { mutableStateOf(false) }
     var showLyricUpgradeSheet by remember { mutableStateOf(false) }
+    var restoreOriginalLyrics by remember { mutableStateOf(false) }
+    var forceUpgradeLyrics by remember { mutableStateOf(false) }
+    // 仅在开启「自动升级为逐字歌词」时展示歌词来源标识
+    val lyricSourceLabel = if (ThemeSettings.wordByWordLyrics && ThemeSettings.autoUpgradeLyrics) {
+        lyricState.source
+    } else {
+        null
+    }
     var showUnlikeDialog by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var speedInput by remember { mutableStateOf("") }
@@ -289,6 +298,15 @@ fun PlayerPage(
     // 通知外部抽屉状态变化
     LaunchedEffect(showPlaylistSheet, showMoreSheet, showLyricUpgradeSheet) {
         onDrawerStateChanged(showPlaylistSheet || showMoreSheet || showLyricUpgradeSheet)
+    }
+
+    // 打开歌词来源弹窗时，同步当前歌曲的黑名单/需要升级状态
+    LaunchedEffect(showLyricUpgradeSheet) {
+        if (showLyricUpgradeSheet) {
+            val track = playerState.currentTrack
+            restoreOriginalLyrics = track != null && LyricUpgradeBlacklist.contains(track.id)
+            forceUpgradeLyrics = track != null && LyricUpgradeRequiredList.contains(track.id)
+        }
     }
     // 始终有2页（封面+歌词），纯音乐时歌词页显示"纯音乐，请欣赏"
     val pageCount = 2
@@ -587,7 +605,7 @@ fun PlayerPage(
                                             Text(text = "纯音乐，请欣赏", fontSize = 16.sp, color = playerText.copy(alpha = 0.5f))
                                         }
                                     } else {
-                                        LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = lyricHorizontalPadding), source = lyricState.source, sourceColor = playerText.copy(alpha = 0.5f), sourceStartPadding = 24.dp - lyricHorizontalPadding, showSourceHelp = true, onSourceClick = { showLyricUpgradeSheet = true }, positionProvider = liveLyricsPositionProvider)
+                                        LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = lyricHorizontalPadding), source = lyricSourceLabel, sourceColor = playerText.copy(alpha = 0.5f), sourceStartPadding = 24.dp - lyricHorizontalPadding, showSourceHelp = true, onSourceClick = { showLyricUpgradeSheet = true }, positionProvider = liveLyricsPositionProvider)
                                     }
                                 }
                                 
@@ -631,6 +649,16 @@ fun PlayerPage(
                                                         if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack()
                                                     }
                                                 )
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                                PlayerShareButton(playerText) { onShare() }
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                                PlayerCommentButton(playerText) {
+                                                    playerState.currentTrack?.let { onNavigateToComment(it.id, it.title) }
+                                                }
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                            }
+                                            if (!isFMMode && !isIntelligenceMode) {
+                                                IconButton(onClick = { if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack() }, modifier = Modifier.size(48.dp)) { Icon(imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites, contentDescription = if (isCurrentTrackLiked) "取消收藏" else "收藏", tint = if (isCurrentTrackLiked) MiuixTheme.colorScheme.primary else playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                                 Spacer(modifier = Modifier.width(16.dp))
                                             }
                                             IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.More, contentDescription = "更多", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
@@ -904,6 +932,28 @@ fun PlayerPage(
                                             }
                                         )
                                         Spacer(modifier = Modifier.width(16.dp))
+                                        PlayerShareButton(playerText) { onShare() }
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        PlayerCommentButton(playerText) {
+                                            playerState.currentTrack?.let { onNavigateToComment(it.id, it.title) }
+                                        }
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                    }
+                                    if (!isFMMode && !isIntelligenceMode) {
+                                        IconButton(
+                                            onClick = {
+                                                if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack()
+                                            },
+                                            modifier = Modifier.size(48.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
+                                                contentDescription = if (isCurrentTrackLiked) "取消收藏" else "收藏",
+                                                tint = if (isCurrentTrackLiked) MiuixTheme.colorScheme.primary else playerText.copy(alpha = 0.6f),
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(16.dp))
                                     }
                                     IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) {
                                         Icon(
@@ -947,7 +997,7 @@ fun PlayerPage(
                                     onSeekTo = onSeekTo,
                                     isPlaying = playerState.isPlaying,
                                     modifier = Modifier.fillMaxSize(),
-                                    source = lyricState.source,
+                                    source = lyricSourceLabel,
                                     sourceColor = playerText.copy(alpha = 0.5f),
                                     showSourceHelp = true,
                                     onSourceClick = { showLyricUpgradeSheet = true },
@@ -1150,7 +1200,7 @@ fun PlayerPage(
                                                 Text(text = "纯音乐，请欣赏", fontSize = 16.sp, color = playerText.copy(alpha = 0.5f))
                                             }
                                         } else {
-                                            LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = lyricHorizontalPadding), source = lyricState.source, sourceColor = playerText.copy(alpha = 0.5f), sourceStartPadding = 24.dp - lyricHorizontalPadding, showSourceHelp = true, onSourceClick = { showLyricUpgradeSheet = true }, positionProvider = liveLyricsPositionProvider)
+                                            LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = lyricHorizontalPadding), source = lyricSourceLabel, sourceColor = playerText.copy(alpha = 0.5f), sourceStartPadding = 24.dp - lyricHorizontalPadding, showSourceHelp = true, onSourceClick = { showLyricUpgradeSheet = true }, positionProvider = liveLyricsPositionProvider)
                                         }
                                     }
                                 }
@@ -1186,8 +1236,6 @@ fun PlayerPage(
                                     }
                                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(onClick = onBackClick, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.Close, contentDescription = "关闭", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
-                                        Spacer(modifier = Modifier.width(16.dp))
-                                        IconButton(onClick = { showLyricsInFullScreen = !showLyricsInFullScreen }, modifier = Modifier.size(48.dp)) { Icon(imageVector = if (showLyricsInFullScreen) MiuixIcons.NotesFill else MiuixIcons.Notes, contentDescription = "歌词", tint = if (showLyricsInFullScreen) playerText else playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                         if (isFMMode || isIntelligenceMode) {
                                             Spacer(modifier = Modifier.width(16.dp))
                                             FmLikeButton(
@@ -1196,8 +1244,28 @@ fun PlayerPage(
                                                     if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack()
                                                 }
                                             )
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            PlayerShareButton(playerText) { onShare() }
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            PlayerCommentButton(playerText) {
+                                                playerState.currentTrack?.let { onNavigateToComment(it.id, it.title) }
+                                            }
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                        } else {
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            IconButton(onClick = { showLyricsInFullScreen = !showLyricsInFullScreen }, modifier = Modifier.size(48.dp)) { Icon(imageVector = if (showLyricsInFullScreen) MiuixIcons.NotesFill else MiuixIcons.Notes, contentDescription = "歌词", tint = if (showLyricsInFullScreen) playerText else playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            PlayerFavoriteButton(
+                                                isLiked = isCurrentTrackLiked,
+                                                playerText = playerText,
+                                                onClick = {
+                                                    if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack()
+                                                }
+                                            )
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            PlayerShareButton(playerText) { onShare() }
+                                            Spacer(modifier = Modifier.width(16.dp))
                                         }
-                                        Spacer(modifier = Modifier.width(16.dp))
                                         IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.More, contentDescription = "更多", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                     }
                                 }
@@ -1352,7 +1420,7 @@ fun PlayerPage(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .padding(horizontal = lyricHorizontalPadding),
-                                        source = lyricState.source,
+                                        source = lyricSourceLabel,
                                         sourceColor = playerText.copy(alpha = 0.5f),
                                         sourceStartPadding = 24.dp - lyricHorizontalPadding,
                                         showSourceHelp = true,
@@ -1487,67 +1555,6 @@ fun PlayerPage(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
-                            if (!isFMMode && !isIntelligenceMode) {
-                                Spacer(modifier = Modifier.width(16.dp))
-                                // 播放模式按钮
-                                IconButton(
-                                    onClick = onSwitchPlayModeSafe,
-                                    modifier = Modifier.size(48.dp).alpha(controlIconAlpha)
-                                ) {
-                                    Icon(
-                                        imageVector = when (playMode) {
-                                            0 -> MiuixIcons.Sort
-                                            1 -> MiuixIcons.Merge
-                                            2 -> MiuixIcons.Replace
-                                            else -> MiuixIcons.Sort
-                                        },
-                                        contentDescription = when (playMode) {
-                                            0 -> "顺序播放"
-                                            1 -> "乱序播放"
-                                            2 -> "单曲循环"
-                                            else -> "顺序播放"
-                                        },
-                                        tint = playerText.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            // 歌词按钮
-                            IconButton(
-                                onClick = { 
-                                    coroutineScope.launch {
-                                        if (pagerState.currentPage == 0) {
-                                            pagerState.animateScrollToPage(1)
-                                        } else {
-                                            pagerState.animateScrollToPage(0)
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (pagerState.currentPage == 1) MiuixIcons.NotesFill else MiuixIcons.Notes,
-                                    contentDescription = "歌词",
-                                    tint = if (pagerState.currentPage == 1) {
-                                        playerText
-                                    } else {
-                                        playerText.copy(alpha = 0.6f)
-                                    },
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            if (!isFMMode && !isIntelligenceMode) {
-                                Spacer(modifier = Modifier.width(16.dp))
-                                IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) {
-                                    Icon(
-                                        imageVector = MiuixIcons.ListView,
-                                        contentDescription = "播放列表",
-                                        tint = playerText.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
                             if (isFMMode || isIntelligenceMode) {
                                 Spacer(modifier = Modifier.width(16.dp))
                                 FmLikeButton(
@@ -1556,6 +1563,48 @@ fun PlayerPage(
                                         if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack()
                                     }
                                 )
+                                Spacer(modifier = Modifier.width(16.dp))
+                                PlayerShareButton(playerText) { onShare() }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                PlayerCommentButton(playerText) {
+                                    playerState.currentTrack?.let { onNavigateToComment(it.id, it.title) }
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.width(16.dp))
+                                // 歌词按钮
+                                IconButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            if (pagerState.currentPage == 0) {
+                                                pagerState.animateScrollToPage(1)
+                                            } else {
+                                                pagerState.animateScrollToPage(0)
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (pagerState.currentPage == 1) MiuixIcons.NotesFill else MiuixIcons.Notes,
+                                        contentDescription = "歌词",
+                                        tint = if (pagerState.currentPage == 1) {
+                                            playerText
+                                        } else {
+                                            playerText.copy(alpha = 0.6f)
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                PlayerFavoriteButton(
+                                    isLiked = isCurrentTrackLiked,
+                                    playerText = playerText,
+                                    onClick = {
+                                        if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack()
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(16.dp))
+                                PlayerShareButton(playerText) { onShare() }
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) {
@@ -1961,69 +2010,97 @@ fun PlayerPage(
             }
         }
 
-        // 自动升级歌词格式说明
-        OverlayBottomSheet(
+        // 歌词来源 / 自动升级歌词格式
+        val upgradeTrack = playerState.currentTrack
+        val upgraded = lyricState.upgraded
+        val neteaseHasWordLyrics = !upgraded &&
+            (lyricState.lyrics?.lines?.any { !it.words.isNullOrEmpty() } == true)
+        val upgradeSummary = when {
+            upgraded -> "此歌曲已为您替换为其他平台的逐字歌词，如果您不需要此功能，可以在设置中关闭“自动升级为逐字歌词”。"
+            neteaseHasWordLyrics -> "检测到此歌曲在网易云音乐平台已支持逐字歌词，我们已跳过升级为其他平台的逐字歌曲。"
+            else -> "检测到此歌曲在网易云音乐平台暂未提供逐字歌词，可尝试从其他平台获取逐字歌词。"
+        }
+        OverlayDialog(
             show = showLyricUpgradeSheet,
             title = "自动升级歌词格式",
-            insideMargin = DpSize(12.dp, 0.dp),
-            startAction = null,
-            endAction = {
-                IconButton(onClick = { showLyricUpgradeSheet = false }) {
-                    Icon(
-                        imageVector = MiuixIcons.Close,
-                        contentDescription = "关闭",
-                        tint = MiuixTheme.colorScheme.onSurface
-                    )
-                }
-            },
-            onDismissRequest = { showLyricUpgradeSheet = false }
-        ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)
-            ) {
-                item {
-                    Text(
-                        text = "此歌曲已为您替换为其他平台的逐字歌词，如果您不需要此功能，可以在设置中关闭“自动升级为逐字歌词”。",
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
-                }
-                item {
+            summary = upgradeSummary,
+            onDismissRequest = { showLyricUpgradeSheet = false },
+            content = {
+                Column {
                     Card(
                         modifier = Modifier
-                            .padding(horizontal = 12.dp)
+                            .fillMaxWidth()
                             .padding(bottom = 12.dp)
                     ) {
-                        val track = playerState.currentTrack
-                        val blacklisted = track?.let { LyricUpgradeBlacklist.contains(it.id) } == true
-                        SwitchPreference(
-                            title = "此歌曲识别有误，恢复原歌词",
-                            checked = blacklisted,
-                            onCheckedChange = { checked ->
-                                if (track != null) {
-                                    if (checked) {
-                                        LyricUpgradeBlacklist.add(
-                                            LyricUpgradeBlacklist.Entry(
-                                                id = track.id,
-                                                title = track.title,
-                                                artist = track.artist,
-                                                album = track.album
+                        if (upgraded) {
+                            CheckboxPreference(
+                                title = "此歌曲识别有误，恢复原歌词",
+                                checked = restoreOriginalLyrics,
+                                onCheckedChange = { restoreOriginalLyrics = it }
+                            )
+                        } else {
+                            CheckboxPreference(
+                                title = if (neteaseHasWordLyrics) {
+                                    "此歌曲实际没有逐字歌词，升级至其他平台逐字歌词"
+                                } else {
+                                    "升级至其他平台逐字歌词"
+                                },
+                                checked = forceUpgradeLyrics,
+                                onCheckedChange = { forceUpgradeLyrics = it }
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                        TextButton(
+                            text = "取消",
+                            onClick = { showLyricUpgradeSheet = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(20.dp))
+                        TextButton(
+                            text = "保存",
+                            onClick = {
+                                if (upgradeTrack != null) {
+                                    if (upgraded) {
+                                        if (restoreOriginalLyrics) {
+                                            LyricUpgradeBlacklist.add(
+                                                LyricUpgradeBlacklist.Entry(
+                                                    id = upgradeTrack.id,
+                                                    title = upgradeTrack.title,
+                                                    artist = upgradeTrack.artist,
+                                                    album = upgradeTrack.album
+                                                )
                                             )
-                                        )
+                                            LyricUpgradeRequiredList.remove(upgradeTrack.id)
+                                        } else {
+                                            LyricUpgradeBlacklist.remove(upgradeTrack.id)
+                                        }
                                     } else {
-                                        LyricUpgradeBlacklist.remove(track.id)
+                                        if (forceUpgradeLyrics) {
+                                            LyricUpgradeRequiredList.add(
+                                                LyricUpgradeRequiredList.Entry(
+                                                    id = upgradeTrack.id,
+                                                    title = upgradeTrack.title,
+                                                    artist = upgradeTrack.artist,
+                                                    album = upgradeTrack.album
+                                                )
+                                            )
+                                            LyricUpgradeBlacklist.remove(upgradeTrack.id)
+                                        } else {
+                                            LyricUpgradeRequiredList.remove(upgradeTrack.id)
+                                        }
                                     }
-                                    showLyricUpgradeSheet = false
                                     viewModel.loadLyrics()
                                 }
-                            }
+                                showLyricUpgradeSheet = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.textButtonColorsPrimary()
                         )
                     }
                 }
             }
-        }
+        )
 
         // 取消收藏确认对话框
         OverlayDialog(
@@ -2186,6 +2263,55 @@ private fun FmLikeButton(
             imageVector = if (isLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
             contentDescription = if (isLiked) "取消喜欢" else "喜欢",
             tint = if (isLiked) playerText else playerText.copy(alpha = 0.6f),
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+@Composable
+private fun PlayerFavoriteButton(
+    isLiked: Boolean,
+    playerText: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    IconButton(onClick = onClick, modifier = modifier.size(48.dp)) {
+        Icon(
+            imageVector = if (isLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
+            contentDescription = if (isLiked) "取消收藏" else "收藏",
+            tint = if (isLiked) playerText else playerText.copy(alpha = 0.6f),
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+@Composable
+private fun PlayerShareButton(
+    playerText: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick, modifier = modifier.size(48.dp)) {
+        Icon(
+            imageVector = MiuixIcons.Share,
+            contentDescription = "分享",
+            tint = playerText.copy(alpha = 0.6f),
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+@Composable
+private fun PlayerCommentButton(
+    playerText: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick, modifier = modifier.size(48.dp)) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.Comment,
+            contentDescription = "评论",
+            tint = playerText.copy(alpha = 0.6f),
             modifier = Modifier.size(24.dp)
         )
     }

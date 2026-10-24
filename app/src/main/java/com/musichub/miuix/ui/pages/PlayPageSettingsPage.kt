@@ -1,6 +1,7 @@
 package com.musichub.miuix.ui.pages
 
 import androidx.activity.compose.BackHandler
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -88,6 +90,7 @@ fun PlayPageSettingsPage(
     var rebindingAction by remember { mutableStateOf<ShortcutAction?>(null) }
     val shortcutFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
 
     LaunchedEffect(rebindingAction) {
         if (rebindingAction != null) {
@@ -103,7 +106,19 @@ fun PlayPageSettingsPage(
             .onPreviewKeyEvent { event ->
                 val action = rebindingAction ?: return@onPreviewKeyEvent false
                 if (event.nativeKeyEvent.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
-                KeyboardShortcutSettings.updateKey(action, event.nativeKeyEvent.keyCode)
+                val keyCode = event.nativeKeyEvent.keyCode
+                val conflict = ShortcutAction.entries.firstOrNull { other ->
+                    other != action && KeyboardShortcutSettings.keyFor(other) == keyCode
+                }
+                if (conflict != null) {
+                    Toast.makeText(
+                        context,
+                        "快捷键与「${conflict.title}」冲突，未保存",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    KeyboardShortcutSettings.updateKey(action, keyCode)
+                }
                 rebindingAction = null
                 focusManager.clearFocus()
                 true

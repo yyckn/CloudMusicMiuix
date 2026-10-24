@@ -150,6 +150,7 @@ object KugouLyricsApi {
                 tlyric = translation,
                 songTitle = track.title,
                 songArtist = track.artist,
+                songAlbum = track.album,
                 artistNames = track.artistNames
             )
             if (lyrics.lines.isEmpty()) return null
@@ -168,6 +169,7 @@ object KugouLyricsApi {
                 yrc = "",
                 songTitle = track.title,
                 songArtist = track.artist,
+                songAlbum = track.album,
                 artistNames = track.artistNames
             )
             if (lyrics.lines.isEmpty()) return null
