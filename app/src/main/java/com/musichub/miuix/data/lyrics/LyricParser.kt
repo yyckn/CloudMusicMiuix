@@ -243,6 +243,13 @@ object LyricParser {
         album = songAlbum
     )
 
+    /** 有些来源用 "//"、"///" 等占位符表示无翻译，需当作空翻译处理。 */
+    private fun normalizeTranslationText(text: String): String {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return ""
+        return if (trimmed.all { it == '/' || it == '／' }) "" else trimmed
+    }
+
     /** 解析 LRC 翻译为时间戳映射。 */
     private fun parseTranslation(tlyric: String): Map<Long, String> {
         val map = mutableMapOf<Long, String>()
@@ -254,7 +261,7 @@ object LyricParser {
             val tag = tagRegex.find(match.groupValues[1]) ?: continue
             val time = tag.groupValues[1].toLong() * 60_000L +
                 (tag.groupValues[2].toDouble() * 1000).toLong()
-            val text = match.groupValues[2].trim()
+            val text = normalizeTranslationText(match.groupValues[2])
             if (text.isNotEmpty()) {
                 map[time] = text
             }
@@ -369,7 +376,7 @@ object LyricParser {
                 val match = leadingTagsRegex.find(line) ?: continue
                 val tag = tagRegex.find(match.groupValues[1]) ?: continue
                 val time = toMillis(tag.groupValues[1], tag.groupValues[2])
-                val text = match.groupValues[2].trim()
+                val text = normalizeTranslationText(match.groupValues[2])
                 if (text.isNotEmpty()) {
                     tlyricMap[time] = text
                 }
@@ -651,7 +658,7 @@ object LyricParser {
                     val min = match.groupValues[1].toLong()
                     val sec = (match.groupValues[2].toDouble() * 1000).toLong()
                     val time = min * 60 * 1000 + sec
-                    val text = match.groupValues[3].trim()
+                    val text = normalizeTranslationText(match.groupValues[3])
                     if (text.isNotEmpty()) {
                         tlyricMap[time] = text
                     }

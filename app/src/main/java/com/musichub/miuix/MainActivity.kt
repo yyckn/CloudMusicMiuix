@@ -14,12 +14,14 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,7 +31,9 @@ import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSiz
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -37,10 +41,12 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -56,16 +62,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.CardDefaults
@@ -212,16 +225,54 @@ fun MainScreen(
     val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Settings)
     val railState = rememberNavigationRailState(initialValue = NavigationRailValue.Expanded)
     
-    // 使用实时宽度判断：≥840dp 视为平板使用侧栏；
-    // 600–839dp（阔折叠等）仍使用手机布局，便于底栏与播放条同行
+    // 宽度阈值：>600dp 视为平板；500–600dp 为阔屏手机；<500dp 为普通手机
     val configuration = LocalConfiguration.current
-    val useNavigationRail = configuration.screenWidthDp >= 840
+    val isTabletWidth = configuration.screenWidthDp > 600
+    val useFloatingBar = ThemeSettings.useFloatingBar
+    val floatingBarAlignment = ThemeSettings.floatingBarAlignmentIndex
+    val systemNavBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // 关闭悬浮底栏时，平板使用侧栏；打开悬浮底栏时全部使用悬浮样式
+    val useNavigationRail = !useFloatingBar && isTabletWidth
 
-    // 迷你播放条圆角/封面样式过渡：仅在手机主页面开启悬浮底栏时为 1
+    // 悬浮底栏上滑吸附状态（仅手机）
+    var floatingBarAttached by remember { mutableStateOf(false) }
+    LaunchedEffect(useFloatingBar, isTabletWidth, currentScreen) {
+        if (!useFloatingBar || isTabletWidth || currentScreen !is Screen.Main) {
+            floatingBarAttached = false
+        }
+    }
+
+    // 滑动页面时自动折叠/展开悬浮底栏（仅手机）
+    val pageScrollThreshold = with(LocalDensity.current) { 48.dp.toPx() }
+    val pageScrollConnection = remember(useFloatingBar, isTabletWidth, pageScrollThreshold) {
+        object : NestedScrollConnection {
+            private var accumulated = 0f
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                if (source != NestedScrollSource.UserInput || !useFloatingBar || isTabletWidth) {
+                    return Offset.Zero
+                }
+                // 手指上滑 = 页面向下滚动
+                accumulated += consumed.y
+                if (accumulated < -pageScrollThreshold) {
+                    floatingBarAttached = true
+                    accumulated = 0f
+                } else if (accumulated > pageScrollThreshold) {
+                    floatingBarAttached = false
+                    accumulated = 0f
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    // 迷你播放条圆角/封面样式过渡：开启悬浮底栏后所有页面保持悬浮样式
     val playerBarFloatingProgress by animateFloatAsState(
-        targetValue = if (!useNavigationRail && ThemeSettings.useFloatingBar &&
-            currentScreen is Screen.Main
-        ) 1f else 0f,
+        targetValue = if (useFloatingBar) 1f else 0f,
         animationSpec = tween(durationMillis = 350),
         label = "playerBarFloatingProgress"
     )
@@ -233,6 +284,26 @@ fun MainScreen(
     val liquidBackdrop = rememberLayerBackdrop {
         drawRect(surfaceColor)
         drawContent()
+    }
+    // 二级页面背景层（悬浮态用于液态玻璃，非悬浮态用于背景模糊）
+    val secondaryBackdrop = rememberLayerBackdrop {
+        drawRect(surfaceColor)
+        drawContent()
+    }
+    val secondaryFloatingLiquidBackdrop = if (useFloatingBar && enableBlur) {
+        secondaryBackdrop
+    } else {
+        null
+    }
+    val secondaryBlurBackdrop = if (!useFloatingBar && enableBlur) {
+        secondaryBackdrop
+    } else {
+        null
+    }
+    val secondaryLayerModifier = if (enableBlur) {
+        Modifier.layerBackdrop(secondaryBackdrop)
+    } else {
+        Modifier
     }
 
     // 导航到新页面的函数
@@ -314,7 +385,12 @@ fun MainScreen(
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = this@AnimatedContent,
                                         hasBottomBar = false,
-                                        hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode, floatingProgress = playerBarFloatingProgress
+                                        hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
+                            isFloatingStyle = useFloatingBar,
+                            liquidBackdrop = secondaryFloatingLiquidBackdrop,
+                            blurBackdrop = if (enableBlur) blurBackdrop else null,
+                            floatingProgress = playerBarFloatingProgress,
+                            floatingBottomMargin = 12.dp + systemNavBarPadding
                                     )
                                 }
                             ) { padding ->
@@ -421,6 +497,12 @@ fun MainScreen(
                                 }
                                 AnimatedContent(
                                     targetState = selectedTab,
+                                    modifier = Modifier
+                                        .then(
+                                            if (blurBackdrop != null) {
+                                                Modifier.layerBackdrop(blurBackdrop)
+                                            } else Modifier
+                                        ),
                                     transitionSpec = {
                                         if (targetState > initialState) {
                                             slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
@@ -506,26 +588,40 @@ fun MainScreen(
                     } else {
                         Scaffold(
                             bottomBar = {
-                                val playerBar: @Composable (Modifier, Boolean, Dp) -> Unit = { barModifier, floating, bottomMargin ->
-                                    PlayerBar(
-                                        playerState = viewModel.playerState,
-                                        onTogglePlayPause = { viewModel.togglePlayPause() },
-                                        onPlayerBarClick = { showPlayerPage = true },
-                                        onSwipeUp = { showPlayerPage = true },
-                                        onPlaylistClick = { showPlaylistSheet = true },
-                                        sharedTransitionScope = this@SharedTransitionLayout,
-                                        animatedVisibilityScope = this@AnimatedContent,
-                                        hasBottomBar = !floating,
-                                        isFloatingStyle = floating,
-                                        hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
-                                        blurBackdrop = null,
-                                        liquidBackdrop = if (floating && enableBlur) liquidBackdrop else null,
-                                        floatingProgress = playerBarFloatingProgress,
-                                        floatingBottomMargin = bottomMargin,
-                                        modifier = barModifier
-                                    )
-                                }
-                                if (ThemeSettings.useFloatingBar) {
+                                val playerBar: @Composable (Modifier, Boolean, Dp, Boolean, Boolean, Boolean) -> Unit =
+                                    { barModifier, floating, bottomMargin, compact, swipeEnabled, layoutSwipe ->
+                                        val swipeUpAction: () -> Unit = if (layoutSwipe) {
+                                            { floatingBarAttached = false }
+                                        } else {
+                                            { showPlayerPage = true }
+                                        }
+                                        val swipeDownAction: () -> Unit = if (layoutSwipe) {
+                                            { floatingBarAttached = true }
+                                        } else {
+                                            {}
+                                        }
+                                        PlayerBar(
+                                            playerState = viewModel.playerState,
+                                            onTogglePlayPause = { viewModel.togglePlayPause() },
+                                            onPlayerBarClick = { showPlayerPage = true },
+                                            onSwipeUp = swipeUpAction,
+                                            onSwipeDown = swipeDownAction,
+                                            onPlaylistClick = { showPlaylistSheet = true },
+                                            sharedTransitionScope = this@SharedTransitionLayout,
+                                            animatedVisibilityScope = this@AnimatedContent,
+                                            hasBottomBar = !floating,
+                                            isFloatingStyle = floating,
+                                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
+                                            blurBackdrop = if (!floating && enableBlur) blurBackdrop else null,
+                                            liquidBackdrop = if (floating && enableBlur) liquidBackdrop else null,
+                                            floatingProgress = playerBarFloatingProgress,
+                                            floatingBottomMargin = bottomMargin,
+                                            compact = compact,
+                                            enableSwipeUp = swipeEnabled,
+                                            modifier = barModifier
+                                        )
+                                    }
+                                if (useFloatingBar) {
                                     // 液态玻璃悬浮底栏
                                     val navBarBottomPadding = WindowInsets.navigationBars
                                         .asPaddingValues()
@@ -538,9 +634,8 @@ fun MainScreen(
                                     // 整体再向下移动 8dp，同时不低于系统导航栏
                                     val bottomPadding = (defaultBottomPadding - 8.dp)
                                         .coerceAtLeast(navBarBottomPadding)
-                                    val useSameRow = configuration.screenWidthDp >= 500
-                                    if (useSameRow) {
-                                        // 阔折叠等宽屏手机：底栏靠左，迷你播放条占据剩余宽度
+                                    if (isTabletWidth) {
+                                        // 平板：默认一行显示导航栏 + 迷你播放条
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -549,7 +644,12 @@ fun MainScreen(
                                                     end = 16.dp,
                                                     bottom = bottomPadding
                                                 ),
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = when (floatingBarAlignment) {
+                                                0 -> Arrangement.Start
+                                                2 -> Arrangement.End
+                                                else -> Arrangement.Center
+                                            }
                                         ) {
                                             FloatingTabsBar(
                                                 selectedIndex = selectedTab,
@@ -562,34 +662,112 @@ fun MainScreen(
                                                     detectTapGestures { }
                                                 }
                                             )
-                                            playerBar(Modifier.weight(1f), true, 0.dp)
+                                            playerBar(Modifier.widthIn(max = 600.dp), true, 0.dp, false, true, false)
                                         }
                                     } else {
-                                        Column {
-                                            playerBar(Modifier, true, 12.dp)
-                                            FloatingTabsBar(
-                                                selectedIndex = selectedTab,
-                                                onSelected = { selectedTab = it },
-                                                backdrop = liquidBackdrop,
-                                                isBlurEnabled = enableBlur,
-                                                tabs = tabs,
-                                                icons = icons,
-                                                modifier = Modifier
-                                                    .pointerInput(Unit) {
-                                                        detectTapGestures { }
-                                                    }
-                                                    .padding(
-                                                        start = 28.dp,
-                                                        end = 28.dp,
-                                                        bottom = bottomPadding
-                                                    )
-                                                    .align(Alignment.CenterHorizontally)
+                                        // 手机：默认两行，滚动/下滑后折叠为一行并只保留封面
+                                        BoxWithConstraints(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = bottomPadding)
+                                        ) {
+                                            val density = LocalDensity.current
+                                            var navWidthPx by remember { mutableIntStateOf(0) }
+                                            var navHeightPx by remember { mutableIntStateOf(0) }
+                                            var playerHeightPx by remember { mutableIntStateOf(0) }
+                                            val navWidth = if (navWidthPx > 0) with(density) { navWidthPx.toDp() } else 220.dp
+                                            val navHeight = if (navHeightPx > 0) with(density) { navHeightPx.toDp() } else 64.dp
+                                            val playerHeight = if (playerHeightPx > 0) with(density) { playerHeightPx.toDp() } else 66.dp
+                                            val expandedHeight = playerHeight + 12.dp + navHeight
+                                            val collapsedHeight = maxOf(playerHeight, navHeight)
+                                            val collapsedGroupWidth = navWidth + 88.dp
+                                            val alignedNavX = when (floatingBarAlignment) {
+                                                0 -> 16.dp
+                                                2 -> maxOf(16.dp, maxWidth - navWidth - 16.dp)
+                                                else -> maxOf(16.dp, (maxWidth - navWidth) / 2f)
+                                            }
+                                            val collapsedGroupX = when (floatingBarAlignment) {
+                                                0 -> 16.dp
+                                                2 -> maxOf(16.dp, maxWidth - collapsedGroupWidth - 16.dp)
+                                                else -> maxOf(16.dp, (maxWidth - collapsedGroupWidth) / 2f)
+                                            }
+                                            val collapsedPlayerX = collapsedGroupX + navWidth
+                                            val containerHeight by animateDpAsState(
+                                                targetValue = if (floatingBarAttached) collapsedHeight else expandedHeight,
+                                                animationSpec = tween(durationMillis = 280),
+                                                label = "bottomBarHeight"
                                             )
+                                            val playerWidth by animateDpAsState(
+                                                targetValue = if (floatingBarAttached) 88.dp else maxWidth,
+                                                animationSpec = tween(durationMillis = 280),
+                                                label = "playerWidth"
+                                            )
+                                            val playerX by animateDpAsState(
+                                                targetValue = if (floatingBarAttached) collapsedPlayerX else 0.dp,
+                                                animationSpec = tween(durationMillis = 280),
+                                                label = "playerX"
+                                            )
+                                            val playerY by animateDpAsState(
+                                                targetValue = if (floatingBarAttached) {
+                                                    maxOf(0.dp, (collapsedHeight - playerHeight) / 2f)
+                                                } else 0.dp,
+                                                animationSpec = tween(durationMillis = 280),
+                                                label = "playerY"
+                                            )
+                                            val navX by animateDpAsState(
+                                                targetValue = if (floatingBarAttached) collapsedGroupX else alignedNavX,
+                                                animationSpec = tween(durationMillis = 280),
+                                                label = "navX"
+                                            )
+                                            val navY by animateDpAsState(
+                                                targetValue = if (floatingBarAttached) {
+                                                    maxOf(0.dp, (collapsedHeight - navHeight) / 2f)
+                                                } else playerHeight + 12.dp,
+                                                animationSpec = tween(durationMillis = 280),
+                                                label = "navY"
+                                            )
+                                            val compactContent = playerWidth < maxWidth * 0.72f
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(containerHeight)
+                                            ) {
+                                                playerBar(
+                                                    Modifier
+                                                        .offset(x = playerX, y = playerY)
+                                                        .width(playerWidth)
+                                                        .onSizeChanged { playerHeightPx = it.height }
+                                                        .zIndex(1f),
+                                                    true,
+                                                    0.dp,
+                                                    compactContent,
+                                                    true,
+                                                    true
+                                                )
+                                                FloatingTabsBar(
+                                                    selectedIndex = selectedTab,
+                                                    onSelected = { selectedTab = it },
+                                                    backdrop = liquidBackdrop,
+                                                    isBlurEnabled = enableBlur,
+                                                    tabs = tabs,
+                                                    icons = icons,
+                                                    modifier = Modifier
+                                                        .offset(x = navX, y = navY)
+                                                        .onSizeChanged {
+                                                            navWidthPx = it.width
+                                                            navHeightPx = it.height
+                                                        }
+                                                        .pointerInput(Unit) {
+                                                            detectTapGestures { }
+                                                        }
+                                                )
+                                            }
                                         }
                                     }
                                 } else {
                                     Column {
-                                        playerBar(Modifier, false, 12.dp)
+                                        playerBar(Modifier, false, 12.dp, false, true, false)
                                         // 普通底栏（半透明模糊）
                                         BlurredBar(backdrop = blurBackdrop) {
                                             NavigationBar(
@@ -727,7 +905,8 @@ fun MainScreen(
                                         if (ThemeSettings.useFloatingBar && enableBlur) {
                                             Modifier.layerBackdrop(liquidBackdrop)
                                         } else Modifier
-                                    ),
+                                    )
+                                    .nestedScroll(pageScrollConnection),
                                 transitionSpec = {
                                     if (targetState > initialState) {
                                         slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
@@ -812,6 +991,14 @@ fun MainScreen(
                 is Screen.PlaylistDetail -> {
                     Scaffold(
                         bottomBar = {
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = when (floatingBarAlignment) {
+                                    0 -> Alignment.CenterStart
+                                    2 -> Alignment.CenterEnd
+                                    else -> Alignment.Center
+                                }
+                            ) {
                             PlayerBar(
                                 playerState = viewModel.playerState,
                                 onTogglePlayPause = { viewModel.togglePlayPause() },
@@ -821,8 +1008,15 @@ fun MainScreen(
                                 sharedTransitionScope = this@SharedTransitionLayout,
                                 animatedVisibilityScope = this@AnimatedContent,
                                 hasBottomBar = false,
-                                hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode, floatingProgress = playerBarFloatingProgress
+                                hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
+                            isFloatingStyle = useFloatingBar,
+                            liquidBackdrop = secondaryFloatingLiquidBackdrop,
+                            blurBackdrop = secondaryBlurBackdrop,
+                            floatingProgress = playerBarFloatingProgress,
+                            floatingBottomMargin = 12.dp + systemNavBarPadding,
+                            modifier = if (useFloatingBar && isTabletWidth) Modifier.widthIn(max = 600.dp) else Modifier
                             )
+                            }
                         }
                     ) { padding ->
                         // 播放列表抽屉
@@ -1004,7 +1198,7 @@ fun MainScreen(
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
                             isBackHandlerEnabled = !showPlayerPage,
-                            modifier = Modifier.padding(padding)
+                            modifier = Modifier.then(secondaryLayerModifier)
                         )
                     }
                 }
@@ -1240,6 +1434,14 @@ fun MainScreen(
             is Screen.Artist -> {
                 Scaffold(
                     bottomBar = {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = when (floatingBarAlignment) {
+                                0 -> Alignment.CenterStart
+                                2 -> Alignment.CenterEnd
+                                else -> Alignment.Center
+                            }
+                        ) {
                         PlayerBar(
                             playerState = viewModel.playerState,
                             onTogglePlayPause = { viewModel.togglePlayPause() },
@@ -1249,8 +1451,15 @@ fun MainScreen(
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
                             hasBottomBar = false,
-                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode, floatingProgress = playerBarFloatingProgress
+                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
+                            isFloatingStyle = useFloatingBar,
+                            liquidBackdrop = secondaryFloatingLiquidBackdrop,
+                            blurBackdrop = secondaryBlurBackdrop,
+                            floatingProgress = playerBarFloatingProgress,
+                            floatingBottomMargin = 12.dp + systemNavBarPadding,
+                            modifier = if (useFloatingBar && isTabletWidth) Modifier.widthIn(max = 600.dp) else Modifier
                         )
+                        }
                     }
                 ) { padding ->
                     val context = LocalContext.current
@@ -1416,13 +1625,21 @@ fun MainScreen(
                             viewModel.playTrack(track)
                         },
                         isBackHandlerEnabled = !showPlayerPage,
-                        modifier = Modifier.padding(padding)
+                        modifier = Modifier.then(secondaryLayerModifier)
                     )
                 }
             }
             is Screen.Album -> {
                 Scaffold(
                     bottomBar = {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = when (floatingBarAlignment) {
+                                0 -> Alignment.CenterStart
+                                2 -> Alignment.CenterEnd
+                                else -> Alignment.Center
+                            }
+                        ) {
                         PlayerBar(
                             playerState = viewModel.playerState,
                             onTogglePlayPause = { viewModel.togglePlayPause() },
@@ -1432,8 +1649,15 @@ fun MainScreen(
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
                             hasBottomBar = false,
-                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode, floatingProgress = playerBarFloatingProgress
+                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
+                            isFloatingStyle = useFloatingBar,
+                            liquidBackdrop = secondaryFloatingLiquidBackdrop,
+                            blurBackdrop = secondaryBlurBackdrop,
+                            floatingProgress = playerBarFloatingProgress,
+                            floatingBottomMargin = 12.dp + systemNavBarPadding,
+                            modifier = if (useFloatingBar && isTabletWidth) Modifier.widthIn(max = 600.dp) else Modifier
                         )
+                        }
                     }
                 ) { padding ->
                     val context = LocalContext.current
@@ -1598,13 +1822,21 @@ fun MainScreen(
                             viewModel.playTrack(track)
                         },
                         isBackHandlerEnabled = !showPlayerPage,
-                        modifier = Modifier.padding(padding)
+                        modifier = Modifier.then(secondaryLayerModifier)
                     )
                 }
             }
             is Screen.Comment -> {
                 Scaffold(
                     bottomBar = {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = when (floatingBarAlignment) {
+                                0 -> Alignment.CenterStart
+                                2 -> Alignment.CenterEnd
+                                else -> Alignment.Center
+                            }
+                        ) {
                         PlayerBar(
                             playerState = viewModel.playerState,
                             onTogglePlayPause = { viewModel.togglePlayPause() },
@@ -1614,8 +1846,15 @@ fun MainScreen(
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
                             hasBottomBar = false,
-                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode, floatingProgress = playerBarFloatingProgress
+                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
+                            isFloatingStyle = useFloatingBar,
+                            liquidBackdrop = secondaryFloatingLiquidBackdrop,
+                            blurBackdrop = secondaryBlurBackdrop,
+                            floatingProgress = playerBarFloatingProgress,
+                            floatingBottomMargin = 12.dp + systemNavBarPadding,
+                            modifier = if (useFloatingBar && isTabletWidth) Modifier.widthIn(max = 600.dp) else Modifier
                         )
+                        }
                     }
                 ) { padding ->
                     CommentPage(
@@ -1626,7 +1865,7 @@ fun MainScreen(
                                 currentScreen = Screen.Main
                             }
                         },
-                        modifier = Modifier.padding(padding)
+                        modifier = Modifier.then(secondaryLayerModifier)
                     )
                 }
             }

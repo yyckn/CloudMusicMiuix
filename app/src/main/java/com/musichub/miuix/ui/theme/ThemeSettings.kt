@@ -17,6 +17,7 @@ object ThemeSettings {
     private const val PREFS_NAME = "theme_settings"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_USE_FLOATING_BAR = "use_floating_bar"
+    private const val KEY_FLOATING_BAR_ALIGNMENT = "floating_bar_alignment"
     private const val KEY_FOLLOW_MONET = "follow_monet"
     private const val KEY_LYRIC_FONT_SIZE = "lyric_font_size"
     private const val KEY_LYRIC_TRANSLATION_RATIO = "lyric_translation_ratio"
@@ -31,7 +32,6 @@ object ThemeSettings {
     private const val KEY_PLAYER_COLOR_SCHEME = "player_color_scheme"
     private const val KEY_AUTO_CHECK_UPDATE = "auto_check_update"
     private const val KEY_FADE_ENABLED = "fade_enabled"
-    private const val KEY_AUDIO_EFFECT_PRESET = "audio_effect_preset"
     private const val KEY_LYRIC_SOURCE = "lyric_source_preference"
     private const val KEY_AUTO_UPGRADE_LYRICS = "auto_upgrade_lyrics"
     private const val KEY_QQ_LYRICS_ENABLED = "qq_lyrics_enabled"
@@ -43,7 +43,11 @@ object ThemeSettings {
     var themeModeIndex by mutableIntStateOf(2)
         private set
 
-    var useFloatingBar by mutableStateOf(false)
+    var useFloatingBar by mutableStateOf(true)
+        private set
+
+    // 悬浮底栏对齐方向: 0=居左, 1=居中, 2=居右
+    var floatingBarAlignmentIndex by mutableIntStateOf(1)
         private set
 
     // 跟随系统莫奈取色
@@ -124,16 +128,13 @@ object ThemeSettings {
     var fadeEnabled by mutableStateOf(false)
         private set
 
-    // 当前音效预设 id（默认音效为 "default"）
-    var audioEffectPresetId by mutableStateOf("default")
-        private set
-
     private var prefs: SharedPreferences? = null
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         themeModeIndex = prefs?.getInt(KEY_THEME_MODE, 2) ?: 2
-        useFloatingBar = prefs?.getBoolean(KEY_USE_FLOATING_BAR, false) ?: false
+        useFloatingBar = prefs?.getBoolean(KEY_USE_FLOATING_BAR, true) ?: true
+        floatingBarAlignmentIndex = prefs?.getInt(KEY_FLOATING_BAR_ALIGNMENT, 1) ?: 1
         followMonet = prefs?.getBoolean(KEY_FOLLOW_MONET, true) ?: true
         lyricFontSize = prefs?.getInt(KEY_LYRIC_FONT_SIZE, 32) ?: 32
         lyricTranslationRatio = prefs?.getInt(KEY_LYRIC_TRANSLATION_RATIO, 60) ?: 60
@@ -154,7 +155,6 @@ object ThemeSettings {
         playerColorSchemeIndex = prefs?.getInt(KEY_PLAYER_COLOR_SCHEME, 2) ?: 2
         autoCheckUpdate = prefs?.getBoolean(KEY_AUTO_CHECK_UPDATE, true) ?: true
         fadeEnabled = prefs?.getBoolean(KEY_FADE_ENABLED, false) ?: false
-        audioEffectPresetId = prefs?.getString(KEY_AUDIO_EFFECT_PRESET, "default") ?: "default"
     }
 
     fun updateThemeModeIndex(index: Int) {
@@ -165,6 +165,11 @@ object ThemeSettings {
     fun updateUseFloatingBar(value: Boolean) {
         useFloatingBar = value
         prefs?.edit()?.putBoolean(KEY_USE_FLOATING_BAR, value)?.apply()
+    }
+
+    fun updateFloatingBarAlignment(index: Int) {
+        floatingBarAlignmentIndex = index
+        prefs?.edit()?.putInt(KEY_FLOATING_BAR_ALIGNMENT, index)?.apply()
     }
 
     fun updateFollowMonet(value: Boolean) {
@@ -265,11 +270,6 @@ object ThemeSettings {
     fun updateFadeEnabled(value: Boolean) {
         fadeEnabled = value
         prefs?.edit()?.putBoolean(KEY_FADE_ENABLED, value)?.apply()
-    }
-
-    fun updateAudioEffectPresetId(id: String) {
-        audioEffectPresetId = id
-        prefs?.edit()?.putString(KEY_AUDIO_EFFECT_PRESET, id)?.apply()
     }
 }
 

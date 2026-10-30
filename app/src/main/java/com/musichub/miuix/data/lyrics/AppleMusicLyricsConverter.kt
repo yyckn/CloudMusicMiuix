@@ -42,7 +42,9 @@ object AppleMusicLyricsConverter {
                 i == source.lastIndex -> start + LAST_LINE_DURATION
                 else -> start + DEFAULT_LINE_DURATION
             }.coerceAtLeast(start)
-            val translation = line.translation.ifBlank { null }
+            val translation = line.translation.takeIf {
+                it.isNotBlank() && !it.trim().all { c -> c == '/' || c == '／' }
+            }
             val phonetic = line.phonetic.ifBlank { null }
 
             val syllables = if (wordByWord) {

@@ -236,7 +236,9 @@ class LyriconProviderManager(private val context: Context) {
                     duration = (endAt - line.startAt).coerceAtLeast(0L),
                     text = lineText,
                     words = words,
-                    translation = line.translation.takeIf { it.isNotEmpty() },
+                    translation = line.translation.takeIf {
+                        it.isNotEmpty() && !it.trim().all { c -> c == '/' || c == '／' }
+                    },
                     roma = line.phonetic.takeIf { it.isNotEmpty() }
                 )
             )

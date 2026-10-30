@@ -231,6 +231,7 @@ fun ArtistPage(
     val blurBackdrop = rememberPageBlurBackdrop()
 
     Scaffold(
+        modifier = modifier,
         topBar = {
             BlurredBar(backdrop = blurBackdrop) {
                 TopAppBar(

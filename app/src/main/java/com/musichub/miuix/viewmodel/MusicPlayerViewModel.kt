@@ -22,7 +22,6 @@ import com.musichub.miuix.data.model.SongLyrics
 import com.musichub.miuix.data.lyrics.LyricsRepository
 import com.musichub.miuix.data.model.Track
 import com.musichub.miuix.service.MediaPlaybackService
-import com.musichub.miuix.ui.theme.ThemeSettings
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -205,7 +204,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             mediaPlaybackService = binder.getService()
             isBound = true
             mediaPlaybackService?.setPlaybackSpeed(playbackSpeed)
-            mediaPlaybackService?.setAudioEffectPreset(ThemeSettings.audioEffectPresetId)
             
             // 设置回调，处理系统控制器的上一首/下一首
             mediaPlaybackService?.onTrackChangedListener = object : MediaPlaybackService.OnTrackChangedListener {
@@ -1480,12 +1478,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         playbackSpeed = normalized
         prefs.edit().putFloat("playback_speed", normalized).apply()
         mediaPlaybackService?.setPlaybackSpeed(normalized)
-    }
-
-    /** 切换音效预设。 */
-    fun updateAudioEffectPreset(presetId: String) {
-        ThemeSettings.updateAudioEffectPresetId(presetId)
-        mediaPlaybackService?.setAudioEffectPreset(presetId)
     }
 
     /** 设置音质选择索引。 */

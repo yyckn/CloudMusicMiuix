@@ -1255,15 +1255,9 @@ fun PlayerPage(
                                             Spacer(modifier = Modifier.width(16.dp))
                                             IconButton(onClick = { showLyricsInFullScreen = !showLyricsInFullScreen }, modifier = Modifier.size(48.dp)) { Icon(imageVector = if (showLyricsInFullScreen) MiuixIcons.NotesFill else MiuixIcons.Notes, contentDescription = "歌词", tint = if (showLyricsInFullScreen) playerText else playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                             Spacer(modifier = Modifier.width(16.dp))
-                                            PlayerFavoriteButton(
-                                                isLiked = isCurrentTrackLiked,
-                                                playerText = playerText,
-                                                onClick = {
-                                                    if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack()
-                                                }
-                                            )
+                                            IconButton(onClick = onSwitchPlayModeSafe, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) { Icon(imageVector = when (playMode) { 0 -> MiuixIcons.Sort; 1 -> MiuixIcons.Merge; 2 -> MiuixIcons.Replace; else -> MiuixIcons.Sort }, contentDescription = when (playMode) { 0 -> "顺序播放"; 1 -> "乱序播放"; 2 -> "单曲循环"; else -> "顺序播放" }, tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                             Spacer(modifier = Modifier.width(16.dp))
-                                            PlayerShareButton(playerText) { onShare() }
+                                            IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) { Icon(imageVector = MiuixIcons.ListView, contentDescription = "播放列表", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                             Spacer(modifier = Modifier.width(16.dp))
                                         }
                                         IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.More, contentDescription = "更多", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
@@ -1596,15 +1590,33 @@ fun PlayerPage(
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(16.dp))
-                                PlayerFavoriteButton(
-                                    isLiked = isCurrentTrackLiked,
-                                    playerText = playerText,
-                                    onClick = {
-                                        if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack()
-                                    }
-                                )
+                                IconButton(onClick = onSwitchPlayModeSafe, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) {
+                                    Icon(
+                                        imageVector = when (playMode) {
+                                            0 -> MiuixIcons.Sort
+                                            1 -> MiuixIcons.Merge
+                                            2 -> MiuixIcons.Replace
+                                            else -> MiuixIcons.Sort
+                                        },
+                                        contentDescription = when (playMode) {
+                                            0 -> "顺序播放"
+                                            1 -> "乱序播放"
+                                            2 -> "单曲循环"
+                                            else -> "顺序播放"
+                                        },
+                                        tint = playerText.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.width(16.dp))
-                                PlayerShareButton(playerText) { onShare() }
+                                IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) {
+                                    Icon(
+                                        imageVector = MiuixIcons.ListView,
+                                        contentDescription = "播放列表",
+                                        tint = playerText.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) {

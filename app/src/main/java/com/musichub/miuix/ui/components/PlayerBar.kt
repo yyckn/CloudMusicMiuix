@@ -71,6 +71,7 @@ fun PlayerBar(
     onTogglePlayPause: () -> Unit,
     onPlayerBarClick: () -> Unit = {},
     onSwipeUp: () -> Unit = {},
+    onSwipeDown: () -> Unit = {},
     onPlaylistClick: () -> Unit = {},
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
@@ -81,6 +82,8 @@ fun PlayerBar(
     liquidBackdrop: Backdrop? = null,
     floatingProgress: Float = if (isFloatingStyle) 1f else 0f,
     floatingBottomMargin: Dp = 12.dp,
+    compact: Boolean = false,
+    enableSwipeUp: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     if (playerState.currentTrack != null) {
@@ -99,6 +102,8 @@ fun PlayerBar(
         val coverSize = lerp(48.dp, 44.dp, floatingFraction)
         val coverCorner = lerp(8.dp, 10.dp, floatingFraction)
         val liquidContainerColor = MiuixTheme.colorScheme.surfaceContainer.copy(0.4f)
+        // 非液态玻璃状态下使用更透明的背景
+        val translucentBarColor = MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
         val liquidModifier = if (liquidBackdrop != null) {
             Modifier.drawBackdrop(
                 backdrop = liquidBackdrop,
@@ -124,7 +129,7 @@ fun PlayerBar(
                 blurRadius = 25f,
                 colors = BlurColors(
                     blendColors = listOf(
-                        BlendColorEntry(color = MiuixTheme.colorScheme.surfaceVariant.copy(0.87f)),
+                        BlendColorEntry(color = MiuixTheme.colorScheme.surfaceVariant.copy(0.72f)),
                     ),
                 ),
             )
@@ -149,7 +154,9 @@ fun PlayerBar(
             blurModifier
         }
 
-        Column(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = modifier.fillMaxWidth()
+        ) {
             with(sharedTransitionScope) {
                 Surface(
                     onClick = { onPlayerBarClick() },
@@ -165,25 +172,66 @@ fun PlayerBar(
                             sharedContentState = rememberSharedContentState(key = "player_bar"),
                             animatedVisibilityScope = animatedVisibilityScope
                         )
-                        .pointerInput(Unit) {
-                            detectVerticalDragGestures(
-                                onVerticalDrag = { change, dragAmount ->
-                                    if (dragAmount < -10) {
-                                        change.consume()
-                                        onSwipeUp()
-                                    }
+                        .then(
+                            if (enableSwipeUp) {
+                                Modifier.pointerInput(Unit) {
+                                    var totalDrag = 0f
+                                    var triggered = false
+                                    val threshold = 30.dp.toPx()
+                                    detectVerticalDragGestures(
+                                        onDragStart = {
+                                            totalDrag = 0f
+                                            triggered = false
+                                        },
+                                        onVerticalDrag = { change, dragAmount ->
+                                            totalDrag += dragAmount
+                                            change.consume()
+                                            if (!triggered && totalDrag < -threshold) {
+                                                triggered = true
+                                                onSwipeUp()
+                                            } else if (!triggered && totalDrag > threshold) {
+                                                triggered = true
+                                                onSwipeDown()
+                                            }
+                                        },
+                                        onDragEnd = {
+                                            totalDrag = 0f
+                                            triggered = false
+                                        },
+                                        onDragCancel = {
+                                            totalDrag = 0f
+                                            triggered = false
+                                        }
+                                    )
                                 }
-                            )
-                        }
+                            } else {
+                                Modifier
+                            }
+                        )
                         .then(backgroundModifier),
                     shape = surfaceShape,
                     color = if (liquidBackdrop != null || blurBackdrop != null) {
                         Color.Transparent
                     } else {
-                        MiuixTheme.colorScheme.surfaceVariant
+                        translucentBarColor
                     }
                 ) {
                     Column {
+                        if (compact) {
+                            Box(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
+                            ) {
+                                AsyncImage(
+                                    model = playerState.currentTrack?.imgUrl,
+                                    contentDescription = playerState.currentTrack?.title,
+                                    modifier = Modifier
+                                        .size(coverSize)
+                                        .clip(RoundedCornerShape(coverCorner)),
+                                    contentScale = ContentScale.Crop,
+                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                )
+                            }
+                        } else {
                         // 顶部进度条
                         val progress = if (playerState.duration > 0) {
                             playerState.currentPosition.toFloat() / playerState.duration.toFloat()
@@ -282,6 +330,7 @@ fun PlayerBar(
                                 }
                             }
                         }
+                        }
                     }
                 }
             }
@@ -292,7 +341,13 @@ fun PlayerBar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(navBarBottomPadding)
-                        .background(MiuixTheme.colorScheme.surfaceVariant)
+                        .then(
+                            if (blurBackdrop != null) {
+                                blurModifier
+                            } else {
+                                Modifier.background(translucentBarColor)
+                            }
+                        )
                 )
             }
         }

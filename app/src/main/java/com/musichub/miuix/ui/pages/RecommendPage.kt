@@ -35,9 +35,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import com.musichub.miuix.ui.components.BlurredBar
 import com.musichub.miuix.ui.components.pageLayerBackdrop
 import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
@@ -764,7 +769,8 @@ private fun PlayModeRow(
                 title = "每日推荐",
                 subtitle = "每天为你精选",
                 gradientColor = dailyColor,
-                onClick = onDailyRecommendClick
+                onClick = onDailyRecommendClick,
+                backgroundCoverUrl = dailyCover
             ) {
                 if (!dailyCover.isNullOrEmpty()) {
                     AsyncImage(
@@ -836,6 +842,7 @@ private fun PlayModeCard(
     gradientColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    backgroundCoverUrl: String? = null,
     cover: @Composable () -> Unit
 ) {
     val onColor = Color.White
@@ -845,49 +852,103 @@ private fun PlayModeCard(
         showIndication = true,
         onClick = onClick
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-        ) {
-            cover()
-            // 底部 80%-100% 渐变：透明 → 颜色（与下方标题区背景衔接）
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0.8f to Color.Transparent,
-                            1f to gradientColor
-                        )
-                    )
-            )
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(gradientColor)
-                .padding(horizontal = 14.dp, vertical = 12.dp)
-        ) {
-            Text(
-                text = title,
-                style = MiuixTheme.textStyles.body2,
-                fontWeight = FontWeight.Medium,
-                color = onColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
-            if (subtitle.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = subtitle,
-                    style = MiuixTheme.textStyles.footnote2,
-                    color = onColor.copy(alpha = 0.75f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
+        Box(modifier = Modifier.fillMaxWidth()) {
+            // 每日推荐：用封面放大裁切、模糊、压暗作为整张卡片背景
+            if (!backgroundCoverUrl.isNullOrEmpty()) {
+                AsyncImage(
+                    model = backgroundCoverUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .matchParentSize()
+                        .blur(40.dp),
+                    contentScale = ContentScale.Crop
                 )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.28f),
+                                    Color.Black.copy(alpha = 0.5f)
+                                )
+                            )
+                        )
+                )
+            }
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                ) {
+                    if (backgroundCoverUrl.isNullOrEmpty()) {
+                        cover()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        0.8f to Color.Transparent,
+                                        1f to gradientColor
+                                    )
+                                )
+                        )
+                    } else {
+                        // 封面底部渐隐：0.8 处不透明 → 1.0 处完全透明，露出模糊背景
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+                                .drawWithContent {
+                                    drawContent()
+                                    drawRect(
+                                        brush = Brush.verticalGradient(
+                                            0.8f to Color.Black,
+                                            1f to Color.Transparent
+                                        ),
+                                        blendMode = BlendMode.DstIn
+                                    )
+                                }
+                        ) {
+                            cover()
+                        }
+                    }
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (backgroundCoverUrl.isNullOrEmpty()) {
+                                Modifier.background(gradientColor)
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        text = title,
+                        style = MiuixTheme.textStyles.body2,
+                        fontWeight = FontWeight.Medium,
+                        color = onColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (subtitle.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = subtitle,
+                            style = MiuixTheme.textStyles.footnote2,
+                            color = onColor.copy(alpha = 0.75f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
             }
         }
     }

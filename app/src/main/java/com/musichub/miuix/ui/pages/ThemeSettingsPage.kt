@@ -50,6 +50,9 @@ fun ThemeSettingsPage(
     val themeModeOptions = remember {
         listOf("浅色模式", "深色模式", "跟随系统")
     }
+    val floatingBarAlignOptions = remember {
+        listOf("居左", "居中", "居右")
+    }
 
     BackHandler {
         onBackClick()
@@ -165,6 +168,14 @@ fun ThemeSettingsPage(
                         },
                         onClick = { ThemeSettings.updateUseFloatingBar(!ThemeSettings.useFloatingBar) }
                     )
+                    if (ThemeSettings.useFloatingBar) {
+                        WindowDropdownPreference(
+                            title = "底栏对齐方向",
+                            items = floatingBarAlignOptions,
+                            selectedIndex = ThemeSettings.floatingBarAlignmentIndex,
+                            onSelectedIndexChange = { ThemeSettings.updateFloatingBarAlignment(it) }
+                        )
+                    }
                 }
             }
         }

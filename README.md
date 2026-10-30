@@ -18,7 +18,7 @@
 
 **MusicHub for Miuix**（以下简称 MusicHub）是一款使用 Kotlin 与 Jetpack Compose 开发的第三方网易云音乐客户端。界面完全基于 [Miuix](https://compose-miuix-ui.github.io/miuix/) 组件库构建，力求在 Android 上带来接近 MIUI / HyperOS 系统级音乐应用的体验。
 
-项目支持手机、折叠屏与平板布局，内置完整的播放、歌词、歌单、音乐云盘、多账号与音效能力。
+项目支持手机、折叠屏与平板布局，内置完整的播放、歌词、歌单、音乐云盘与多账号能力。
 
 > 当前版本：**1.2.2**（versionCode 54）  
 > 更新日志见 [`updatelog.json`](updatelog.json)
@@ -39,7 +39,6 @@
 - 基于 Media3 ExoPlayer 的在线播放
 - 后台播放、通知栏控制、耳机按键、音频焦点处理
 - 播放速度、渐入渐出、音质选择
-- 音效预设：默认、流行、摇滚、爵士、古典、音乐厅、低音增强、人声、夜间
 - 播放队列、收藏、分享、下载
 
 ### 歌词
@@ -122,7 +121,7 @@ app/src/main/java/com/musichub/miuix/
 │   ├── api/          # 网易云等接口与加密
 │   ├── lyrics/       # 歌词解析、来源选择、排除规则
 │   └── model/        # 数据模型
-├── service/          # 播放服务、音效、Lyricon 词幕
+├── service/          # 播放服务、Lyricon 词幕
 ├── ui/
 │   ├── components/   # 通用组件（播放条、歌词视图等）
 │   ├── pages/        # 页面
