@@ -1935,7 +1935,8 @@ object NeteaseApi {
                         artistNames = artistNames,
                         artistIds = artistNames.mapIndexed { index, _ ->
                             if (index == 0) "neartist_$artistId" else "neartist_0"
-                        }
+                        },
+                        isCloudDisk = true
                     )
                 )
             } catch (e: Exception) {
@@ -2063,13 +2064,22 @@ object NeteaseApi {
             val yrc = json.lyricField("yrc")
             val tlyric = json.lyricField("tlyric")
             val ytlrc = json.lyricField("ytlrc")
+            val romalrc = json.lyricField("romalrc")
+            val yromalrc = json.lyricField("yromalrc")
 
             // 逐字歌词优先使用配套的 ytlrc（时间戳与 yrc 行边界对齐）
             val translation = if (ytlrc.isNotEmpty()) ytlrc else tlyric
+            // 罗马音优先使用逐字配套的 yromalrc；可在设置中关闭
+            val phonetic = if (com.musichub.miuix.ui.theme.ThemeSettings.showJapaneseRomaji) {
+                if (yromalrc.isNotEmpty()) yromalrc else romalrc
+            } else {
+                ""
+            }
 
             android.util.Log.d(
                 "NeteaseApi",
-                "getSongLyric - lrc=${lrc.length}, yrc=${yrc.length}, tlyric=${tlyric.length}, ytlrc=${ytlrc.length}"
+                "getSongLyric - lrc=${lrc.length}, yrc=${yrc.length}, tlyric=${tlyric.length}, " +
+                    "ytlrc=${ytlrc.length}, romalrc=${romalrc.length}, yromalrc=${yromalrc.length}"
             )
 
             // 统一交给 LyricParser 处理（各平台通用）
@@ -2080,7 +2090,8 @@ object NeteaseApi {
                 songTitle = songTitle,
                 songArtist = songArtist,
                 songAlbum = songAlbum,
-                artistNames = artistNames
+                artistNames = artistNames,
+                phonetic = phonetic
             )
 
             android.util.Log.d(
@@ -2100,7 +2111,9 @@ object NeteaseApi {
         val lrc: String = "",
         val yrc: String = "",
         val tlyric: String = "",
-        val ytlrc: String = ""
+        val ytlrc: String = "",
+        val romalrc: String = "",
+        val yromalrc: String = ""
     )
 
     /** 获取网易云原始歌词（不经过任何处理）。 */
@@ -2115,7 +2128,9 @@ object NeteaseApi {
                     lrc = json.lyricField("lrc"),
                     yrc = json.lyricField("yrc"),
                     tlyric = json.lyricField("tlyric"),
-                    ytlrc = json.lyricField("ytlrc")
+                    ytlrc = json.lyricField("ytlrc"),
+                    romalrc = json.lyricField("romalrc"),
+                    yromalrc = json.lyricField("yromalrc")
                 )
             )
         } catch (e: Exception) {
@@ -2145,11 +2160,11 @@ object NeteaseApi {
                 .add("cp", "false")
                 .add("tv", "0")
                 .add("lv", "0")
-                .add("rv", "0")
+                .add("rv", "1")
                 .add("kv", "0")
                 .add("yv", "0")
                 .add("ytv", "0")
-                .add("yrv", "0")
+                .add("yrv", "1")
                 .build()
             val request = Request.Builder()
                 .url("https://music.163.com/api/song/lyric/v1")
@@ -2171,7 +2186,7 @@ object NeteaseApi {
         // 2) eapi（部分设备/网络环境走 eapi 更稳定）
         try {
             val eapiPath = "/api/song/lyric/v1"
-            val reqData = """{"id":$id,"cp":false,"tv":0,"lv":0,"rv":0,"kv":0,"yv":0,"ytv":0,"yrv":0}"""
+            val reqData = """{"id":$id,"cp":false,"tv":0,"lv":0,"rv":1,"kv":0,"yv":0,"ytv":0,"yrv":1}"""
             val encrypted = NeteaseCrypto.eapi(eapiPath, reqData)
             val body = FormBody.Builder()
                 .add("params", encrypted["params"]!!)
@@ -2191,7 +2206,7 @@ object NeteaseApi {
 
         // 3) 回退：旧版 weapi 接口
         return try {
-            val reqData = """{"id":$id,"lv":-1,"tv":-1,"yv":-1,"ytv":-1,"yrv":-1,"csrf_token":""}"""
+            val reqData = """{"id":$id,"lv":-1,"tv":-1,"rv":-1,"yv":-1,"ytv":-1,"yrv":-1,"csrf_token":""}"""
             val encrypted = NeteaseCrypto.weapi(reqData)
             val body = FormBody.Builder()
                 .add("params", encrypted["params"]!!)

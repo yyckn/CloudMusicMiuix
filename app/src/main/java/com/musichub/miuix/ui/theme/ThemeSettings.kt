@@ -31,10 +31,13 @@ object ThemeSettings {
     private const val KEY_PLAYER_COLOR_SCHEME = "player_color_scheme"
     private const val KEY_AUTO_CHECK_UPDATE = "auto_check_update"
     private const val KEY_FADE_ENABLED = "fade_enabled"
+    private const val KEY_AUDIO_EFFECT_PRESET = "audio_effect_preset"
     private const val KEY_LYRIC_SOURCE = "lyric_source_preference"
     private const val KEY_AUTO_UPGRADE_LYRICS = "auto_upgrade_lyrics"
     private const val KEY_QQ_LYRICS_ENABLED = "qq_lyrics_enabled"
     private const val KEY_KUGOU_LYRICS_ENABLED = "kugou_lyrics_enabled"
+    private const val KEY_SHOW_JAPANESE_ROMAJI = "show_japanese_romaji"
+    private const val KEY_JAPANESE_NO_UPGRADE = "japanese_no_upgrade"
 
     // 0 = 浅色模式, 1 = 深色模式, 2 = 跟随系统
     var themeModeIndex by mutableIntStateOf(2)
@@ -71,6 +74,14 @@ object ThemeSettings {
         private set
 
     var kugouLyricsEnabled by mutableStateOf(true)
+        private set
+
+    // 日语歌曲显示罗马音（由网易云提供）
+    var showJapaneseRomaji by mutableStateOf(true)
+        private set
+
+    // 日语歌曲不升级为其他平台的逐字歌词（用于保留网易云罗马音）
+    var japaneseNoUpgrade by mutableStateOf(false)
         private set
 
     // 是否使用圆形封面
@@ -113,6 +124,10 @@ object ThemeSettings {
     var fadeEnabled by mutableStateOf(false)
         private set
 
+    // 当前音效预设 id（默认音效为 "default"）
+    var audioEffectPresetId by mutableStateOf("default")
+        private set
+
     private var prefs: SharedPreferences? = null
 
     fun init(context: Context) {
@@ -132,11 +147,14 @@ object ThemeSettings {
         autoUpgradeLyrics = prefs?.getBoolean(KEY_AUTO_UPGRADE_LYRICS, true) ?: true
         qqLyricsEnabled = prefs?.getBoolean(KEY_QQ_LYRICS_ENABLED, true) ?: true
         kugouLyricsEnabled = prefs?.getBoolean(KEY_KUGOU_LYRICS_ENABLED, true) ?: true
+        showJapaneseRomaji = prefs?.getBoolean(KEY_SHOW_JAPANESE_ROMAJI, true) ?: true
+        japaneseNoUpgrade = prefs?.getBoolean(KEY_JAPANESE_NO_UPGRADE, false) ?: false
         showCastButton = prefs?.getBoolean(KEY_SHOW_CAST_BUTTON, true) ?: true
         showQuality = prefs?.getBoolean(KEY_SHOW_QUALITY, true) ?: true
         playerColorSchemeIndex = prefs?.getInt(KEY_PLAYER_COLOR_SCHEME, 2) ?: 2
         autoCheckUpdate = prefs?.getBoolean(KEY_AUTO_CHECK_UPDATE, true) ?: true
         fadeEnabled = prefs?.getBoolean(KEY_FADE_ENABLED, false) ?: false
+        audioEffectPresetId = prefs?.getString(KEY_AUDIO_EFFECT_PRESET, "default") ?: "default"
     }
 
     fun updateThemeModeIndex(index: Int) {
@@ -214,6 +232,16 @@ object ThemeSettings {
         prefs?.edit()?.putBoolean(KEY_KUGOU_LYRICS_ENABLED, value)?.apply()
     }
 
+    fun updateShowJapaneseRomaji(value: Boolean) {
+        showJapaneseRomaji = value
+        prefs?.edit()?.putBoolean(KEY_SHOW_JAPANESE_ROMAJI, value)?.apply()
+    }
+
+    fun updateJapaneseNoUpgrade(value: Boolean) {
+        japaneseNoUpgrade = value
+        prefs?.edit()?.putBoolean(KEY_JAPANESE_NO_UPGRADE, value)?.apply()
+    }
+
     fun updateShowCastButton(value: Boolean) {
         showCastButton = value
         prefs?.edit()?.putBoolean(KEY_SHOW_CAST_BUTTON, value)?.apply()
@@ -237,6 +265,11 @@ object ThemeSettings {
     fun updateFadeEnabled(value: Boolean) {
         fadeEnabled = value
         prefs?.edit()?.putBoolean(KEY_FADE_ENABLED, value)?.apply()
+    }
+
+    fun updateAudioEffectPresetId(id: String) {
+        audioEffectPresetId = id
+        prefs?.edit()?.putString(KEY_AUDIO_EFFECT_PRESET, id)?.apply()
     }
 }
 

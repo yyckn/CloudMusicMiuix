@@ -237,6 +237,8 @@ private fun buildRawLyricsText(raw: NeteaseApi.RawLyrics): String {
     appendSection("LRC", raw.lrc)
     appendSection("翻译 YTLRC", raw.ytlrc)
     appendSection("翻译 TLYRIC", raw.tlyric)
+    appendSection("罗马音 YROMALRC", raw.yromalrc)
+    appendSection("罗马音 ROMALRC", raw.romalrc)
 
     return if (builder.isEmpty()) "未获取到歌词" else builder.toString()
 }

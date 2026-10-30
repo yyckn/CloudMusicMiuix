@@ -55,6 +55,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     private var errorRetryCount = 0
     private var fadeJob: Job? = null
     private var pendingFadeIn = false
+    private val audioEffectController = AudioEffectController()
 
     private val media3AudioAttributes = Media3AudioAttributes.Builder()
         .setUsage(C.USAGE_MEDIA)
@@ -76,6 +77,8 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                     updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
                 }
                 Player.STATE_READY -> {
+                    // 播放就绪后兜底同步一次音频会话，确保音效挂载
+                    player?.let { audioEffectController.onAudioSessionChanged(it.audioSessionId) }
                     val state = if (isPlaying) {
                         PlaybackStateCompat.STATE_PLAYING
                     } else {
@@ -101,6 +104,10 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 }
                 Player.STATE_IDLE -> Unit
             }
+        }
+
+        override fun onAudioSessionIdChanged(audioSessionId: Int) {
+            audioEffectController.onAudioSessionChanged(audioSessionId)
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -338,12 +345,15 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 setHandleAudioBecomingNoisy(true)
                 setPlaybackSpeed(playbackSpeed)
                 addListener(playerListener)
+                audioEffectController.setPresetById(ThemeSettings.audioEffectPresetId)
+                audioEffectController.onAudioSessionChanged(audioSessionId)
             }
     }
 
     private fun releasePlayer() {
         cancelFade()
         pendingFadeIn = false
+        audioEffectController.release()
         player?.removeListener(playerListener)
         player?.release()
         player = null
@@ -395,6 +405,11 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         updatePlaybackState(
             if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
         )
+    }
+
+    /** 切换音效预设。 */
+    fun setAudioEffectPreset(presetId: String) {
+        audioEffectController.setPresetById(presetId)
     }
 
     fun getPlaybackSpeed(): Float = playbackSpeed

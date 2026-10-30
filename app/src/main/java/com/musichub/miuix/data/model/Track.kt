@@ -14,7 +14,8 @@ data class Track(
     val duration: Long = 0,
     val isVip: Boolean = false,
     val artistNames: List<String> = emptyList(), // 原始歌手名称列表
-    val artistIds: List<String> = emptyList() // 原始歌手ID列表
+    val artistIds: List<String> = emptyList(), // 原始歌手ID列表
+    val isCloudDisk: Boolean = false // 是否为音乐云盘歌曲
 )
 
 data class Playlist(
@@ -74,7 +75,8 @@ data class LyricLine(
     val startAt: Long, // 毫秒
     val endAt: Long = 0, // 毫秒
     val words: List<LyricWord>? = null, // 逐字歌词
-    val isArtistLine: Boolean = false // 是否为歌手行
+    val isArtistLine: Boolean = false, // 是否为歌手行
+    val phonetic: String = "" // 音译/罗马音副行
 )
 
 data class LyricWord(

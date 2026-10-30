@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,8 +31,10 @@ import com.musichub.miuix.ui.components.pageLayerBackdrop
 import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
 import com.musichub.miuix.ui.theme.ThemeSettings
 import com.musichub.miuix.viewmodel.MusicPlayerViewModel
+import com.musichub.miuix.data.model.AudioEffectPresets
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -41,6 +44,7 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.SliderDefaults
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -104,6 +108,7 @@ fun SongSettingsPage(
             overscrollEffect = null
         ) {
             item { Spacer(modifier = Modifier.height(12.dp)) }
+            item { SmallTitle("播放选项") }
             item {
                 Card(
                     modifier = Modifier
@@ -181,6 +186,30 @@ fun SongSettingsPage(
                         summary = "在播放和暂停歌曲时音频渐入渐出",
                         checked = ThemeSettings.fadeEnabled,
                         onCheckedChange = { ThemeSettings.updateFadeEnabled(it) }
+                    )
+                }
+            }
+
+            item { SmallTitle("音效") }
+            items(AudioEffectPresets.presets, key = { it.id }) { preset ->
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp),
+                    onClick = { viewModel.updateAudioEffectPreset(preset.id) }
+                ) {
+                    BasicComponent(
+                        title = preset.name,
+                        summary = preset.description,
+                        endActions = {
+                            if (ThemeSettings.audioEffectPresetId == preset.id) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = "已选择",
+                                    tint = MiuixTheme.colorScheme.primary
+                                )
+                            }
+                        }
                     )
                 }
             }

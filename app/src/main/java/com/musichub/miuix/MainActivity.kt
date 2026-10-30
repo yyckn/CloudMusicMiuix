@@ -14,6 +14,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -34,6 +36,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -54,10 +57,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -103,6 +108,7 @@ import com.musichub.miuix.ui.components.FloatingBottomBar
 import com.musichub.miuix.ui.components.FloatingBottomBarItem
 import com.musichub.miuix.ui.components.rememberBlurBackdrop
 import com.musichub.miuix.ui.theme.LocalEnableBlur
+import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import com.musichub.miuix.ui.components.PlayerBar
@@ -206,9 +212,19 @@ fun MainScreen(
     val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Settings)
     val railState = rememberNavigationRailState(initialValue = NavigationRailValue.Expanded)
     
-    // 使用实时屏幕尺寸判断，避免窗口变化时不同步
+    // 使用实时宽度判断：≥840dp 视为平板使用侧栏；
+    // 600–839dp（阔折叠等）仍使用手机布局，便于底栏与播放条同行
     val configuration = LocalConfiguration.current
-    val useNavigationRail = configuration.screenWidthDp > 600
+    val useNavigationRail = configuration.screenWidthDp >= 840
+
+    // 迷你播放条圆角/封面样式过渡：仅在手机主页面开启悬浮底栏时为 1
+    val playerBarFloatingProgress by animateFloatAsState(
+        targetValue = if (!useNavigationRail && ThemeSettings.useFloatingBar &&
+            currentScreen is Screen.Main
+        ) 1f else 0f,
+        animationSpec = tween(durationMillis = 350),
+        label = "playerBarFloatingProgress"
+    )
 
     // 底栏模糊 / 液态玻璃所需的背景层
     val enableBlur = LocalEnableBlur.current
@@ -298,7 +314,7 @@ fun MainScreen(
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = this@AnimatedContent,
                                         hasBottomBar = false,
-                                        hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode
+                                        hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode, floatingProgress = playerBarFloatingProgress
                                     )
                                 }
                             ) { padding ->
@@ -490,7 +506,7 @@ fun MainScreen(
                     } else {
                         Scaffold(
                             bottomBar = {
-                                Column {
+                                val playerBar: @Composable (Modifier, Boolean, Dp) -> Unit = { barModifier, floating, bottomMargin ->
                                     PlayerBar(
                                         playerState = viewModel.playerState,
                                         onTogglePlayPause = { viewModel.togglePlayPause() },
@@ -499,60 +515,81 @@ fun MainScreen(
                                         onPlaylistClick = { showPlaylistSheet = true },
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = this@AnimatedContent,
-                                        hasBottomBar = !ThemeSettings.useFloatingBar,
-                                        isFloatingStyle = ThemeSettings.useFloatingBar,
+                                        hasBottomBar = !floating,
+                                        isFloatingStyle = floating,
                                         hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
-                                        blurBackdrop = if (ThemeSettings.useFloatingBar) blurBackdrop else null
+                                        blurBackdrop = null,
+                                        liquidBackdrop = if (floating && enableBlur) liquidBackdrop else null,
+                                        floatingProgress = playerBarFloatingProgress,
+                                        floatingBottomMargin = bottomMargin,
+                                        modifier = barModifier
                                     )
-                                    if (ThemeSettings.useFloatingBar) {
-                                        // 液态玻璃悬浮底栏
-                                        val navBarBottomPadding = WindowInsets.navigationBars
-                                            .asPaddingValues()
-                                            .calculateBottomPadding()
-                                        val bottomPadding = if (navBarBottomPadding != 0.dp) {
-                                            8.dp + navBarBottomPadding
-                                        } else {
-                                            28.dp
-                                        }
-                                        FloatingBottomBar(
+                                }
+                                if (ThemeSettings.useFloatingBar) {
+                                    // 液态玻璃悬浮底栏
+                                    val navBarBottomPadding = WindowInsets.navigationBars
+                                        .asPaddingValues()
+                                        .calculateBottomPadding()
+                                    val defaultBottomPadding = if (navBarBottomPadding != 0.dp) {
+                                        8.dp + navBarBottomPadding
+                                    } else {
+                                        28.dp
+                                    }
+                                    // 整体再向下移动 8dp，同时不低于系统导航栏
+                                    val bottomPadding = (defaultBottomPadding - 8.dp)
+                                        .coerceAtLeast(navBarBottomPadding)
+                                    val useSameRow = configuration.screenWidthDp >= 500
+                                    if (useSameRow) {
+                                        // 阔折叠等宽屏手机：底栏靠左，迷你播放条占据剩余宽度
+                                        Row(
                                             modifier = Modifier
-                                                .pointerInput(Unit) {
+                                                .fillMaxWidth()
+                                                .padding(
+                                                    start = 16.dp,
+                                                    end = 16.dp,
+                                                    bottom = bottomPadding
+                                                ),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            FloatingTabsBar(
+                                                selectedIndex = selectedTab,
+                                                onSelected = { selectedTab = it },
+                                                backdrop = liquidBackdrop,
+                                                isBlurEnabled = enableBlur,
+                                                tabs = tabs,
+                                                icons = icons,
+                                                modifier = Modifier.pointerInput(Unit) {
                                                     detectTapGestures { }
                                                 }
-                                                .padding(
-                                                    start = 28.dp,
-                                                    end = 28.dp,
-                                                    bottom = bottomPadding
-                                                )
-                                                .align(Alignment.CenterHorizontally),
-                                            selectedIndex = selectedTab,
-                                            onSelected = { selectedTab = it },
-                                            backdrop = liquidBackdrop,
-                                            tabsCount = tabs.size,
-                                            isBlurEnabled = enableBlur
-                                        ) { activateTab ->
-                                            tabs.forEachIndexed { index, tab ->
-                                                FloatingBottomBarItem(
-                                                    selected = selectedTab == index,
-                                                    onClick = { activateTab(index) },
-                                                    modifier = Modifier.defaultMinSize(minWidth = 76.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = icons[index],
-                                                        contentDescription = tab
-                                                    )
-                                                    Text(
-                                                        text = tab,
-                                                        fontSize = 11.sp,
-                                                        lineHeight = 14.sp,
-                                                        maxLines = 1,
-                                                        softWrap = false,
-                                                        overflow = TextOverflow.Visible
-                                                    )
-                                                }
-                                            }
+                                            )
+                                            playerBar(Modifier.weight(1f), true, 0.dp)
                                         }
                                     } else {
+                                        Column {
+                                            playerBar(Modifier, true, 12.dp)
+                                            FloatingTabsBar(
+                                                selectedIndex = selectedTab,
+                                                onSelected = { selectedTab = it },
+                                                backdrop = liquidBackdrop,
+                                                isBlurEnabled = enableBlur,
+                                                tabs = tabs,
+                                                icons = icons,
+                                                modifier = Modifier
+                                                    .pointerInput(Unit) {
+                                                        detectTapGestures { }
+                                                    }
+                                                    .padding(
+                                                        start = 28.dp,
+                                                        end = 28.dp,
+                                                        bottom = bottomPadding
+                                                    )
+                                                    .align(Alignment.CenterHorizontally)
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Column {
+                                        playerBar(Modifier, false, 12.dp)
                                         // 普通底栏（半透明模糊）
                                         BlurredBar(backdrop = blurBackdrop) {
                                             NavigationBar(
@@ -784,7 +821,7 @@ fun MainScreen(
                                 sharedTransitionScope = this@SharedTransitionLayout,
                                 animatedVisibilityScope = this@AnimatedContent,
                                 hasBottomBar = false,
-                                hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode
+                                hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode, floatingProgress = playerBarFloatingProgress
                             )
                         }
                     ) { padding ->
@@ -1212,7 +1249,7 @@ fun MainScreen(
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
                             hasBottomBar = false,
-                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode
+                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode, floatingProgress = playerBarFloatingProgress
                         )
                     }
                 ) { padding ->
@@ -1395,7 +1432,7 @@ fun MainScreen(
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
                             hasBottomBar = false,
-                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode
+                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode, floatingProgress = playerBarFloatingProgress
                         )
                     }
                 ) { padding ->
@@ -1577,7 +1614,7 @@ fun MainScreen(
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
                             hasBottomBar = false,
-                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode
+                            hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode, floatingProgress = playerBarFloatingProgress
                         )
                     }
                 ) { padding ->
@@ -1711,4 +1748,45 @@ fun MainScreen(
         }
     }
 }
+}
+
+@Composable
+private fun FloatingTabsBar(
+    modifier: Modifier = Modifier,
+    selectedIndex: Int,
+    onSelected: (Int) -> Unit,
+    backdrop: Backdrop,
+    isBlurEnabled: Boolean,
+    tabs: List<String>,
+    icons: List<ImageVector>
+) {
+    FloatingBottomBar(
+        modifier = modifier,
+        selectedIndex = selectedIndex,
+        onSelected = onSelected,
+        backdrop = backdrop,
+        tabsCount = tabs.size,
+        isBlurEnabled = isBlurEnabled
+    ) { activateTab ->
+        tabs.forEachIndexed { index, tab ->
+            FloatingBottomBarItem(
+                selected = selectedIndex == index,
+                onClick = { activateTab(index) },
+                modifier = Modifier.defaultMinSize(minWidth = 76.dp)
+            ) {
+                Icon(
+                    imageVector = icons[index],
+                    contentDescription = tab
+                )
+                Text(
+                    text = tab,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Visible
+                )
+            }
+        }
+    }
 }

@@ -24,19 +24,20 @@ object LyricParser {
         songTitle: String = "",
         songArtist: String = "",
         songAlbum: String = "",
-        artistNames: List<String> = emptyList()
+        artistNames: List<String> = emptyList(),
+        phonetic: String = ""
     ): SongLyrics {
         val effectiveArtistNames = resolveArtistNames(songArtist, artistNames)
         val lyrics = if (yrc.isNotEmpty()) {
-            val fromYrc = parseYrc(yrc, tlyric, effectiveArtistNames, songTitle, songAlbum)
+            val fromYrc = parseYrc(yrc, tlyric, effectiveArtistNames, songTitle, songAlbum, phonetic)
             // 部分歌曲的 yrc 只有作词/作曲等元信息，解析不出正文时回退到 lrc
             if (fromYrc.lines.isEmpty() && lrc.isNotEmpty()) {
-                parseLrc(lrc, tlyric, effectiveArtistNames, songTitle, songAlbum)
+                parseLrc(lrc, tlyric, effectiveArtistNames, songTitle, songAlbum, phonetic)
             } else {
                 fromYrc
             }
         } else {
-            parseLrc(lrc, tlyric, effectiveArtistNames, songTitle, songAlbum)
+            parseLrc(lrc, tlyric, effectiveArtistNames, songTitle, songAlbum, phonetic)
         }
         return finalize(lyrics, songTitle, songArtist)
     }
@@ -64,10 +65,11 @@ object LyricParser {
         if (words.isNullOrEmpty()) {
             val text = line.text.trimEnd('，', '。').trimEnd()
             val translation = line.translation.trimEnd('，', '。').trimEnd()
-            return if (text == line.text && translation == line.translation) {
+            val phonetic = line.phonetic.trimEnd('，', '。').trimEnd()
+            return if (text == line.text && translation == line.translation && phonetic == line.phonetic) {
                 line
             } else {
-                line.copy(text = text, translation = translation)
+                line.copy(text = text, translation = translation, phonetic = phonetic)
             }
         }
 
@@ -86,10 +88,12 @@ object LyricParser {
 
         val text = trimmedWords.joinToString("") { it.text }.trimEnd('，', '。').trimEnd()
         val translation = line.translation.trimEnd('，', '。').trimEnd()
+        val phonetic = line.phonetic.trimEnd('，', '。').trimEnd()
         return line.copy(
             text = text,
             translation = translation,
-            words = trimmedWords.takeIf { it.isNotEmpty() }
+            words = trimmedWords.takeIf { it.isNotEmpty() },
+            phonetic = phonetic
         )
     }
 
@@ -104,11 +108,13 @@ object LyricParser {
         songTitle: String = "",
         songArtist: String = "",
         songAlbum: String = "",
-        artistNames: List<String> = emptyList()
+        artistNames: List<String> = emptyList(),
+        phonetic: String = ""
     ): SongLyrics {
         val effectiveArtistNames = resolveArtistNames(songArtist, artistNames)
         val content = extractQrcContent(qrc)
         val tlyricMap = parseTranslation(tlyric)
+        val phoneticMap = parseTranslation(phonetic)
         val lines = mutableListOf<LyricLine>()
         val headerRegex = Regex("""^\[(\d+),(\d+)]""")
         val timingRegex = Regex("""\((\d+),(\d+)\)""")
@@ -143,6 +149,7 @@ object LyricParser {
                 lines = lines,
                 text = text,
                 translation = findTranslation(tlyricMap, start),
+                phonetic = findTranslation(phoneticMap, start),
                 start = start,
                 end = start + dur,
                 words = words,
@@ -168,10 +175,12 @@ object LyricParser {
         songTitle: String = "",
         songArtist: String = "",
         songAlbum: String = "",
-        artistNames: List<String> = emptyList()
+        artistNames: List<String> = emptyList(),
+        phonetic: String = ""
     ): SongLyrics {
         val effectiveArtistNames = resolveArtistNames(songArtist, artistNames)
         val tlyricMap = parseTranslation(tlyric)
+        val phoneticMap = parseTranslation(phonetic)
         val lines = mutableListOf<LyricLine>()
         val headerRegex = Regex("""^\[(\d+),(\d+)]""")
         val wordRegex = Regex("""<(\d+),(\d+)(?:,[-\d]+)?>([^<]*)""")
@@ -197,6 +206,7 @@ object LyricParser {
                 lines = lines,
                 text = text,
                 translation = findTranslation(tlyricMap, start),
+                phonetic = findTranslation(phoneticMap, start),
                 start = start,
                 end = start + dur,
                 words = words,
@@ -278,6 +288,7 @@ object LyricParser {
         lines: MutableList<LyricLine>,
         text: String,
         translation: String,
+        phonetic: String,
         start: Long,
         end: Long,
         words: List<LyricWord>,
@@ -306,7 +317,8 @@ object LyricParser {
                     startAt = start,
                     endAt = end,
                     words = wordList,
-                    isArtistLine = false
+                    isArtistLine = false,
+                    phonetic = phonetic
                 )
             )
         } else if (isArtist) {
@@ -328,7 +340,8 @@ object LyricParser {
                     startAt = start,
                     endAt = end,
                     words = wordList,
-                    isArtistLine = false
+                    isArtistLine = false,
+                    phonetic = phonetic
                 )
             )
         }
@@ -339,7 +352,8 @@ object LyricParser {
         tlyric: String,
         artistNames: List<String> = emptyList(),
         songTitle: String = "",
-        songAlbum: String = ""
+        songAlbum: String = "",
+        phonetic: String = ""
     ): SongLyrics {
         val tagRegex = Regex("""\[(\d+):(\d+(?:\.\d+)?)]""")
         val leadingTagsRegex = Regex("""^\s*((?:\[\d+:\d+(?:\.\d+)?])+)(.*)$""")
@@ -361,6 +375,7 @@ object LyricParser {
                 }
             }
         }
+        val phoneticMap = parseTranslation(phonetic)
 
         // 解析原文歌词
         val lines = mutableListOf<LyricLine>()
@@ -406,6 +421,7 @@ object LyricParser {
 
             if (!shouldExclude(text, duration, songTitle, artistNames, songAlbum)) {
                 val translation = findTranslation(tlyricMap, time)
+                val phoneticText = findTranslation(phoneticMap, time)
                 val (isArtist, splitLyrics) = parseArtistLine(text, artistNames)
 
                 if (isArtist && splitLyrics != null) {
@@ -415,14 +431,14 @@ object LyricParser {
                     // 歌手行
                     lines.add(LyricLine(text = artistText, translation = "", startAt = time, endAt = explicitEnd ?: 0L, isArtistLine = true))
                     // 正常歌词（使用相同的时间戳）
-                    lines.add(LyricLine(text = lyricText, translation = translation, startAt = time, endAt = explicitEnd ?: 0L, isArtistLine = false))
+                    lines.add(LyricLine(text = lyricText, translation = translation, phonetic = phoneticText, startAt = time, endAt = explicitEnd ?: 0L, isArtistLine = false))
                 } else if (isArtist) {
                     // 整行是歌手行
                     val artistText = formatArtistText(text)
                     lines.add(LyricLine(text = artistText, translation = translation, startAt = time, endAt = explicitEnd ?: 0L, isArtistLine = true))
                 } else {
                     // 正常歌词
-                    lines.add(LyricLine(text = text, translation = translation, startAt = time, endAt = explicitEnd ?: 0L, isArtistLine = false))
+                    lines.add(LyricLine(text = text, translation = translation, phonetic = phoneticText, startAt = time, endAt = explicitEnd ?: 0L, isArtistLine = false))
                 }
             }
         }
@@ -619,7 +635,8 @@ object LyricParser {
         tlyric: String,
         artistNames: List<String> = emptyList(),
         songTitle: String = "",
-        songAlbum: String = ""
+        songAlbum: String = "",
+        phonetic: String = ""
     ): SongLyrics {
         val headerRegex = Regex("""\[(\d{1,19}),\s*(\d{1,19})]""")
         val segRegex = Regex("""\((\d{1,19}),\s*(\d{1,19}),\s*[-\d]{1,20}\)([^()\n\r]*)""")
@@ -641,6 +658,7 @@ object LyricParser {
                 }
             }
         }
+        val phoneticMap = parseTranslation(phonetic)
 
         val lines = mutableListOf<LyricLine>()
 
@@ -674,6 +692,7 @@ object LyricParser {
             if (text.isNotEmpty() && !shouldExclude(text, dur, songTitle, artistNames, songAlbum)) {
                 // 查找翻译（使用开始时间匹配）
                 val translation = findTranslation(tlyricMap, start)
+                val phoneticText = findTranslation(phoneticMap, start)
                 val (isArtist, splitLyrics) = parseArtistLine(text, artistNames)
 
                 if (isArtist && splitLyrics != null) {
@@ -699,7 +718,8 @@ object LyricParser {
                             startAt = start,
                             endAt = end,
                             words = words.takeIf { it.isNotEmpty() },
-                            isArtistLine = false
+                            isArtistLine = false,
+                            phonetic = phoneticText
                         )
                     )
                 } else if (isArtist) {
@@ -724,7 +744,8 @@ object LyricParser {
                             startAt = start,
                             endAt = end,
                             words = words.takeIf { it.isNotEmpty() },
-                            isArtistLine = false
+                            isArtistLine = false,
+                            phonetic = phoneticText
                         )
                     )
                 }

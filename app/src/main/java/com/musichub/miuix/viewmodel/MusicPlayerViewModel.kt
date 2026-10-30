@@ -22,6 +22,7 @@ import com.musichub.miuix.data.model.SongLyrics
 import com.musichub.miuix.data.lyrics.LyricsRepository
 import com.musichub.miuix.data.model.Track
 import com.musichub.miuix.service.MediaPlaybackService
+import com.musichub.miuix.ui.theme.ThemeSettings
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -204,6 +205,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             mediaPlaybackService = binder.getService()
             isBound = true
             mediaPlaybackService?.setPlaybackSpeed(playbackSpeed)
+            mediaPlaybackService?.setAudioEffectPreset(ThemeSettings.audioEffectPresetId)
             
             // 设置回调，处理系统控制器的上一首/下一首
             mediaPlaybackService?.onTrackChangedListener = object : MediaPlaybackService.OnTrackChangedListener {
@@ -433,12 +435,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
         viewModelScope.launch {
-            // 用播放账号的 Cookie 获取播放地址，不切换全局账号，避免影响并发中的数据请求
+            // 云盘歌曲属于「获取数据」账号，必须用该账号 Cookie 获取播放地址；
+            // 其他歌曲使用「播放歌曲」账号，且不切换全局账号，避免影响并发中的数据请求
             val accounts = NeteaseApi.getAccounts()
-            val playbackUserId = if (playbackAccountIndex < accounts.size) accounts[playbackAccountIndex].userId else null
-            val playbackCookie = playbackUserId?.let { NeteaseApi.getAccountCookie(it) }
+            val accountIndex = if (track.isCloudDisk) dataAccountIndex else playbackAccountIndex
+            val accountUserId = accounts.getOrNull(accountIndex)?.userId
+            val accountCookie = accountUserId?.let { NeteaseApi.getAccountCookie(it) }
 
-            NeteaseApi.getSongUrl(track.id, accountCookie = playbackCookie).fold(
+            NeteaseApi.getSongUrl(track.id, accountCookie = accountCookie).fold(
                 onSuccess = { (url, bitrate, _) ->
                     try {
                         mediaPlaybackService?.let { service ->
@@ -1423,17 +1427,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             loadLyrics()
             checkIfCurrentTrackLiked()
 
-            // 使用播放账号的 Cookie 获取播放地址，避免临时切换全局账号影响其他请求
+            // 云盘歌曲属于「获取数据」账号，必须用该账号 Cookie 获取播放地址；
+            // 其他歌曲使用「播放歌曲」账号，且不切换全局账号影响其他请求
             val accounts = NeteaseApi.getAccounts()
-            val playbackUserId = if (playbackAccountIndex < accounts.size) accounts[playbackAccountIndex].userId else null
-            val playbackCookie = playbackUserId?.let { NeteaseApi.getAccountCookie(it) }
+            val accountIndex = if (track.isCloudDisk) dataAccountIndex else playbackAccountIndex
+            val accountUserId = accounts.getOrNull(accountIndex)?.userId
+            val accountCookie = accountUserId?.let { NeteaseApi.getAccountCookie(it) }
 
             // 获取用户选择的音质
             val qualityBitrates = listOf(999000, 999000, 740000, 320000, 128000)
             val qualityIndex = audioQualityIndex
             val selectedBitrate = if (qualityIndex < qualityBitrates.size) qualityBitrates[qualityIndex] else 999000
 
-            NeteaseApi.getSongUrl(track.id, selectedBitrate, accountCookie = playbackCookie).fold(
+            NeteaseApi.getSongUrl(track.id, selectedBitrate, accountCookie = accountCookie).fold(
                 onSuccess = { (url, bitrate, _) ->
                     try {
                         mediaPlaybackService?.let { service ->
@@ -1474,6 +1480,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         playbackSpeed = normalized
         prefs.edit().putFloat("playback_speed", normalized).apply()
         mediaPlaybackService?.setPlaybackSpeed(normalized)
+    }
+
+    /** 切换音效预设。 */
+    fun updateAudioEffectPreset(presetId: String) {
+        ThemeSettings.updateAudioEffectPresetId(presetId)
+        mediaPlaybackService?.setAudioEffectPreset(presetId)
     }
 
     /** 设置音质选择索引。 */

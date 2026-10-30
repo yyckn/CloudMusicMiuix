@@ -85,11 +85,29 @@ object LyricsRepository {
         else -> "网易云音乐"
     }
 
+    /** 日文假名检测，用于判断是否需要保留网易云罗马音。 */
+    private val kanaRegex = Regex("[\\u3040-\\u30FF]")
+
+    private fun japaneseNoUpgradeActive(): Boolean =
+        ThemeSettings.showJapaneseRomaji && ThemeSettings.japaneseNoUpgrade
+
+    private fun isJapaneseLyrics(lyrics: SongLyrics): Boolean =
+        lyrics.lines.any { kanaRegex.containsMatchIn(it.text) }
+
     /** 智能选择：优先网易云；开启自动升级时，若无逐字歌词则尝试其他平台。 */
     private suspend fun loadSmart(track: Track, forceUpgrade: Boolean): LoadOutcome? {
         val wantWordLyrics = forceUpgrade ||
             (ThemeSettings.wordByWordLyrics && ThemeSettings.autoUpgradeLyrics)
         val netease = fetch(Platform.NETEASE, track)
+
+        // 日语歌曲不升级：保留网易云歌词，确保罗马音可用
+        if (!forceUpgrade && netease != null && japaneseNoUpgradeActive() &&
+            isJapaneseLyrics(netease.lyrics)
+        ) {
+            Log.d(TAG, "Japanese lyrics: skip upgrade to keep Netease romanization")
+            return LoadOutcome(netease, upgraded = false)
+        }
+
         // 强制升级时不因网易云已有逐字歌词而提前返回
         if (!forceUpgrade && netease != null && (!wantWordLyrics || netease.hasWordLines)) {
             return LoadOutcome(netease, upgraded = false)
@@ -127,6 +145,12 @@ object LyricsRepository {
             }
         }
         if (first == null) return null
+
+        // 日语歌曲不升级：保留当前首选平台的歌词
+        if (!forceUpgrade && japaneseNoUpgradeActive() && isJapaneseLyrics(first.lyrics)) {
+            Log.d(TAG, "Japanese lyrics: skip cross-platform upgrade")
+            return LoadOutcome(first, upgraded = false)
+        }
 
         if (upgrade && (forceUpgrade || !first.hasWordLines)) {
             for (platform in order) {

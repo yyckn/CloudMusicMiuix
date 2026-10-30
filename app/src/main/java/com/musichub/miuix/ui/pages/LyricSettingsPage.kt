@@ -54,6 +54,8 @@ fun LyricSettingsPage(
     var autoUpgrade by remember { mutableStateOf(ThemeSettings.autoUpgradeLyrics) }
     var qqEnabled by remember { mutableStateOf(ThemeSettings.qqLyricsEnabled) }
     var kugouEnabled by remember { mutableStateOf(ThemeSettings.kugouLyricsEnabled) }
+    var showJapaneseRomaji by remember { mutableStateOf(ThemeSettings.showJapaneseRomaji) }
+    var japaneseNoUpgrade by remember { mutableStateOf(ThemeSettings.japaneseNoUpgrade) }
     var exclusionEnabled by remember { mutableStateOf(LyricExclusionRules.enabled) }
 
     // 网易云音乐始终启用；QQ/酷狗关闭后不在偏好选项中出现
@@ -146,6 +148,16 @@ fun LyricSettingsPage(
                             onLyricSettingsChanged()
                         }
                     )
+                    SwitchPreference(
+                        title = "日语歌曲显示罗马音",
+                        summary = "此功能由网易云提供，仅限在使用网易云平台的歌词时使用",
+                        checked = showJapaneseRomaji,
+                        onCheckedChange = { enabled ->
+                            showJapaneseRomaji = enabled
+                            ThemeSettings.updateShowJapaneseRomaji(enabled)
+                            onLyricSettingsChanged()
+                        }
+                    )
                 }
             }
 
@@ -178,6 +190,18 @@ fun LyricSettingsPage(
                                 if (enabled) onLyricSettingsChanged()
                             }
                         )
+                        if (autoUpgrade && showJapaneseRomaji) {
+                            SwitchPreference(
+                                title = "日语歌曲不升级为其他平台的逐字歌词",
+                                summary = "因除网易云音乐的其他平台暂无法获取罗马音，故提供此选项便于显示歌词罗马音",
+                                checked = japaneseNoUpgrade,
+                                onCheckedChange = { enabled ->
+                                    japaneseNoUpgrade = enabled
+                                    ThemeSettings.updateJapaneseNoUpgrade(enabled)
+                                    onLyricSettingsChanged()
+                                }
+                            )
+                        }
                     }
                 }
             }

@@ -43,6 +43,7 @@ object AppleMusicLyricsConverter {
                 else -> start + DEFAULT_LINE_DURATION
             }.coerceAtLeast(start)
             val translation = line.translation.ifBlank { null }
+            val phonetic = line.phonetic.ifBlank { null }
 
             val syllables = if (wordByWord) {
                 line.words
@@ -66,6 +67,21 @@ object AppleMusicLyricsConverter {
                         alignment = alignment,
                         start = start,
                         end = end,
+                        phonetic = phonetic,
+                    )
+                )
+            } else if (phonetic != null) {
+                // 非逐字歌词也用单音节卡拉OK行承载罗马音，避免 SyncedLine 丢失注音
+                result.add(
+                    KaraokeLine.MainKaraokeLine(
+                        syllables = listOf(
+                            KaraokeSyllable(content = line.text, start = start, end = end)
+                        ),
+                        translation = translation,
+                        alignment = alignment,
+                        start = start,
+                        end = end,
+                        phonetic = phonetic,
                     )
                 )
             } else {
