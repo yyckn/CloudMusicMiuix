@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -48,6 +49,7 @@ import com.musichub.miuix.ui.components.pageLayerBackdrop
 import com.musichub.miuix.ui.components.rememberPageBlurBackdrop
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -104,6 +106,7 @@ fun RecommendPage(
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
+    val isTablet = LocalConfiguration.current.screenWidthDp > 600
     var searchText by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
@@ -408,17 +411,32 @@ fun RecommendPage(
                     // 2. 专属歌单 / 推荐歌单
                     if (recommendState.playlists.isNotEmpty()) {
                         item {
-                            HomeSection(
-                                title = if (isLoggedIn) "专属歌单" else "推荐歌单",
-                                subtitle = if (isLoggedIn) "为你量身定制的精选歌单" else "大家都在听的热门歌单"
-                            ) {
-                                items(recommendState.playlists) { playlist ->
-                                    CoverCard(
+                            val sectionTitle = if (isLoggedIn) "专属歌单" else "推荐歌单"
+                            val sectionSubtitle = if (isLoggedIn) "为你量身定制的精选歌单" else "大家都在听的热门歌单"
+                            if (isTablet) {
+                                TabletHomeSection(
+                                    title = sectionTitle,
+                                    subtitle = sectionSubtitle,
+                                    cards = recommendState.playlists
+                                ) { playlist, cardModifier ->
+                                    TabletCoverCard(
                                         coverUrl = playlist.coverImgUrl,
                                         title = playlist.title,
                                         subtitle = if (playlist.playCount > 0) formatPlayCount(playlist.playCount) else "",
-                                        onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }
+                                        onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) },
+                                        modifier = cardModifier
                                     )
+                                }
+                            } else {
+                                HomeSection(title = sectionTitle, subtitle = sectionSubtitle) {
+                                    items(recommendState.playlists) { playlist ->
+                                        CoverCard(
+                                            coverUrl = playlist.coverImgUrl,
+                                            title = playlist.title,
+                                            subtitle = if (playlist.playCount > 0) formatPlayCount(playlist.playCount) else "",
+                                            onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -427,57 +445,77 @@ fun RecommendPage(
                     // 3. 雷达歌单
                     if (recommendState.radarPlaylists.isNotEmpty()) {
                         item {
-                            HomeSection(
-                                title = "雷达歌单",
-                                subtitle = "根据你的音乐口味持续推荐"
-                            ) {
-                                items(recommendState.radarPlaylists) { playlist ->
-                                    // 「私人雷达」等个性化歌单：首页只显示基础名称（如「私人雷达」），点进去再看完整歌单
+                            if (isTablet) {
+                                TabletHomeSection(
+                                    title = "雷达歌单",
+                                    subtitle = "根据你的音乐口味持续推荐",
+                                    cards = recommendState.radarPlaylists
+                                ) { playlist, cardModifier ->
                                     val displayTitle = if (playlist.title.contains("|")) {
                                         playlist.title.substringAfterLast("|").trim()
                                     } else {
                                         playlist.title
                                     }
-                                    CoverCard(
+                                    TabletCoverCard(
                                         coverUrl = playlist.coverImgUrl,
                                         title = displayTitle,
                                         subtitle = if (playlist.playCount > 0) formatPlayCount(playlist.playCount) else "",
-                                        onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, displayTitle) }
+                                        onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, displayTitle) },
+                                        modifier = cardModifier
                                     )
+                                }
+                            } else {
+                                HomeSection(
+                                    title = "雷达歌单",
+                                    subtitle = "根据你的音乐口味持续推荐"
+                                ) {
+                                    items(recommendState.radarPlaylists) { playlist ->
+                                        // 「私人雷达」等个性化歌单：首页只显示基础名称（如「私人雷达」），点进去再看完整歌单
+                                        val displayTitle = if (playlist.title.contains("|")) {
+                                            playlist.title.substringAfterLast("|").trim()
+                                        } else {
+                                            playlist.title
+                                        }
+                                        CoverCard(
+                                            coverUrl = playlist.coverImgUrl,
+                                            title = displayTitle,
+                                            subtitle = if (playlist.playCount > 0) formatPlayCount(playlist.playCount) else "",
+                                            onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, displayTitle) }
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // 4. 歌手推荐
-                    if (recommendState.recommendArtists.isNotEmpty()) {
-                        item {
-                            HomeSection(
-                                title = "歌手推荐",
-                                subtitle = "发现你可能喜欢的音乐人"
-                            ) {
-                                items(recommendState.recommendArtists) { artist ->
-                                    ArtistCard(
-                                        artist = artist,
-                                        onClick = { onArtistClick(artist.id.toString()) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // 5. 新碟上架
+                    // 4. 新碟上架
                     if (recommendState.newAlbums.isNotEmpty()) {
                         item {
-                            HomeSection(
-                                title = "新碟上架",
-                                subtitle = "新鲜出炉的专辑"
-                            ) {
-                                items(recommendState.newAlbums) { album ->
-                                    AlbumCard(
-                                        album = album,
-                                        onClick = { if (album.id > 0) onAlbumClick(album.id) }
+                            if (isTablet) {
+                                TabletHomeSection(
+                                    title = "新碟上架",
+                                    subtitle = "新鲜出炉的专辑",
+                                    cards = recommendState.newAlbums
+                                ) { album, cardModifier ->
+                                    TabletCoverCard(
+                                        coverUrl = album.picUrl,
+                                        title = album.name,
+                                        subtitle = album.artist,
+                                        onClick = { if (album.id > 0) onAlbumClick(album.id) },
+                                        modifier = cardModifier
                                     )
+                                }
+                            } else {
+                                HomeSection(
+                                    title = "新碟上架",
+                                    subtitle = "新鲜出炉的专辑"
+                                ) {
+                                    items(recommendState.newAlbums) { album ->
+                                        AlbumCard(
+                                            album = album,
+                                            onClick = { if (album.id > 0) onAlbumClick(album.id) }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -527,6 +565,120 @@ private fun HomeSection(
             contentPadding = PaddingValues(horizontal = 12.dp)
         ) {
             content()
+        }
+    }
+}
+
+/**
+ * 平板首页板块：两行卡片，按列横向滚动
+ */
+@Composable
+private fun <T> TabletHomeSection(
+    title: String,
+    subtitle: String,
+    cards: List<T>,
+    card: @Composable (T, Modifier) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Spacer(modifier = Modifier.height(20.dp))
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            Text(
+                text = title,
+                style = MiuixTheme.textStyles.body1,
+                fontWeight = FontWeight.Bold,
+                color = MiuixTheme.colorScheme.onBackground
+            )
+            if (subtitle.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MiuixTheme.textStyles.footnote1,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val cardWidth = (maxWidth / 3.2f).coerceIn(220.dp, 300.dp)
+            val columns = (cards.size + 1) / 2
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp)
+            ) {
+                items(columns) { columnIndex ->
+                    val top = cards[columnIndex]
+                    val bottom = cards.getOrNull(columnIndex + columns)
+                    Column(
+                        modifier = Modifier.width(cardWidth),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        card(top, Modifier.fillMaxWidth())
+                        if (bottom != null) {
+                            card(bottom, Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 平板首页横向卡片：左封面，右信息
+ */
+@Composable
+private fun TabletCoverCard(
+    coverUrl: String,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        pressFeedbackType = PressFeedbackType.Tilt,
+        showIndication = true,
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = coverUrl,
+                contentDescription = title,
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Crop,
+                error = painterResource(android.R.drawable.ic_menu_gallery)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MiuixTheme.textStyles.body1,
+                    fontWeight = FontWeight.Medium,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    minLines = 2,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = subtitle,
+                    style = MiuixTheme.textStyles.footnote1,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    minLines = 1,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
@@ -584,7 +736,7 @@ private fun CoverCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.width(140.dp),
+        modifier = modifier.width(156.dp),
         pressFeedbackType = PressFeedbackType.Tilt,
         showIndication = true,
         onClick = onClick
@@ -637,7 +789,7 @@ private fun ArtistCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.width(120.dp),
+        modifier = modifier.width(136.dp),
         pressFeedbackType = PressFeedbackType.Tilt,
         showIndication = true,
         onClick = onClick
@@ -682,7 +834,7 @@ private fun AlbumCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.width(140.dp),
+        modifier = modifier.width(156.dp),
         pressFeedbackType = PressFeedbackType.Tilt,
         showIndication = true,
         onClick = onClick

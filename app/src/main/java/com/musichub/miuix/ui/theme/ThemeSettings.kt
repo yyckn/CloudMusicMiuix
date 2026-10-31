@@ -18,6 +18,7 @@ object ThemeSettings {
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_USE_FLOATING_BAR = "use_floating_bar"
     private const val KEY_FLOATING_BAR_ALIGNMENT = "floating_bar_alignment"
+    private const val KEY_LIQUID_GLASS_EFFECT = "liquid_glass_effect"
     private const val KEY_FOLLOW_MONET = "follow_monet"
     private const val KEY_LYRIC_FONT_SIZE = "lyric_font_size"
     private const val KEY_LYRIC_TRANSLATION_RATIO = "lyric_translation_ratio"
@@ -49,6 +50,17 @@ object ThemeSettings {
     // 悬浮底栏对齐方向: 0=居左, 1=居中, 2=居右
     var floatingBarAlignmentIndex by mutableIntStateOf(1)
         private set
+
+    // 液态玻璃效果: 0=通透(0.4), 1=中等(0.6), 2=厚重(0.8)
+    var liquidGlassEffectIndex by mutableIntStateOf(1)
+        private set
+
+    val liquidGlassAlpha: Float
+        get() = when (liquidGlassEffectIndex) {
+            1 -> 0.6f
+            2 -> 0.8f
+            else -> 0.4f
+        }
 
     // 跟随系统莫奈取色
     var followMonet by mutableStateOf(true)
@@ -135,6 +147,7 @@ object ThemeSettings {
         themeModeIndex = prefs?.getInt(KEY_THEME_MODE, 2) ?: 2
         useFloatingBar = prefs?.getBoolean(KEY_USE_FLOATING_BAR, true) ?: true
         floatingBarAlignmentIndex = prefs?.getInt(KEY_FLOATING_BAR_ALIGNMENT, 1) ?: 1
+        liquidGlassEffectIndex = prefs?.getInt(KEY_LIQUID_GLASS_EFFECT, 1) ?: 1
         followMonet = prefs?.getBoolean(KEY_FOLLOW_MONET, true) ?: true
         lyricFontSize = prefs?.getInt(KEY_LYRIC_FONT_SIZE, 32) ?: 32
         lyricTranslationRatio = prefs?.getInt(KEY_LYRIC_TRANSLATION_RATIO, 60) ?: 60
@@ -170,6 +183,11 @@ object ThemeSettings {
     fun updateFloatingBarAlignment(index: Int) {
         floatingBarAlignmentIndex = index
         prefs?.edit()?.putInt(KEY_FLOATING_BAR_ALIGNMENT, index)?.apply()
+    }
+
+    fun updateLiquidGlassEffectIndex(index: Int) {
+        liquidGlassEffectIndex = index
+        prefs?.edit()?.putInt(KEY_LIQUID_GLASS_EFFECT, index)?.apply()
     }
 
     fun updateFollowMonet(value: Boolean) {

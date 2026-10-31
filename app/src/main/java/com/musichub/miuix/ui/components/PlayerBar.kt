@@ -3,7 +3,7 @@ package com.musichub.miuix.ui.components
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +64,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.ListView
 import top.yukonga.miuix.kmp.icon.extended.Pause
 import top.yukonga.miuix.kmp.icon.extended.Play
+import kotlin.math.abs
 
 @Composable
 fun PlayerBar(
@@ -72,6 +73,8 @@ fun PlayerBar(
     onPlayerBarClick: () -> Unit = {},
     onSwipeUp: () -> Unit = {},
     onSwipeDown: () -> Unit = {},
+    onSwipeLeft: () -> Unit = {},
+    onSwipeRight: () -> Unit = {},
     onPlaylistClick: () -> Unit = {},
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
@@ -80,6 +83,7 @@ fun PlayerBar(
     hidePlaylistButton: Boolean = false,
     blurBackdrop: LayerBackdrop? = null,
     liquidBackdrop: Backdrop? = null,
+    liquidAlpha: Float = 0.6f,
     floatingProgress: Float = if (isFloatingStyle) 1f else 0f,
     floatingBottomMargin: Dp = 12.dp,
     compact: Boolean = false,
@@ -101,7 +105,7 @@ fun PlayerBar(
         val surfaceShape = RoundedCornerShape((measuredHeight / 2) * floatingFraction)
         val coverSize = lerp(48.dp, 44.dp, floatingFraction)
         val coverCorner = lerp(8.dp, 10.dp, floatingFraction)
-        val liquidContainerColor = MiuixTheme.colorScheme.surfaceContainer.copy(0.4f)
+        val liquidContainerColor = MiuixTheme.colorScheme.surfaceContainer.copy(liquidAlpha)
         // 非液态玻璃状态下使用更透明的背景
         val translucentBarColor = MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
         val liquidModifier = if (liquidBackdrop != null) {
@@ -175,31 +179,48 @@ fun PlayerBar(
                         .then(
                             if (enableSwipeUp) {
                                 Modifier.pointerInput(Unit) {
-                                    var totalDrag = 0f
+                                    var totalX = 0f
+                                    var totalY = 0f
                                     var triggered = false
                                     val threshold = 30.dp.toPx()
-                                    detectVerticalDragGestures(
+                                    detectDragGestures(
                                         onDragStart = {
-                                            totalDrag = 0f
+                                            totalX = 0f
+                                            totalY = 0f
                                             triggered = false
                                         },
-                                        onVerticalDrag = { change, dragAmount ->
-                                            totalDrag += dragAmount
+                                        onDrag = { change, dragAmount ->
+                                            totalX += dragAmount.x
+                                            totalY += dragAmount.y
                                             change.consume()
-                                            if (!triggered && totalDrag < -threshold) {
-                                                triggered = true
-                                                onSwipeUp()
-                                            } else if (!triggered && totalDrag > threshold) {
-                                                triggered = true
-                                                onSwipeDown()
+                                            if (!triggered) {
+                                                if (abs(totalX) > abs(totalY)) {
+                                                    if (totalX < -threshold) {
+                                                        triggered = true
+                                                        onSwipeLeft()
+                                                    } else if (totalX > threshold) {
+                                                        triggered = true
+                                                        onSwipeRight()
+                                                    }
+                                                } else {
+                                                    if (totalY < -threshold) {
+                                                        triggered = true
+                                                        onSwipeUp()
+                                                    } else if (totalY > threshold) {
+                                                        triggered = true
+                                                        onSwipeDown()
+                                                    }
+                                                }
                                             }
                                         },
                                         onDragEnd = {
-                                            totalDrag = 0f
+                                            totalX = 0f
+                                            totalY = 0f
                                             triggered = false
                                         },
                                         onDragCancel = {
-                                            totalDrag = 0f
+                                            totalX = 0f
+                                            totalY = 0f
                                             triggered = false
                                         }
                                     )

@@ -53,6 +53,9 @@ fun ThemeSettingsPage(
     val floatingBarAlignOptions = remember {
         listOf("居左", "居中", "居右")
     }
+    val liquidGlassEffectOptions = remember {
+        listOf("通透", "中等", "厚重")
+    }
 
     BackHandler {
         onBackClick()
@@ -174,6 +177,12 @@ fun ThemeSettingsPage(
                             items = floatingBarAlignOptions,
                             selectedIndex = ThemeSettings.floatingBarAlignmentIndex,
                             onSelectedIndexChange = { ThemeSettings.updateFloatingBarAlignment(it) }
+                        )
+                        WindowDropdownPreference(
+                            title = "液态玻璃效果",
+                            items = liquidGlassEffectOptions,
+                            selectedIndex = ThemeSettings.liquidGlassEffectIndex,
+                            onSelectedIndexChange = { ThemeSettings.updateLiquidGlassEffectIndex(it) }
                         )
                     }
                 }

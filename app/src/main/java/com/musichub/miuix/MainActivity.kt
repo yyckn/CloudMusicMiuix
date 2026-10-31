@@ -236,8 +236,8 @@ fun MainScreen(
 
     // 悬浮底栏上滑吸附状态（仅手机）
     var floatingBarAttached by remember { mutableStateOf(false) }
-    LaunchedEffect(useFloatingBar, isTabletWidth, currentScreen) {
-        if (!useFloatingBar || isTabletWidth || currentScreen !is Screen.Main) {
+    LaunchedEffect(useFloatingBar, currentScreen) {
+        if (!useFloatingBar || currentScreen !is Screen.Main) {
             floatingBarAttached = false
         }
     }
@@ -388,6 +388,7 @@ fun MainScreen(
                                         hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
                             isFloatingStyle = useFloatingBar,
                             liquidBackdrop = secondaryFloatingLiquidBackdrop,
+                            liquidAlpha = ThemeSettings.liquidGlassAlpha,
                             blurBackdrop = if (enableBlur) blurBackdrop else null,
                             floatingProgress = playerBarFloatingProgress,
                             floatingBottomMargin = 12.dp + systemNavBarPadding
@@ -591,7 +592,13 @@ fun MainScreen(
                                 val playerBar: @Composable (Modifier, Boolean, Dp, Boolean, Boolean, Boolean) -> Unit =
                                     { barModifier, floating, bottomMargin, compact, swipeEnabled, layoutSwipe ->
                                         val swipeUpAction: () -> Unit = if (layoutSwipe) {
-                                            { floatingBarAttached = false }
+                                            {
+                                                if (floatingBarAttached) {
+                                                    floatingBarAttached = false
+                                                } else {
+                                                    showPlayerPage = true
+                                                }
+                                            }
                                         } else {
                                             { showPlayerPage = true }
                                         }
@@ -600,12 +607,24 @@ fun MainScreen(
                                         } else {
                                             {}
                                         }
+                                        val swipeLeftAction: () -> Unit = {
+                                            if (floating && floatingBarAttached) {
+                                                floatingBarAttached = false
+                                            }
+                                        }
+                                        val swipeRightAction: () -> Unit = {
+                                            if (floating && !floatingBarAttached) {
+                                                floatingBarAttached = true
+                                            }
+                                        }
                                         PlayerBar(
                                             playerState = viewModel.playerState,
                                             onTogglePlayPause = { viewModel.togglePlayPause() },
                                             onPlayerBarClick = { showPlayerPage = true },
                                             onSwipeUp = swipeUpAction,
                                             onSwipeDown = swipeDownAction,
+                                            onSwipeLeft = swipeLeftAction,
+                                            onSwipeRight = swipeRightAction,
                                             onPlaylistClick = { showPlaylistSheet = true },
                                             sharedTransitionScope = this@SharedTransitionLayout,
                                             animatedVisibilityScope = this@AnimatedContent,
@@ -614,6 +633,7 @@ fun MainScreen(
                                             hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
                                             blurBackdrop = if (!floating && enableBlur) blurBackdrop else null,
                                             liquidBackdrop = if (floating && enableBlur) liquidBackdrop else null,
+                                            liquidAlpha = ThemeSettings.liquidGlassAlpha,
                                             floatingProgress = playerBarFloatingProgress,
                                             floatingBottomMargin = bottomMargin,
                                             compact = compact,
@@ -635,34 +655,64 @@ fun MainScreen(
                                     val bottomPadding = (defaultBottomPadding - 8.dp)
                                         .coerceAtLeast(navBarBottomPadding)
                                     if (isTabletWidth) {
-                                        // 平板：默认一行显示导航栏 + 迷你播放条
-                                        Row(
+                                        // 平板：默认一行显示导航栏 + 完整迷你播放条，可左右滑动收起/展开
+                                        BoxWithConstraints(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .padding(
                                                     start = 16.dp,
                                                     end = 16.dp,
                                                     bottom = bottomPadding
-                                                ),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = when (floatingBarAlignment) {
-                                                0 -> Arrangement.Start
-                                                2 -> Arrangement.End
-                                                else -> Arrangement.Center
-                                            }
+                                                )
                                         ) {
-                                            FloatingTabsBar(
-                                                selectedIndex = selectedTab,
-                                                onSelected = { selectedTab = it },
-                                                backdrop = liquidBackdrop,
-                                                isBlurEnabled = enableBlur,
-                                                tabs = tabs,
-                                                icons = icons,
-                                                modifier = Modifier.pointerInput(Unit) {
-                                                    detectTapGestures { }
-                                                }
+                                            val density = LocalDensity.current
+                                            var navWidthPx by remember { mutableIntStateOf(0) }
+                                            val navWidth = if (navWidthPx > 0) {
+                                                with(density) { navWidthPx.toDp() }
+                                            } else {
+                                                320.dp
+                                            }
+                                            val expandedPlayerWidth = (maxWidth - navWidth)
+                                                .coerceAtMost(600.dp)
+                                                .coerceAtLeast(88.dp)
+                                            val playerWidth by animateDpAsState(
+                                                targetValue = if (floatingBarAttached) 88.dp else expandedPlayerWidth,
+                                                animationSpec = tween(durationMillis = 280),
+                                                label = "tabletPlayerWidth"
                                             )
-                                            playerBar(Modifier.widthIn(max = 600.dp), true, 0.dp, false, true, false)
+                                            val compactContent = floatingBarAttached ||
+                                                playerWidth < expandedPlayerWidth * 0.72f
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = when (floatingBarAlignment) {
+                                                    0 -> Arrangement.Start
+                                                    2 -> Arrangement.End
+                                                    else -> Arrangement.Center
+                                                }
+                                            ) {
+                                                FloatingTabsBar(
+                                                    selectedIndex = selectedTab,
+                                                    onSelected = { selectedTab = it },
+                                                    backdrop = liquidBackdrop,
+                                                    isBlurEnabled = enableBlur,
+                                                    tabs = tabs,
+                                                    icons = icons,
+                                                    modifier = Modifier
+                                                        .onSizeChanged { navWidthPx = it.width }
+                                                        .pointerInput(Unit) {
+                                                            detectTapGestures { }
+                                                        }
+                                                )
+                                                playerBar(
+                                                    Modifier.width(playerWidth),
+                                                    true,
+                                                    0.dp,
+                                                    compactContent,
+                                                    true,
+                                                    false
+                                                )
+                                            }
                                         }
                                     } else {
                                         // 手机：默认两行，滚动/下滑后折叠为一行并只保留封面
@@ -1011,6 +1061,7 @@ fun MainScreen(
                                 hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
                             isFloatingStyle = useFloatingBar,
                             liquidBackdrop = secondaryFloatingLiquidBackdrop,
+                            liquidAlpha = ThemeSettings.liquidGlassAlpha,
                             blurBackdrop = secondaryBlurBackdrop,
                             floatingProgress = playerBarFloatingProgress,
                             floatingBottomMargin = 12.dp + systemNavBarPadding,
@@ -1454,6 +1505,7 @@ fun MainScreen(
                             hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
                             isFloatingStyle = useFloatingBar,
                             liquidBackdrop = secondaryFloatingLiquidBackdrop,
+                            liquidAlpha = ThemeSettings.liquidGlassAlpha,
                             blurBackdrop = secondaryBlurBackdrop,
                             floatingProgress = playerBarFloatingProgress,
                             floatingBottomMargin = 12.dp + systemNavBarPadding,
@@ -1652,6 +1704,7 @@ fun MainScreen(
                             hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
                             isFloatingStyle = useFloatingBar,
                             liquidBackdrop = secondaryFloatingLiquidBackdrop,
+                            liquidAlpha = ThemeSettings.liquidGlassAlpha,
                             blurBackdrop = secondaryBlurBackdrop,
                             floatingProgress = playerBarFloatingProgress,
                             floatingBottomMargin = 12.dp + systemNavBarPadding,
@@ -1849,6 +1902,7 @@ fun MainScreen(
                             hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
                             isFloatingStyle = useFloatingBar,
                             liquidBackdrop = secondaryFloatingLiquidBackdrop,
+                            liquidAlpha = ThemeSettings.liquidGlassAlpha,
                             blurBackdrop = secondaryBlurBackdrop,
                             floatingProgress = playerBarFloatingProgress,
                             floatingBottomMargin = 12.dp + systemNavBarPadding,
@@ -2005,7 +2059,8 @@ private fun FloatingTabsBar(
         onSelected = onSelected,
         backdrop = backdrop,
         tabsCount = tabs.size,
-        isBlurEnabled = isBlurEnabled
+        isBlurEnabled = isBlurEnabled,
+        glassAlpha = ThemeSettings.liquidGlassAlpha
     ) { activateTab ->
         tabs.forEachIndexed { index, tab ->
             FloatingBottomBarItem(

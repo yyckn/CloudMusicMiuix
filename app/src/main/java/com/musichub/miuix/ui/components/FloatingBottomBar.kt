@@ -213,11 +213,12 @@ fun FloatingBottomBar(
     accentColor: Color = MiuixTheme.colorScheme.primary,
     tabContentColor: Color = MiuixTheme.colorScheme.onSurface,
     surfaceContainer: Color = MiuixTheme.colorScheme.surfaceContainer,
+    glassAlpha: Float = 0.6f,
     content: @Composable RowScope.((Int) -> Unit) -> Unit
 ) {
     val isInDark = isInDarkTheme()
     val pillShape = remember { CircleShape }
-    val containerColor = if (isBlurEnabled) surfaceContainer.copy(0.4f) else surfaceContainer
+    val containerColor = if (isBlurEnabled) surfaceContainer.copy(glassAlpha) else surfaceContainer
 
     val tabsBackdrop = rememberLayerBackdrop()
     val density = LocalDensity.current
