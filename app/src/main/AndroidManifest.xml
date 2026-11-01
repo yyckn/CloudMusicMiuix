@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -27,11 +29,20 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:label="@string/app_name"
             android:theme="@style/Theme.CloudMusicMiuix"
             android:resizeableActivity="true"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboardHidden"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="hypermusic" android:host="user" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".ui.scan.QrScannerActivity" android:exported="false" />
 
         <activity-alias
             android:name=".IconNotes"
@@ -103,6 +114,338 @@
             </intent-filter>
         </activity-alias>
 
+        <activity-alias
+            android:name=".IconQishuiClassic" android:targetActivity=".MainActivity"
+            android:exported="true" android:enabled="false"
+            android:icon="@drawable/ic_qishui_classic" android:roundIcon="@drawable/ic_qishui_classic"
+            android:label="@string/app_name">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconQqClassic" android:targetActivity=".MainActivity"
+            android:exported="true" android:enabled="false"
+            android:icon="@drawable/ic_qqmusic_classic" android:roundIcon="@drawable/ic_qqmusic_classic"
+            android:label="@string/app_name">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".IconNotesNameMusic"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_notes_launcher"
+            android:roundIcon="@mipmap/ic_launcher_notes_launcher"
+            android:label="Music">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconNotesNameChinese"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_notes_launcher"
+            android:roundIcon="@mipmap/ic_launcher_notes_launcher"
+            android:label="音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconNotesNameNetease"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_notes_launcher"
+            android:roundIcon="@mipmap/ic_launcher_notes_launcher"
+            android:label="网易云音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconNotesNameQq"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_notes_launcher"
+            android:roundIcon="@mipmap/ic_launcher_notes_launcher"
+            android:label="QQ音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconNeteaseNameMusic"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:label="Music">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconNeteaseNameChinese"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:label="音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconNeteaseNameNetease"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:label="网易云音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconNeteaseNameQq"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:label="QQ音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconKugouNameMusic"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_kugou"
+            android:roundIcon="@mipmap/ic_launcher_kugou"
+            android:label="Music">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconKugouNameChinese"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_kugou"
+            android:roundIcon="@mipmap/ic_launcher_kugou"
+            android:label="音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconKugouNameNetease"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_kugou"
+            android:roundIcon="@mipmap/ic_launcher_kugou"
+            android:label="网易云音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconKugouNameQq"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_kugou"
+            android:roundIcon="@mipmap/ic_launcher_kugou"
+            android:label="QQ音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconKugouMonetNameMusic"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_kugou_monet"
+            android:roundIcon="@mipmap/ic_launcher_kugou_monet"
+            android:label="Music">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconKugouMonetNameChinese"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_kugou_monet"
+            android:roundIcon="@mipmap/ic_launcher_kugou_monet"
+            android:label="音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconKugouMonetNameNetease"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_kugou_monet"
+            android:roundIcon="@mipmap/ic_launcher_kugou_monet"
+            android:label="网易云音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconKugouMonetNameQq"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_kugou_monet"
+            android:roundIcon="@mipmap/ic_launcher_kugou_monet"
+            android:label="QQ音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconNeteaseClassicNameMusic"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_netease_classic"
+            android:roundIcon="@mipmap/ic_launcher_netease_classic"
+            android:label="Music">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconNeteaseClassicNameChinese"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_netease_classic"
+            android:roundIcon="@mipmap/ic_launcher_netease_classic"
+            android:label="音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconNeteaseClassicNameNetease"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_netease_classic"
+            android:roundIcon="@mipmap/ic_launcher_netease_classic"
+            android:label="网易云音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconNeteaseClassicNameQq"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:icon="@mipmap/ic_launcher_netease_classic"
+            android:roundIcon="@mipmap/ic_launcher_netease_classic"
+            android:label="QQ音乐">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconQishuiClassicNameMusic" android:targetActivity=".MainActivity"
+            android:exported="true" android:enabled="false"
+            android:icon="@drawable/ic_qishui_classic" android:roundIcon="@drawable/ic_qishui_classic"
+            android:label="Music">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconQishuiClassicNameChinese" android:targetActivity=".MainActivity"
+            android:exported="true" android:enabled="false"
+            android:icon="@drawable/ic_qishui_classic" android:roundIcon="@drawable/ic_qishui_classic"
+            android:label="音乐">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconQishuiClassicNameNetease" android:targetActivity=".MainActivity"
+            android:exported="true" android:enabled="false"
+            android:icon="@drawable/ic_qishui_classic" android:roundIcon="@drawable/ic_qishui_classic"
+            android:label="网易云音乐">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconQishuiClassicNameQq" android:targetActivity=".MainActivity"
+            android:exported="true" android:enabled="false"
+            android:icon="@drawable/ic_qishui_classic" android:roundIcon="@drawable/ic_qishui_classic"
+            android:label="QQ音乐">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconQqClassicNameMusic" android:targetActivity=".MainActivity"
+            android:exported="true" android:enabled="false"
+            android:icon="@drawable/ic_qqmusic_classic" android:roundIcon="@drawable/ic_qqmusic_classic"
+            android:label="Music">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconQqClassicNameChinese" android:targetActivity=".MainActivity"
+            android:exported="true" android:enabled="false"
+            android:icon="@drawable/ic_qqmusic_classic" android:roundIcon="@drawable/ic_qqmusic_classic"
+            android:label="音乐">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconQqClassicNameNetease" android:targetActivity=".MainActivity"
+            android:exported="true" android:enabled="false"
+            android:icon="@drawable/ic_qqmusic_classic" android:roundIcon="@drawable/ic_qqmusic_classic"
+            android:label="网易云音乐">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconQqClassicNameQq" android:targetActivity=".MainActivity"
+            android:exported="true" android:enabled="false"
+            android:icon="@drawable/ic_qqmusic_classic" android:roundIcon="@drawable/ic_qqmusic_classic"
+            android:label="QQ音乐">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity-alias>
+
         <service
             android:name=".service.MediaPlaybackService"
             android:exported="true"
@@ -116,10 +459,10 @@
             android:name=".service.MediaPlaybackReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.musichub.miuix.PLAY" />
-                <action android:name="com.musichub.miuix.PAUSE" />
-                <action android:name="com.musichub.miuix.NEXT" />
-                <action android:name="com.musichub.miuix.PREVIOUS" />
+                <action android:name="com.hypermusic.miuix.PLAY" />
+                <action android:name="com.hypermusic.miuix.PAUSE" />
+                <action android:name="com.hypermusic.miuix.NEXT" />
+                <action android:name="com.hypermusic.miuix.PREVIOUS" />
             </intent-filter>
         </receiver>
 

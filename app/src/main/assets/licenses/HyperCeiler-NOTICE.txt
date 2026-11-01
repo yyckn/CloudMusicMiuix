@@ -1,0 +1,4 @@
+The OOBE terms and basic settings icons are from HyperCeiler.
+Copyright (C) 2023-2026 HyperCeiler Contributions.
+Source: https://github.com/ReChronoRain/HyperCeiler
+License: GNU Affero General Public License, version 3 or later; see HyperCeiler-AGPL-3.0.txt.

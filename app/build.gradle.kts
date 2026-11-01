@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.musichub.miuix"
+    namespace = "com.hypermusic.miuix"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.musichub.miuix"
+        applicationId = "com.hypermusic.miuix"
         minSdk = 33
         targetSdk = 36
-        versionCode = 55
-        versionName = "1.3.0"
+        versionCode = 59
+        versionName = "2.0.0-dev3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -74,6 +74,11 @@ dependencies {
     implementation("androidx.media2:media2-session:1.3.0")
     implementation("androidx.compose.material3:material3-window-size-class:1.3.1")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("androidx.camera:camera-core:1.4.2")
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("io.github.proify.lyricon:provider:0.1.70")
     implementation(libs.accompanist.lyrics.ui)
     implementation(libs.accompanist.lyrics.core)

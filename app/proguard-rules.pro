@@ -3,9 +3,9 @@
 # proguardFiles setting in build.gradle.kts.
 
 # Keep NeteaseApi and related classes
--keep class com.musichub.miuix.data.api.** { *; }
--keep class com.musichub.miuix.data.model.** { *; }
--keep class com.musichub.miuix.service.** { *; }
+-keep class com.hypermusic.miuix.data.api.** { *; }
+-keep class com.hypermusic.miuix.data.model.** { *; }
+-keep class com.hypermusic.miuix.service.** { *; }
 
 # Keep Miuix classes
 -keep class top.yukonga.miuix.** { *; }
