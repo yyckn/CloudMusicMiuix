@@ -11,8 +11,8 @@ android {
         applicationId = "com.hypermusic.miuix"
         minSdk = 33
         targetSdk = 36
-        versionCode = 59
-        versionName = "2.0.0-dev3"
+        versionCode = 61
+        versionName = "2.0.0-beta5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -80,7 +80,9 @@ dependencies {
     implementation("androidx.camera:camera-view:1.4.2")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("io.github.proify.lyricon:provider:0.1.70")
-    implementation(libs.accompanist.lyrics.ui)
+    // Locally maintained lyrics UI 2.0.0-rc.1; see third-party notice.
+    implementation("com.mocharealm.gaze:capsule:2.1.1-patch2")
+    implementation("androidx.compose.ui:ui:1.12.0")
     implementation(libs.accompanist.lyrics.core)
     val media3Version = "1.3.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")

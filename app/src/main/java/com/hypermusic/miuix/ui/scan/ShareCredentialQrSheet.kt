@@ -63,10 +63,11 @@ fun ShareCredentialQrSheet(show: Boolean, platform: String, onDismiss: () -> Uni
             val image = bitmapResult?.getOrNull()
             if (image != null) {
                 Image(bitmap = image, contentDescription = "用户凭证二维码", modifier = Modifier
-                    .sizeIn(maxWidth = 320.dp, maxHeight = 320.dp).fillMaxWidth().aspectRatio(1f)
+                    .sizeIn(maxWidth = 256.dp, maxHeight = 256.dp).fillMaxWidth().aspectRatio(1f)
                     .clip(RoundedCornerShape(20.dp)).background(Color.White))
                 Spacer(Modifier.height(16.dp))
                 Text("请在另一设备上打开此APP，然后点击“登录新账号”，点击“扫码用户数据二维码”。支持使用相机等系统级应用扫描此二维码。",
+                    style = MiuixTheme.textStyles.footnote1,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f), textAlign = TextAlign.Center)
             } else Text("无法生成二维码，请检查账号凭证是否有效。", color = MiuixTheme.colorScheme.error)
         }

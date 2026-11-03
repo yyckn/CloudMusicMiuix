@@ -61,6 +61,7 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 fun DeveloperOptionsPage(
     currentTrack: Track?,
     onBackClick: () -> Unit,
+    onOpenOobe: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -141,6 +142,12 @@ fun DeveloperOptionsPage(
             contentPadding = PaddingValues(bottom = FeedBottomPads.None)
         ) {
             item { Spacer(modifier = Modifier.height(12.dp)) }
+            item { SmallTitle("应用") }
+            item {
+                Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                    ArrowPreference(title = "OOBE", summary = "重新打开首次设置", onClick = onOpenOobe)
+                }
+            }
             item { SmallTitle("设备") }
             item {
                 Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {

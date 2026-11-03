@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="play_daily_recommendation"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_play_daily"
+        android:shortcutShortLabel="@string/shortcut_play_daily">
+        <intent android:action="com.hypermusic.miuix.action.PLAY_DAILY"
+            android:targetPackage="com.hypermusic.miuix"
+            android:targetClass="com.hypermusic.miuix.MainActivity" />
+    </shortcut>
+</shortcuts>

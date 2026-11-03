@@ -51,6 +51,21 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.hypermusic.miuix.ui.FeedBottomPads
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Link
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Sidebar
+import top.yukonga.miuix.kmp.icon.extended.ConvertFile
+import top.yukonga.miuix.kmp.icon.extended.Contacts
+import top.yukonga.miuix.kmp.icon.extended.Photos
+import top.yukonga.miuix.kmp.icon.extended.Tune
+import top.yukonga.miuix.kmp.icon.extended.Music
+import top.yukonga.miuix.kmp.icon.extended.Playlist
+import top.yukonga.miuix.kmp.icon.extended.Info
+
 
 @Composable
 fun SettingsPage(
@@ -66,6 +81,7 @@ fun SettingsPage(
     onLyricSettingsClick: () -> Unit = {},
     onManageAccountsClick: () -> Unit = {},
     onSearchClick: () -> Unit = {},
+    showSearchAction: Boolean = true,
     profileVersion: Int = 0,
     modifier: Modifier = Modifier
 ) {
@@ -101,6 +117,7 @@ fun SettingsPage(
             qqPrefs.unregisterOnSharedPreferenceChangeListener(qqListener)
         }
     }
+    var showAccountLimitDialog by remember { mutableStateOf(false) }
     val pullToRefreshState = rememberPullToRefreshState()
     
     // 获取APP版本号
@@ -163,7 +180,7 @@ fun SettingsPage(
         topBar = {
             BlurredBar(backdrop = blurBackdrop) {
                 TopAppBar(
-                    actions = { com.hypermusic.miuix.ui.components.SearchPlatformActions(onSearchClick) },
+                    actions = { com.hypermusic.miuix.ui.components.SearchPlatformActions(onSearchClick, showSearchAction) },
                     title = "设置",
                     largeTitle = "设置",
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
@@ -237,15 +254,16 @@ fun SettingsPage(
                                 SwitchPreference(
                                     checked = isQqMultiAccountEnabled,
                                     onCheckedChange = {
+                                        if (!it && com.hypermusic.miuix.data.api.QqMusicApi.accounts.size > 1) { showAccountLimitDialog = true; return@SwitchPreference }
                                         isQqMultiAccountEnabled = it
                                         context.getSharedPreferences("qqmusic_prefs", android.content.Context.MODE_PRIVATE)
                                             .edit().putBoolean("multi_account_enabled", it).apply()
                                     },
-                                    title = "多账号切换",
+                                    title = "多账号切换", startAction = { Icon(MiuixIcons.Contacts, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
                                     summary = if (isQqMultiAccountEnabled) "已开启" else "未开启"
                                 )
                                 if (isQqMultiAccountEnabled) ArrowPreference(
-                                    title = "管理多账号", summary = "添加、切换和管理账号", onClick = onManageAccountsClick
+                                    title = "管理多账号", startAction = { Icon(MiuixIcons.ConvertFile, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) }, summary = "添加、切换和管理账号", onClick = onManageAccountsClick
                                 )
                             }
                         }
@@ -286,6 +304,7 @@ fun SettingsPage(
                             SwitchPreference(
                                 checked = isMultiAccountEnabled,
                                 onCheckedChange = { 
+                                    if (!it && NeteaseApi.getAccounts().size > 1) { showAccountLimitDialog = true; return@SwitchPreference }
                                     isMultiAccountEnabled = it
                                     // 保存状态
                                     context.getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
@@ -293,7 +312,7 @@ fun SettingsPage(
                                         .putBoolean("multi_account_enabled", it)
                                         .apply()
                                 },
-                                title = "多账号切换",
+                                title = "多账号切换", startAction = { Icon(MiuixIcons.Contacts, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
                                 summary = if (isMultiAccountEnabled) "已开启" else "未开启"
                             )
                         }
@@ -301,7 +320,7 @@ fun SettingsPage(
                         // 多账号开启后显示管理选项
                         if (isLoggedIn && isMultiAccountEnabled) {
                             ArrowPreference(
-                                title = "管理多账号",
+                                title = "管理多账号", startAction = { Icon(MiuixIcons.ConvertFile, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
                                 summary = "添加、切换和管理账号",
                                 onClick = onManageAccountsClick
                             )
@@ -317,17 +336,17 @@ fun SettingsPage(
                             .padding(bottom = 12.dp)
                     ) {
                         ArrowPreference(
-                            title = "界面设置",
+                            title = "界面设置", startAction = { Icon(MiuixIcons.Sidebar, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
                             summary = "主题色、底栏等",
                             onClick = onThemeSettingsClick
                         )
                         ArrowPreference(
-                            title = "应用图标和名称",
+                            title = "应用图标和名称", startAction = { Icon(MiuixIcons.Photos, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
                             summary = "音符、网易云图标",
                             onClick = onAppIconClick
                         )
                         ArrowPreference(
-                            title = "播放页设置",
+                            title = "播放页设置", startAction = { Icon(MiuixIcons.Tune, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
                             summary = "歌词样式、封面样式等",
                             onClick = onPlayPageSettingsClick
                         )
@@ -341,17 +360,18 @@ fun SettingsPage(
                             .padding(bottom = 12.dp)
                     ) {
                         ArrowPreference(
-                            title = "歌曲设置",
+                            title = "歌曲设置", startAction = { Icon(MiuixIcons.Music, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
                             summary = "音质、播放速度",
                             onClick = onSongSettingsClick
                         )
                         ArrowPreference(
-                            title = "歌词设置",
+                            title = "歌词设置", startAction = { Icon(MiuixIcons.Playlist, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
                             summary = "歌词来源等",
                             onClick = onLyricSettingsClick
                         )
                         ArrowPreference(
                             title = "歌词接口适配",
+                            startAction = { Icon(Icons.Filled.Link, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
                             onClick = onLyriconAdapterClick
                         )
                     }
@@ -364,7 +384,7 @@ fun SettingsPage(
                             .padding(bottom = 12.dp)
                     ) {
                         ArrowPreference(
-                            title = "关于",
+                            title = "关于", startAction = { Icon(MiuixIcons.Info, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
                             summary = "HyperMusic v$versionName",
                             onClick = onAboutClick
                         )
@@ -373,4 +393,10 @@ fun SettingsPage(
             }
         }
     }
+    OverlayDialog(show = showAccountLimitDialog, title = "无法关闭多账号",
+        summary = "当前账号数量大于1，需要删除部分账号才能关闭多账号功能。",
+        onDismissRequest = { showAccountLimitDialog = false }) {
+        TextButton(text = "确定", onClick = { showAccountLimitDialog = false }, modifier = Modifier.fillMaxWidth())
+    }
+
 }

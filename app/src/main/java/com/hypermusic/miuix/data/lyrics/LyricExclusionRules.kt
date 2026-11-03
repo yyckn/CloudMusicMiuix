@@ -25,6 +25,7 @@ object LyricExclusionRules {
     private const val KEY_ENABLED = "enabled"
     private const val KEY_DISABLED_DEFAULT_IDS = "disabled_default_ids"
     private const val KEY_USER_RULES = "user_rules"
+    private const val SLASH_RULE_ID = "default-special-slashes"
 
     /** 规则类型。 */
     enum class RuleKind { KEYWORD, REGEX, SONG_INFO, DURATION }
@@ -149,6 +150,9 @@ object LyricExclusionRules {
         album: String
     ): Boolean {
         if (!durationMatches(rule, durationMs)) return false
+        if (rule.id == SLASH_RULE_ID) {
+            return text.count { it == '/' || it == '\\' } >= 3
+        }
         val pattern = rule.pattern.trim()
         if (pattern.isEmpty()) {
             // 仅时长规则
@@ -210,6 +214,7 @@ object LyricExclusionRules {
 
     /** 供 UI 展示规则时长，如「时长 ≤ 1999ms」「时长 1000-2000ms」；未设置时长时返回空串。 */
     fun describe(rule: Rule): String {
+        if (rule.id == SLASH_RULE_ID) return "特殊规则"
         val min = rule.durationMinMs
         val max = rule.durationMs
         return when {
@@ -405,7 +410,8 @@ object LyricExclusionRules {
 
     /** 全部默认规则。 */
     val defaultRules: List<Rule> by lazy {
-        defaultColonRules + defaultExtraRules + defaultPlainRules + defaultTitleRules + defaultShortDurationRules
+        listOf(Rule(id = SLASH_RULE_ID, pattern = "包含超过4个斜杠或反斜杠")) +
+            defaultColonRules + defaultExtraRules + defaultPlainRules + defaultTitleRules + defaultShortDurationRules
     }
 
     /** 当前启用的默认规则数量（供 UI 展示）。 */

@@ -63,7 +63,6 @@ import com.hypermusic.miuix.data.model.AlbumInfo
 import com.hypermusic.miuix.data.model.ArtistInfo
 import com.hypermusic.miuix.data.model.RecommendPlaylist
 import com.hypermusic.miuix.data.model.Track
-import com.hypermusic.miuix.data.model.UpdateInfo
 import com.hypermusic.miuix.ui.FeedBottomPads
 import com.hypermusic.miuix.ui.theme.ThemeSettings
 import com.hypermusic.miuix.viewmodel.MusicPlayerViewModel
@@ -104,6 +103,7 @@ fun RecommendPage(
     onArtistClick: (String) -> Unit = {},
     onAlbumClick: (Long) -> Unit = {},
     onSearchClick: () -> Unit = {},
+    showSearchAction: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -132,7 +132,7 @@ fun RecommendPage(
         topBar = {
             BlurredBar(backdrop = blurBackdrop) {
                 TopAppBar(
-                    actions = { com.hypermusic.miuix.ui.components.SearchPlatformActions(onSearchClick, scrollBehavior.state.collapsedFraction >= 0.99f) },
+                    actions = { com.hypermusic.miuix.ui.components.SearchPlatformActions(onSearchClick, showSearchAction && scrollBehavior.state.collapsedFraction >= 0.99f) },
                     title = "推荐",
                     largeTitle = "推荐",
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
@@ -174,20 +174,6 @@ fun RecommendPage(
                     contentPadding = PaddingValues(top = 8.dp, bottom = FeedBottomPads.More)
                 ) {
                     item { SearchEntry(onSearchClick) }
-                    // 0. 新版本提示卡片
-                    val update = viewModel.updateState
-                    if (update.hasUpdate && !update.dismissed) {
-                        item {
-                            UpdateAvailableCard(
-                                onView = {
-                                    viewModel.dismissUpdateCard()
-                                    viewModel.openUpdateLog()
-                                },
-                                onDismiss = { viewModel.dismissUpdateCard() }
-                            )
-                        }
-                    }
-
                     item { SmallTitle("专属推荐") }
 
                     // 2. 播放模式（仅卡片，无标题/解释）
@@ -345,8 +331,6 @@ fun RecommendPage(
             }
         }
 
-        // 更新日志抽屉
-        UpdateLogSheet(viewModel = viewModel)
     }
 }
 
@@ -460,47 +444,6 @@ private fun TabletCoverCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-    }
-}
-
-/**
- * 新版本提示卡片
- */
-@Composable
-private fun UpdateAvailableCard(
-    onView: () -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        pressFeedbackType = PressFeedbackType.Tilt,
-        showIndication = true,
-        onClick = onView
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "检测到新版本，点击查看",
-                style = MiuixTheme.textStyles.body1,
-                fontWeight = FontWeight.Medium,
-                color = MiuixTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(onClick = onDismiss) {
-                Icon(
-                    imageVector = MiuixIcons.Close,
-                    contentDescription = "关闭",
-                    tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
             }
         }

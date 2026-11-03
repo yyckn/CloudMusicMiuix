@@ -62,10 +62,7 @@ fun SongSettingsPage(
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     val blurBackdrop = rememberPageBlurBackdrop()
-    val isVipAccount = viewModel.userVipType > 0
-    val qualityOptions = remember {
-        listOf("Hi-Res 无损", "无损", "高品质", "标准品质", "低品质")
-    }
+    val qualityOptions = com.hypermusic.miuix.data.model.AudioQuality.options(com.hypermusic.miuix.data.api.PlatformManager.current)
     var showSpeedDialog by remember { mutableStateOf(false) }
     var speedInput by remember { mutableStateOf("") }
 
@@ -112,43 +109,14 @@ fun SongSettingsPage(
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 12.dp)
                 ) {
-                    if (isVipAccount) {
-                        WindowDropdownPreference(
-                            title = "音质",
-                            summary = "*选择的音质仅代表可获取的最高音质，实际音频音质可能因歌曲质量而不同",
-                            items = qualityOptions,
-                            selectedIndex = viewModel.audioQualityIndex,
-                            startAction = {
-                                Icon(
-                                    imageVector = MiuixIcons.Music,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            },
-                            onSelectedIndexChange = { newIndex ->
-                                viewModel.updateAudioQualityIndex(newIndex)
-                            }
-                        )
-                    } else {
-                        BasicComponent(
-                            title = "音质",
-                            summary = "登录VIP账号后可享受更高音质",
-                            startAction = {
-                                Icon(
-                                    imageVector = MiuixIcons.Music,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            },
-                            endActions = {
-                                Text(
-                                    text = "低品质",
-                                    style = MiuixTheme.textStyles.body2,
-                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                )
-                            }
-                        )
-                    }
+                    WindowDropdownPreference(
+                        title = "音质",
+                        summary = "设置播放及下载的最高音质；播放时切歌生效，实际音质取决于歌曲和账号权限",
+                        items = qualityOptions,
+                        selectedIndex = viewModel.audioQualityIndex,
+                        startAction = { Icon(imageVector = MiuixIcons.Music, contentDescription = null, modifier = Modifier.size(24.dp)) },
+                        onSelectedIndexChange = { viewModel.updateAudioQualityIndex(it) }
+                    )
 
                     BasicComponent(
                         title = "播放速度",

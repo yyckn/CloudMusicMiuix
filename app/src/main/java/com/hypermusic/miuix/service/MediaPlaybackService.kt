@@ -30,6 +30,8 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.hypermusic.miuix.MainActivity
 import com.hypermusic.miuix.R
 import com.hypermusic.miuix.data.model.Track
+import com.hypermusic.miuix.data.api.NeteaseApi
+import com.hypermusic.miuix.data.api.QqMusicApi
 import com.hypermusic.miuix.ui.theme.ThemeSettings
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
@@ -125,6 +127,11 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     
     // 回调接口，用于通知ViewModel播放状态变化
     var onPlaybackStateChanged: ((Boolean) -> Unit)? = null
+    var onNotificationClose: (() -> Unit)? = null
+    var onNotificationFavorite: ((Track) -> Unit)? = null
+    private var favoriteTrack: Track? = null
+    private var favorite = false
+    private var favoriteJob: Job? = null
     
     // Lyricon词幕管理器
     var lyriconManager: LyriconProviderManager? = null
@@ -149,6 +156,8 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         const val ACTION_PAUSE = "com.hypermusic.miuix.PAUSE"
         const val ACTION_NEXT = "com.hypermusic.miuix.NEXT"
         const val ACTION_PREVIOUS = "com.hypermusic.miuix.PREVIOUS"
+        const val ACTION_CLOSE = "com.hypermusic.miuix.CLOSE_MEDIA"
+        const val ACTION_FAVORITE = "com.hypermusic.miuix.FAVORITE_MEDIA"
         private const val TAG = "MediaPlaybackService"
         private const val MAX_ERROR_RETRIES = 2
         private const val FADE_DURATION_MS = 300L
@@ -180,6 +189,8 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
             ACTION_PAUSE -> pausePlayback()
             ACTION_NEXT -> playNext()
             ACTION_PREVIOUS -> playPrevious()
+            ACTION_CLOSE -> closeFromNotification()
+            ACTION_FAVORITE -> favoriteFromNotification()
         }
         return START_STICKY
     }
@@ -227,7 +238,14 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         }
 
         override fun onStop() {
-            stopPlayback()
+            closeFromNotification()
+        }
+
+        override fun onCustomAction(action: String?, extras: Bundle?) {
+            when (action) {
+                ACTION_CLOSE -> closeFromNotification()
+                ACTION_FAVORITE -> favoriteFromNotification()
+            }
         }
 
         override fun onSeekTo(pos: Long) {
@@ -272,6 +290,20 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
+    fun restoreTrackWithUrl(track: Track, url: String, position: Long, resume: Boolean) {
+        currentTrack = track
+        errorRetryCount = 0
+        serviceScope.launch {
+            try {
+                lyriconManager?.setTrack(track)
+                if (resume && !requestAudioFocus()) return@launch
+                startPlayback(track, url, autoplay = resume, startPosition = position)
+                lyriconManager?.setPlaybackState(resume)
+                loadAlbumArtAndShowNotification(track)
+            } catch (e: Exception) { Log.e(TAG, "restoreTrackWithUrl error", e) }
+        }
+    }
+
     fun prepareTrackWithUrl(track: Track, url: String) {
         currentTrack = track
         errorRetryCount = 0
@@ -297,6 +329,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         startPosition: Long = 0L
     ) {
         currentTrack = track
+        mediaSession.isActive = true
         currentUrl = url
         playbackPosition = startPosition
         completionHandled = false
@@ -548,6 +581,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     fun clearPlayback() {
+        favoriteJob?.cancel()
+        favoriteTrack = null
+        favorite = false
         currentTrack = null
         currentUrl = null
         currentLyrics = null
@@ -559,9 +595,57 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         lyriconManager?.setPlaybackState(false)
         mediaSession.setMetadata(null)
         updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
+        mediaSession.isActive = false
         abandonAudioFocus()
         stopForeground(true)
         onPlaybackStateChanged?.invoke(false)
+    }
+
+    fun setFavoriteState(track: Track, liked: Boolean) {
+        favoriteTrack = track
+        favorite = liked
+        if (currentTrack == track) {
+            updatePlaybackState(if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED)
+            showNotification()
+        }
+    }
+
+    private fun closeFromNotification() {
+        if (onNotificationClose != null) {
+            onNotificationClose?.invoke()
+        } else {
+            val snapshotKey = if (currentTrack?.source == "qqmusic") "playback_snapshot_qq" else "playback_snapshot_netease"
+            clearPlayback()
+            getSharedPreferences("player_prefs", Context.MODE_PRIVATE).edit()
+                .remove(snapshotKey)
+                .remove("last_track").remove("last_playlist").remove("play_mode_type")
+                .remove("intelligence_song_id").remove("intelligence_playlist_id").apply()
+            stopSelf()
+        }
+    }
+
+    private fun favoriteFromNotification() {
+        val track = currentTrack ?: return
+        if (onNotificationFavorite != null) {
+            onNotificationFavorite?.invoke(track)
+            return
+        }
+        if (favoriteJob?.isActive == true) return
+        favoriteJob = serviceScope.launch {
+            val result = if (track.source == "qqmusic") {
+                QqMusicApi.isLiked(track).fold({ QqMusicApi.setLiked(track, !it) }, { kotlin.Result.failure(it) })
+            } else {
+                NeteaseApi.checkSongLiked(track.id).fold({ liked -> NeteaseApi.likeSong(track.id, !liked).map { success ->
+                    check(success) { "收藏操作失败" }; !liked
+                } }, { kotlin.Result.failure(it) })
+            }
+            result.fold({ liked ->
+                if (currentTrack == track) setFavoriteState(track, liked)
+                android.widget.Toast.makeText(this@MediaPlaybackService, if (liked) "已收藏" else "已取消收藏", android.widget.Toast.LENGTH_SHORT).show()
+            }, { error ->
+                android.widget.Toast.makeText(this@MediaPlaybackService, error.message ?: "收藏操作失败", android.widget.Toast.LENGTH_SHORT).show()
+            })
+        }
     }
 
     private fun stopPlayback() {
@@ -672,6 +756,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
                 PlaybackStateCompat.ACTION_SEEK_TO
             )
+            .addCustomAction(ACTION_CLOSE, "关闭", R.drawable.ic_media_close)
+            .addCustomAction(ACTION_FAVORITE, if (favoriteTrack == currentTrack && favorite) "取消收藏" else "收藏",
+                if (favoriteTrack == currentTrack && favorite) R.drawable.ic_media_favorite_filled else R.drawable.ic_media_favorite)
             .setState(state, position, playbackSpeed)
             .build()
         mediaSession.setPlaybackState(playbackState)
@@ -807,6 +894,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                     getActionIntent(ACTION_NEXT)
                 )
             )
+            .addAction(R.drawable.ic_media_close, "关闭", getActionIntent(ACTION_CLOSE))
+            .addAction(if (favoriteTrack == track && favorite) R.drawable.ic_media_favorite_filled else R.drawable.ic_media_favorite,
+                if (favoriteTrack == track && favorite) "取消收藏" else "收藏", getActionIntent(ACTION_FAVORITE))
             .setStyle(
                 androidx.media.app.NotificationCompat.MediaStyle()
                     .setMediaSession(mediaSession.sessionToken)

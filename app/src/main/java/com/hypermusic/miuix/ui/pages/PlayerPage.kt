@@ -6,15 +6,19 @@ import android.graphics.drawable.BitmapDrawable
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,6 +36,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.runtime.DisposableEffect
@@ -39,6 +44,8 @@ import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import com.hypermusic.miuix.ui.theme.KeyboardShortcutSettings
 import com.hypermusic.miuix.ui.theme.ShortcutAction
 import androidx.compose.foundation.layout.width
@@ -46,6 +53,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.ClickableText
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -67,6 +78,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -77,6 +89,8 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -119,6 +133,8 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.theme.ColorSchemeMode
+import top.yukonga.miuix.kmp.theme.ThemeController
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
@@ -137,7 +153,7 @@ import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.FavoritesFill
-import top.yukonga.miuix.kmp.icon.extended.ListView
+import top.yukonga.miuix.kmp.icon.extended.Playlist
 import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.icon.extended.Merge
 import top.yukonga.miuix.kmp.icon.extended.More
@@ -197,6 +213,15 @@ fun PlayerPage(
     var showMoreMenu by remember { mutableStateOf(false) }
     var showPlaylistSheet by remember { mutableStateOf(false) }
     var showMoreSheet by remember { mutableStateOf(false) }
+    val moreListState = rememberLazyListState()
+    var scrollToArtists by remember { mutableStateOf(false) }
+    LaunchedEffect(showMoreSheet, scrollToArtists) {
+        if (showMoreSheet && scrollToArtists) {
+            kotlinx.coroutines.delay(100)
+            moreListState.scrollToItem(2)
+            scrollToArtists = false
+        }
+    }
     var showLyricUpgradeSheet by remember { mutableStateOf(false) }
     var restoreOriginalLyrics by remember { mutableStateOf(false) }
     var forceUpgradeLyrics by remember { mutableStateOf(false) }
@@ -271,14 +296,24 @@ fun PlayerPage(
         }
     }
     
-    // 音质选择
-    val qualityOptions = listOf(
-        "Hi-Res 无损",
-        "无损",
-        "高品质",
-        "标准品质",
-        "低品质"
-    )
+    // 音质选项随当前平台变化。
+    val qualityOptions = com.hypermusic.miuix.data.model.AudioQuality.options(com.hypermusic.miuix.data.api.PlatformManager.current)
+
+    val onArtistTextClick: (Int) -> Unit = { index ->
+        val current = track
+        if (current != null) {
+            if (isPlayerArtistGroup(current)) {
+                scrollToArtists = true
+                showMoreSheet = true
+            } else {
+                val id = current.artistIds.getOrNull(index).orEmpty().ifBlank { current.artistId }
+                if (id.isNotBlank()) onNavigateToArtist(id)
+            }
+        }
+    }
+    val onAlbumTextClick: () -> Unit = {
+        track?.albumId?.removePrefix("nealbum_")?.toLongOrNull()?.let(onNavigateToAlbum)
+    }
 
     // 获取专辑歌手信息
     LaunchedEffect(track?.albumId) {
@@ -599,11 +634,11 @@ fun PlayerPage(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(text = track?.title ?: "未知歌曲", fontSize = 24.sp, fontWeight = FontWeight.Medium, color = playerText, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}", fontSize = 14.sp, color = playerText.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+                                        PlayerArtistAlbumText(track, playerText, 14.sp, onArtistTextClick, onAlbumTextClick, modifier = Modifier.fillMaxWidth())
                                     }
                                     if (showCastButton) {
                                         IconButton(onClick = onOpenSystemUI) {
-                                            Icon(imageVector = MiuixIcons.ScreenMirroring, contentDescription = "投屏", tint = playerText)
+                                            Icon(imageVector = MiuixIcons.ScreenMirroring, contentDescription = "音频输出", tint = playerText)
                                         }
                                     }
                                 }
@@ -624,10 +659,10 @@ fun PlayerPage(
                                     var seekPosition by remember { mutableStateOf<Long?>(null) }
                                     val displayPosition = seekPosition ?: playerState.currentPosition
                                     val progress = if (playerState.duration > 0) displayPosition.toFloat() / playerState.duration.toFloat() else 0f
-                                    Slider(value = progress, onValueChange = { newValue -> seekPosition = (newValue * playerState.duration).toLong() }, onValueChangeFinished = { seekPosition?.let { onSeekTo(it) }; seekPosition = null }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
+                                    PlayerProgressSlider(value = progress, color = playerText, onValueChange = { newValue -> seekPosition = (newValue * playerState.duration).toLong() }, onValueChangeFinished = { seekPosition?.let { onSeekTo(it) }; seekPosition = null }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
                                     Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                         Text(text = formatDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
-                                        Text(text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode, ThemeSettings.showQuality), fontSize = 12.sp, color = playerText)
+                                        Text(text = getQualityText(playerState.bitrate, playerState.audioQuality, isFMMode, isIntelligenceMode, ThemeSettings.showQuality), fontSize = 12.sp, color = playerText)
                                         Text(text = formatDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                                     }
                                     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -649,7 +684,7 @@ fun PlayerPage(
                                             }
                                             Spacer(modifier = Modifier.width(16.dp))
                                             if (!isFMMode && !isIntelligenceMode) {
-                                                IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) { Icon(imageVector = MiuixIcons.ListView, contentDescription = "播放列表", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                                IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) { Icon(imageVector = MiuixIcons.Playlist, contentDescription = "播放列表", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                                 Spacer(modifier = Modifier.width(16.dp))
                                             }
                                             if (isFMMode || isIntelligenceMode) {
@@ -691,13 +726,11 @@ fun PlayerPage(
                                 Text(track?.title ?: "未知歌曲", fontSize = 24.sp, fontWeight = FontWeight.Medium,
                                     color = playerText, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Spacer(Modifier.height(4.dp))
-                                Text("${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}",
-                                    fontSize = 14.sp, color = playerText.copy(alpha = 0.7f),
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                PlayerArtistAlbumText(track, playerText, 14.sp, onArtistTextClick, onAlbumTextClick)
                             }
                             if (showCastButton) {
                                 IconButton(onClick = onOpenSystemUI) {
-                                    Icon(MiuixIcons.ScreenMirroring, contentDescription = "投屏", tint = playerText)
+                                    Icon(MiuixIcons.ScreenMirroring, contentDescription = "音频输出", tint = playerText)
                                 }
                             }
                         }
@@ -728,12 +761,12 @@ fun PlayerPage(
                         var seekPosition by remember { mutableStateOf<Long?>(null) }
                         val displayPosition = seekPosition ?: playerState.currentPosition
                         val progress = if (playerState.duration > 0) (displayPosition.toFloat() / playerState.duration).coerceIn(0f, 1f) else 0f
-                        Slider(value = progress, onValueChange = { seekPosition = (it * playerState.duration).toLong() },
+                        PlayerProgressSlider(value = progress, color = playerText, onValueChange = { seekPosition = (it * playerState.duration).toLong() },
                             onValueChangeFinished = { seekPosition?.let(onSeekTo); seekPosition = null },
                             enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth())
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(formatDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
-                            Text(getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode, ThemeSettings.showQuality),
+                            Text(getQualityText(playerState.bitrate, playerState.audioQuality, isFMMode, isIntelligenceMode, ThemeSettings.showQuality),
                                 fontSize = 12.sp, color = playerText)
                             Text(formatDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                         }
@@ -828,7 +861,7 @@ fun PlayerPage(
                                         Spacer(modifier = Modifier.width(16.dp))
                                         IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) {
                                             Icon(
-                                                imageVector = MiuixIcons.ListView,
+                                                imageVector = MiuixIcons.Playlist,
                                                 contentDescription = "播放列表",
                                                 tint = playerText.copy(alpha = 0.6f),
                                                 modifier = Modifier.size(24.dp)
@@ -918,7 +951,7 @@ fun PlayerPage(
                                 verticalAlignment = Alignment.CenterVertically) {
                             if (!isFMMode && !isIntelligenceMode) {
                                 IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) {
-                                    Icon(MiuixIcons.ListView, contentDescription = "播放列表", tint = playerText.copy(alpha = 0.6f))
+                                    Icon(MiuixIcons.Playlist, contentDescription = "播放列表", tint = playerText.copy(alpha = 0.6f))
                                 }
                             }
                             IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) {
@@ -977,14 +1010,7 @@ fun PlayerPage(
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}",
-                                    fontSize = 14.sp,
-                                    color = playerText.copy(alpha = 0.7f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                PlayerArtistAlbumText(track, playerText, 14.sp, onArtistTextClick, onAlbumTextClick, modifier = Modifier.fillMaxWidth())
                             }
                             
                             // 投屏按钮
@@ -992,7 +1018,7 @@ fun PlayerPage(
                                 IconButton(onClick = onOpenSystemUI) {
                                     Icon(
                                         imageVector = MiuixIcons.ScreenMirroring,
-                                        contentDescription = "投屏",
+                                        contentDescription = "音频输出",
                                         tint = playerText
                                     )
                                 }
@@ -1048,8 +1074,8 @@ fun PlayerPage(
                                 0f
                             }
 
-                            Slider(
-                                value = progress,
+                            PlayerProgressSlider(
+                                value = progress, color = playerText,
                                 onValueChange = { newValue ->
                                     seekPosition = (newValue * playerState.duration).toLong()
                                 },
@@ -1076,7 +1102,7 @@ fun PlayerPage(
                                     color = playerText.copy(alpha = 0.6f)
                                 )
                                 Text(
-                                    text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode, ThemeSettings.showQuality),
+                                    text = getQualityText(playerState.bitrate, playerState.audioQuality, isFMMode, isIntelligenceMode, ThemeSettings.showQuality),
                                     fontSize = 12.sp,
                                     color = playerText
                                 )
@@ -1177,7 +1203,7 @@ fun PlayerPage(
                                         Spacer(modifier = Modifier.width(16.dp))
                                         IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) {
                                             Icon(
-                                                imageVector = MiuixIcons.ListView,
+                                                imageVector = MiuixIcons.Playlist,
                                                 contentDescription = "播放列表",
                                                 tint = playerText.copy(alpha = 0.6f),
                                                 modifier = Modifier.size(24.dp)
@@ -1409,11 +1435,11 @@ fun PlayerPage(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(text = track?.title ?: "未知歌曲", fontSize = 24.sp, fontWeight = FontWeight.Medium, color = playerText, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text(text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}", fontSize = 14.sp, color = playerText.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+                                    PlayerArtistAlbumText(track, playerText, 14.sp, onArtistTextClick, onAlbumTextClick, modifier = Modifier.fillMaxWidth())
                                 }
                                 if (showCastButton) {
                                     IconButton(onClick = onOpenSystemUI) {
-                                        Icon(imageVector = MiuixIcons.ScreenMirroring, contentDescription = "投屏", tint = playerText)
+                                        Icon(imageVector = MiuixIcons.ScreenMirroring, contentDescription = "音频输出", tint = playerText)
                                     }
                                 }
                             }
@@ -1470,7 +1496,7 @@ fun PlayerPage(
                             // 底部控制区域
                             Column(
                                 modifier = Modifier
-                                    .padding(horizontal = 24.dp)
+                                    .padding(horizontal = if (screenWidth < 400.dp) 8.dp else 24.dp)
                                     .onGloballyPositioned { coordinates ->
                                         controlsTopY = topPaddingPx + coordinates.positionInParent().y
                                     }
@@ -1478,10 +1504,10 @@ fun PlayerPage(
                                 var seekPosition by remember { mutableStateOf<Long?>(null) }
                                 val displayPosition = seekPosition ?: playerState.currentPosition
                                 val progress = if (playerState.duration > 0) displayPosition.toFloat() / playerState.duration.toFloat() else 0f
-                                Slider(value = progress, onValueChange = { newValue -> seekPosition = (newValue * playerState.duration).toLong() }, onValueChangeFinished = { seekPosition?.let { onSeekTo(it) }; seekPosition = null }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
-                                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                PlayerProgressSlider(value = progress, color = playerText, onValueChange = { newValue -> seekPosition = (newValue * playerState.duration).toLong() }, onValueChangeFinished = { seekPosition?.let { onSeekTo(it) }; seekPosition = null }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(horizontal = if (screenWidth < 400.dp) 16.dp else 0.dp).padding(bottom = 4.dp))
+                                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = if (screenWidth < 400.dp) 16.dp else 0.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text(text = formatDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
-                                    Text(text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode, ThemeSettings.showQuality), fontSize = 12.sp, color = playerText)
+                                    Text(text = getQualityText(playerState.bitrate, playerState.audioQuality, isFMMode, isIntelligenceMode, ThemeSettings.showQuality), fontSize = 12.sp, color = playerText)
                                     Text(text = formatDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                                 }
                                 Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1495,30 +1521,31 @@ fun PlayerPage(
                                         Spacer(modifier = Modifier.width(24.dp))
                                         IconButton(onClick = onNextSafe, modifier = Modifier.size(56.dp).alpha(controlIconAlpha)) { Icon(imageVector = MiuixIcons.ChevronForward, contentDescription = "下一首", tint = playerText, modifier = Modifier.size(32.dp)) }
                                     }
-                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(onClick = onBackClick, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.Close, contentDescription = "关闭", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = if ((isFMMode || isIntelligenceMode) && screenWidth < 400.dp) Arrangement.SpaceEvenly else Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                                         if (isFMMode || isIntelligenceMode) {
-                                            Spacer(modifier = Modifier.width(16.dp))
+                                            IconButton(onClick = onBackClick, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.Close, contentDescription = "关闭", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                            if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                                             FmLikeButton(
                                                 isLiked = isCurrentTrackLiked,
                                                 onClick = {
                                                     if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack()
                                                 }
                                             )
-                                            Spacer(modifier = Modifier.width(16.dp))
+                                            if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                                             PlayerShareButton(playerText) { onShare() }
-                                            Spacer(modifier = Modifier.width(16.dp))
+                                            if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                                             PlayerCommentButton(playerText) {
                                                 playerState.currentTrack?.let { onNavigateToComment(it.id, it.title) }
                                             }
-                                            Spacer(modifier = Modifier.width(16.dp))
+                                            if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                                         } else {
-                                            Spacer(modifier = Modifier.width(16.dp))
                                             IconButton(onClick = { showLyricsInFullScreen = !showLyricsInFullScreen }, modifier = Modifier.size(48.dp)) { Icon(imageVector = if (showLyricsInFullScreen) MiuixIcons.NotesFill else MiuixIcons.Notes, contentDescription = "歌词", tint = if (showLyricsInFullScreen) playerText else playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                             Spacer(modifier = Modifier.width(16.dp))
                                             IconButton(onClick = onSwitchPlayModeSafe, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) { Icon(imageVector = when (playMode) { 0 -> MiuixIcons.Sort; 1 -> MiuixIcons.Merge; 2 -> MiuixIcons.Replace; else -> MiuixIcons.Sort }, contentDescription = when (playMode) { 0 -> "顺序播放"; 1 -> "乱序播放"; 2 -> "单曲循环"; else -> "顺序播放" }, tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                             Spacer(modifier = Modifier.width(16.dp))
-                                            IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) { Icon(imageVector = MiuixIcons.ListView, contentDescription = "播放列表", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                            IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) { Icon(imageVector = MiuixIcons.Playlist, contentDescription = "播放列表", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            IconButton(onClick = { if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack() }, modifier = Modifier.size(48.dp)) { Icon(imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites, contentDescription = if (isCurrentTrackLiked) "取消收藏" else "收藏", tint = if (isCurrentTrackLiked) MiuixTheme.colorScheme.primary else playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                             Spacer(modifier = Modifier.width(16.dp))
                                         }
                                         IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.More, contentDescription = "更多", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
@@ -1555,14 +1582,7 @@ fun PlayerPage(
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}",
-                                fontSize = 14.sp,
-                                color = playerText.copy(alpha = 0.7f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            PlayerArtistAlbumText(track, playerText, 14.sp, onArtistTextClick, onAlbumTextClick, modifier = Modifier.fillMaxWidth())
                         }
                         
                         // 投屏按钮
@@ -1570,7 +1590,7 @@ fun PlayerPage(
                             IconButton(onClick = onOpenSystemUI) {
                                 Icon(
                                     imageVector = MiuixIcons.ScreenMirroring,
-                                    contentDescription = "投屏",
+                                    contentDescription = "音频输出",
                                     tint = playerText
                                 )
                             }
@@ -1605,13 +1625,8 @@ fun PlayerPage(
                                                 modifier = Modifier.fillMaxWidth()
                                             )
                                             Spacer(modifier = Modifier.height(8.dp))
-                                            Text(
-                                                text = "${track?.artist ?: "未知歌手"} - ${track?.album ?: "未知专辑"}",
-                                                fontSize = 16.sp,
-                                                color = playerText.copy(alpha = 0.7f),
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
+                                            PlayerArtistAlbumText(track, playerText, 16.sp, onArtistTextClick, onAlbumTextClick,
+                                                modifier = Modifier.fillMaxWidth(), centered = true, maxLines = Int.MAX_VALUE)
                                         }
                                     }
                                 } else {
@@ -1688,7 +1703,7 @@ fun PlayerPage(
                     }
 
                     // 底部控制区域
-                    Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                    Column(modifier = Modifier.padding(horizontal = if (screenWidth < 400.dp) 8.dp else 24.dp)) {
                         // 播放进度条
                         var seekPosition by remember { mutableStateOf<Long?>(null) }
                         val displayPosition = seekPosition ?: playerState.currentPosition
@@ -1698,8 +1713,8 @@ fun PlayerPage(
                             0f
                         }
 
-                        Slider(
-                            value = progress,
+                        PlayerProgressSlider(
+                            value = progress, color = playerText,
                             onValueChange = { newValue ->
                                 seekPosition = (newValue * playerState.duration).toLong()
                             },
@@ -1710,6 +1725,7 @@ fun PlayerPage(
                             enabled = !playerState.isLoading,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .padding(horizontal = if (screenWidth < 400.dp) 16.dp else 0.dp)
                                 .padding(bottom = 4.dp)
                         )
 
@@ -1717,6 +1733,7 @@ fun PlayerPage(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .padding(horizontal = if (screenWidth < 400.dp) 16.dp else 0.dp)
                                 .padding(bottom = 16.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -1726,7 +1743,7 @@ fun PlayerPage(
                             color = playerText.copy(alpha = 0.6f)
                         )
                         Text(
-                            text = getQualityText(playerState.bitrate, isFMMode, isIntelligenceMode, ThemeSettings.showQuality),
+                            text = getQualityText(playerState.bitrate, playerState.audioQuality, isFMMode, isIntelligenceMode, ThemeSettings.showQuality),
                             fontSize = 12.sp,
                             color = playerText
                         )
@@ -1795,37 +1812,28 @@ fun PlayerPage(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.Center,
+                            horizontalArrangement = if ((isFMMode || isIntelligenceMode) && screenWidth < 400.dp) Arrangement.SpaceEvenly else Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // 关闭按钮
-                            IconButton(
-                                onClick = onBackClick,
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = MiuixIcons.Close,
-                                    contentDescription = "关闭",
-                                    tint = playerText.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
                             if (isFMMode || isIntelligenceMode) {
-                                Spacer(modifier = Modifier.width(16.dp))
+                                IconButton(onClick = onBackClick, modifier = Modifier.size(48.dp)) {
+                                    Icon(imageVector = MiuixIcons.Close, contentDescription = "关闭",
+                                        tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp))
+                                }
+                                if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                                 FmLikeButton(
                                     isLiked = isCurrentTrackLiked,
                                     onClick = {
                                         if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack()
                                     }
                                 )
-                                Spacer(modifier = Modifier.width(16.dp))
+                                if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                                 PlayerShareButton(playerText) { onShare() }
-                                Spacer(modifier = Modifier.width(16.dp))
+                                if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                                 PlayerCommentButton(playerText) {
                                     playerState.currentTrack?.let { onNavigateToComment(it.id, it.title) }
                                 }
                             } else {
-                                Spacer(modifier = Modifier.width(16.dp))
                                 // 歌词按钮
                                 IconButton(
                                     onClick = {
@@ -1872,14 +1880,20 @@ fun PlayerPage(
                                 Spacer(modifier = Modifier.width(16.dp))
                                 IconButton(onClick = { if (!controlsLocked) showPlaylistSheet = true }, modifier = Modifier.size(48.dp).alpha(controlIconAlpha)) {
                                     Icon(
-                                        imageVector = MiuixIcons.ListView,
+                                        imageVector = MiuixIcons.Playlist,
                                         contentDescription = "播放列表",
                                         tint = playerText.copy(alpha = 0.6f),
                                         modifier = Modifier.size(24.dp)
                                     )
                                 }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                IconButton(onClick = { if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack() }, modifier = Modifier.size(48.dp)) {
+                                    Icon(imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
+                                        contentDescription = if (isCurrentTrackLiked) "取消收藏" else "收藏",
+                                        tint = if (isCurrentTrackLiked) MiuixTheme.colorScheme.primary else playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp))
+                                }
                             }
-                            Spacer(modifier = Modifier.width(16.dp))
+                            if ((!isFMMode && !isIntelligenceMode) || screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                             IconButton(onClick = { showMoreSheet = true }, modifier = Modifier.size(48.dp)) {
                                 Icon(
                                     imageVector = MiuixIcons.More,
@@ -1895,6 +1909,14 @@ fun PlayerPage(
             }
             } // 结束手机卡片封面样式
             
+            // Playback sheet handle stays below the status bar in every layout.
+            Box(
+                modifier = Modifier.align(Alignment.TopCenter)
+                    .padding(top = topPadding + 2.dp)
+                    .width(48.dp).height(4.dp)
+                    .background(playerText.copy(alpha = 0.45f), RoundedCornerShape(50))
+            )
+
             // 播放列表抽屉（作为覆盖层）
             var shouldScrollToCurrent by remember { mutableStateOf(false) }
             
@@ -2011,6 +2033,7 @@ fun PlayerPage(
                 onDismissRequest = { showMoreSheet = false }
             ) {
                 LazyColumn(
+                    state = moreListState,
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)
                 ) {
@@ -2025,43 +2048,14 @@ fun PlayerPage(
                                 color = MiuixTheme.colorScheme.secondaryContainer
                             )
                         ) {
-                            if (isVipAccount) {
-                                WindowDropdownPreference(
-                                    title = "音质",
-                                    summary = "*选择的音质仅代表可获取的最高音质，实际音频音质可能因歌曲质量而不同",
-                                    items = qualityOptions,
-                                    selectedIndex = viewModel.audioQualityIndex,
-                                    startAction = {
-                                        Icon(
-                                            imageVector = MiuixIcons.Music,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    },
-                                    onSelectedIndexChange = { newIndex ->
-                                        viewModel.updateAudioQualityIndex(newIndex)
-                                    }
-                                )
-                            } else {
-                                BasicComponent(
-                                    title = "音质",
-                                    summary = "登录VIP账号后可享受更高音质",
-                                    startAction = {
-                                        Icon(
-                                            imageVector = MiuixIcons.Music,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    },
-                                    endActions = {
-                                        Text(
-                                            text = "低品质",
-                                            style = MiuixTheme.textStyles.body2,
-                                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                        )
-                                    }
-                                )
-                            }
+                            WindowDropdownPreference(
+                                title = "音质",
+                                summary = "设置播放及下载的最高音质；播放时切歌生效，实际音质取决于歌曲和账号权限",
+                                items = qualityOptions,
+                                selectedIndex = viewModel.audioQualityIndex,
+                                startAction = { Icon(imageVector = MiuixIcons.Music, contentDescription = null, modifier = Modifier.size(24.dp)) },
+                                onSelectedIndexChange = { viewModel.updateAudioQualityIndex(it) }
+                            )
                             BasicComponent(
                                 title = "播放速度",
                                 endActions = {
@@ -2460,6 +2454,110 @@ private fun formatSpeedValue(speed: Float): String {
     }
 }
 
+@Composable
+private fun PlayerArtistAlbumText(track: Track?, color: Color, fontSize: TextUnit,
+    onArtistClick: (Int) -> Unit, onAlbumClick: () -> Unit, modifier: Modifier = Modifier, centered: Boolean = false,
+    maxLines: Int = 1) {
+    val text = buildPlayerArtistAlbumText(track)
+    ClickableText(text = text, modifier = modifier, maxLines = maxLines, overflow = TextOverflow.Ellipsis,
+        style = TextStyle(fontSize = fontSize, color = color.copy(alpha = 0.7f),
+            textAlign = if (centered) TextAlign.Center else TextAlign.Start),
+        onClick = { offset ->
+            when {
+                text.getStringAnnotations("artist", offset, offset).isNotEmpty() ->
+                    onArtistClick(text.getStringAnnotations("artist", offset, offset).first().item.toIntOrNull() ?: 0)
+                text.getStringAnnotations("album", offset, offset).isNotEmpty() -> onAlbumClick()
+            }
+        })
+}
+
+internal fun isPlayerArtistGroup(track: Track): Boolean =
+    track.artistNames.size >= 4 || track.artist.trim() == "群星"
+
+internal fun buildPlayerArtistAlbumText(track: Track?): androidx.compose.ui.text.AnnotatedString {
+    val artist = track?.artist ?: "未知歌手"
+    val album = track?.album ?: "未知专辑"
+    return buildAnnotatedString {
+        var cursor = 0
+        val names = track?.artistNames.orEmpty()
+        val isGroup = track?.let(::isPlayerArtistGroup) ?: false
+        if (!isGroup && names.isNotEmpty()) {
+            names.forEachIndexed { index, name ->
+                if (name.isNotBlank()) {
+                    val start = artist.indexOf(name, cursor)
+                    if (start >= 0) {
+                        append(artist.substring(cursor, start))
+                        pushStringAnnotation("artist", index.toString()); append(name); pop()
+                        cursor = start + name.length
+                    }
+                }
+            }
+        }
+        if (cursor < artist.length) {
+            pushStringAnnotation("artist", "0"); append(artist.substring(cursor)); pop()
+        }
+        append(" - ")
+        pushStringAnnotation("album", "album"); append(album); pop()
+    }
+}
+
+@Composable
+private fun PlayerProgressSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
+    enabled: Boolean,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val playerDark = rememberPlayerDark()
+    val monetController = remember(playerDark) {
+        ThemeController(if (playerDark) ColorSchemeMode.MonetDark else ColorSchemeMode.MonetLight)
+    }
+    val thumbColor = monetController.currentColors().primary
+    val progress = value.coerceIn(0f, 1f)
+    var isDragging by remember { mutableStateOf(false) }
+    val lineWidth by animateDpAsState(if (isDragging) 10.dp else 6.dp, label = "playerProgressWidth")
+    BoxWithConstraints(modifier = modifier.height(28.dp).pointerInput(enabled) {
+        if (!enabled) return@pointerInput
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            try {
+                do {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (kotlin.math.abs(change.position.x - down.position.x) > viewConfiguration.touchSlop) {
+                        isDragging = true
+                    }
+                } while (change.pressed)
+            } finally {
+                isDragging = false
+            }
+        }
+    }, contentAlignment = Alignment.CenterStart) {
+        // 保留 Miuix 滑块的拖动、点击、触觉反馈和无障碍语义，视觉由细轨道单独绘制。
+        Slider(
+            value = progress,
+            onValueChange = onValueChange,
+            onValueChangeFinished = onValueChangeFinished,
+            enabled = enabled,
+            modifier = Modifier.requiredWidth(maxWidth + 18.dp).height(28.dp).alpha(0f)
+        )
+        ComposeCanvas(Modifier.matchParentSize()) {
+            val strokeWidth = lineWidth.toPx()
+            val radius = 5.dp.toPx()
+            val left = radius
+            val right = (size.width - radius).coerceAtLeast(left)
+            val thumbX = if (rtl) right - (right - left) * progress else left + (right - left) * progress
+            val y = size.height / 2f
+            drawLine(color.copy(alpha = 0.3f), Offset(left, y), Offset(right, y), strokeWidth, StrokeCap.Round)
+            drawLine(color, Offset(if (rtl) right else left, y), Offset(thumbX, y), strokeWidth, StrokeCap.Round)
+            drawCircle(thumbColor, radius = radius, center = Offset(thumbX, y))
+        }
+    }
+}
+
 private fun formatDuration(durationMs: Long): String {
     if (durationMs <= 0) return "0:00"
     val totalSeconds = durationMs / 1000
@@ -2470,16 +2568,13 @@ private fun formatDuration(durationMs: Long): String {
 
 private fun getQualityText(
     bitrate: Int,
+    actualQuality: String,
     isFMMode: Boolean = false,
     isIntelligenceMode: Boolean = false,
     showQuality: Boolean = true
 ): String {
-    val quality = when {
-        bitrate <= 0 -> "未知品质"
-        bitrate <= 320000 -> "低品质"
-        bitrate <= 1411000 -> "SQ 标准品质"
-        bitrate <= 2304000 -> "HQ 高品质"
-        else -> "Hi-Res 无损音频"
+    val quality = actualQuality.ifBlank {
+        if (bitrate > 0) com.hypermusic.miuix.data.model.AudioQuality.neteaseActual(bitrate, "") else "未知音质"
     }
     val prefix = when {
         isFMMode -> "私人FM"

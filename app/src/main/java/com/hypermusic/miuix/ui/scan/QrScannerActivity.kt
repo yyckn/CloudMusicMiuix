@@ -21,6 +21,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.FlashlightOff
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +45,8 @@ import com.google.mlkit.vision.common.InputImage
 import com.hypermusic.miuix.data.api.UserCredentialLink
 import com.hypermusic.miuix.ui.theme.CloudMusicMiuixTheme
 import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Image
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -77,10 +81,15 @@ class QrScannerActivity : ComponentActivity() {
                 SmallTopAppBar(title = "扫描二维码", navigationIcon = {
                     IconButton(onClick = { finish() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
                 }, actions = {
-                    TextButton(text = "相册", onClick = { gallery.launch("image/*") })
-                    TextButton(text = if (torch) "关闭闪光灯" else "闪光灯", onClick = {
+                    IconButton(onClick = { gallery.launch("image/*") }) {
+                        Icon(MiuixIcons.Image, contentDescription = "相册")
+                    }
+                    IconButton(onClick = {
                         camera?.let { torch = !torch; it.cameraControl.enableTorch(torch) }
-                    })
+                    }) {
+                        Icon(if (torch) Icons.Filled.FlashlightOn else Icons.Filled.FlashlightOff,
+                            contentDescription = if (torch) "关闭闪光灯" else "打开闪光灯")
+                    }
                 })
             }) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {

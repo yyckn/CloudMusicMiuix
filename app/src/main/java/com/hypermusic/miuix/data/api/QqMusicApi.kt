@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit
 object QqMusicApi {
     private val client = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS).build()
+    private val audioProbeClient = client.newBuilder().callTimeout(4, TimeUnit.SECONDS).build()
     private var preferences: android.content.SharedPreferences? = null
     data class Credential(val musicId: String, val musicKey: String, val encryptUin: String, val loginType: Int)
     data class Account(val credential: Credential, val name: String, val avatarUrl: String = "")
@@ -39,6 +40,7 @@ object QqMusicApi {
     var accountName by androidx.compose.runtime.mutableStateOf<String?>(null)
         private set
 
+    @Synchronized
     fun init(context: android.content.Context) {
         preferences = context.applicationContext.getSharedPreferences("qqmusic_prefs", android.content.Context.MODE_PRIVATE)
         val prefs = preferences ?: return
@@ -68,6 +70,7 @@ object QqMusicApi {
         accountName = active?.name
     }
 
+    @Synchronized
     private fun persistAccounts() {
         preferences?.edit()?.putString("accounts", gson.toJson(accounts))
             ?.putString("data_account_id", dataAccountId)?.putString("playback_account_id", playbackAccountId)
@@ -377,50 +380,83 @@ object QqMusicApi {
 
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 
-    suspend fun searchSongs(keyword: String): Result<List<Track>> = withContext(Dispatchers.IO) {
-        runCatching {
-            require(keyword.isNotBlank()) { "请输入搜索内容" }
-            val params = JsonObject().apply {
-                addProperty("searchid", System.nanoTime().toString())
-                addProperty("query", keyword)
-                addProperty("page_num", 1)
-                addProperty("num_per_page", 30)
-                addProperty("search_type", 0)
-                addProperty("highlight", false)
-                addProperty("grp", 1)
-                add("selectors", JsonObject())
-                add("vec_selectors", com.google.gson.JsonArray())
+    private val searchMutex = kotlinx.coroutines.sync.Mutex()
+    private val searchCache = LinkedHashMap<Pair<String, Int>, Pair<Long, JsonObject>>()
+    private var lastSearchAt = 0L
+    private var searchCooldownUntil = 0L
+
+    private class SearchUnavailable(val code: Int) : Exception("QQ音乐搜索暂不可用（$code），请稍后重试")
+
+    /** 两种搜索均为游客请求。仅在上游返回 2001 时尝试一次移动端；HTTP 429 则遵守冷却时间。 */
+    private suspend fun searchBody(keyword: String, type: Int): Result<JsonObject> = withContext(Dispatchers.IO) {
+        searchMutex.lock()
+        try {
+            val query = keyword.trim()
+            require(query.isNotEmpty()) { "请输入搜索内容" }
+            val key = query to type
+            val now = android.os.SystemClock.elapsedRealtime()
+            searchCache[key]?.let { (time, result) ->
+                if (now - time < 60_000) return@withContext Result.success(result)
             }
-            val body = JsonObject().apply {
-                add("comm", JsonObject().apply {
-                    addProperty("ct", 11); addProperty("cv", 14090008)
-                    addProperty("v", 14090008); addProperty("chid", "10003505")
-                    addProperty("os_ver", "15"); addProperty("phonetype", "24122RKC7C")
-                    addProperty("nettype", "NETWORK_WIFI"); addProperty("udid", "0")
-                    addProperty("OpenUDID", "0"); addProperty("QIMEI36", "0")
-                    addProperty("uin", "0"); addProperty("tmeAppID", "qqmusic")
-                })
-                add("request", JsonObject().apply {
-                    addProperty("module", "music.search.SearchCgiService")
-                    addProperty("method", "DoSearchForQQMusicMobile")
-                    add("param", params)
-                })
+            if (now < searchCooldownUntil) return@withContext Result.failure(IllegalStateException("QQ音乐搜索请求过于频繁，请稍后再试"))
+            suspend fun requestSearch(method: String): JsonObject {
+                val wait = 1000L - (android.os.SystemClock.elapsedRealtime() - lastSearchAt)
+                if (wait > 0) kotlinx.coroutines.delay(wait)
+                lastSearchAt = android.os.SystemClock.elapsedRealtime()
+                val body = JsonObject().apply {
+                    add("comm", JsonObject().apply { addProperty("ct", 19); addProperty("cv", 0); addProperty("format", "json") })
+                    add("request", JsonObject().apply {
+                        addProperty("module", "music.search.SearchCgiService")
+                        addProperty("method", method)
+                        add("param", JsonObject().apply {
+                            addProperty("query", query); addProperty("page_num", 1)
+                            addProperty("num_per_page", 30); addProperty("search_type", type)
+                        })
+                    })
+                }
+                val request = Request.Builder().url("https://u.y.qq.com/cgi-bin/musicu.fcg")
+                    .header("User-Agent", "Mozilla/5.0").header("Referer", "https://y.qq.com/")
+                    .post(body.toString().toRequestBody(jsonType)).build()
+                val root = client.newCall(request).execute().use { response ->
+                    if (response.code == 429) {
+                        searchCooldownUntil = android.os.SystemClock.elapsedRealtime() + 15_000
+                        error("QQ音乐搜索请求过于频繁，请稍后再试")
+                    }
+                    check(response.isSuccessful) { "QQ音乐请求失败 (${response.code})" }
+                    JsonParser.parseString(response.body?.string() ?: error("QQ音乐返回空响应")).asJsonObject
+                }
+                val envelope = root.getAsJsonObject("request") ?: error("QQ音乐搜索响应缺失")
+                val rootCode = root.text("code").toIntOrNull() ?: error("QQ音乐搜索响应格式异常")
+                val code = envelope.text("code").toIntOrNull() ?: error("QQ音乐搜索响应格式异常")
+                if (rootCode != 0) throw SearchUnavailable(rootCode)
+                if (code != 0) throw SearchUnavailable(code)
+                return envelope.getAsJsonObject("data")?.getAsJsonObject("body") ?: error("QQ音乐搜索结果格式异常")
             }
-            val request = Request.Builder().url("https://u.y.qq.com/cgi-bin/musicu.fcg")
-                .header("User-Agent", "QQMusic 14090008(android 15)")
-                .header("Referer", "https://y.qq.com/")
-                .post(body.toString().toRequestBody(jsonType)).build()
-            val root = client.newCall(request).execute().use { response ->
-                check(response.isSuccessful) { "QQ音乐请求失败 (${response.code})" }
-                JsonParser.parseString(response.body?.string() ?: error("QQ音乐返回空响应")).asJsonObject
+            val result = try {
+                requestSearch("DoSearchForQQMusicDesktop")
+            } catch (e: SearchUnavailable) {
+                if (e.code != 2001) throw e
+                SearchEntityParser.normalizeQqMobile(requestSearch("DoSearchForQQMusicMobile"), type)
             }
-            val result = root.getAsJsonObject("request") ?: error("QQ音乐搜索响应缺失")
-            val code = result.get("code")?.asInt
-            check(code == 0) { if (code == 2001) "QQ音乐请求过于频繁，请稍后再试" else "QQ音乐搜索失败 ($code)" }
-            val songs = result.getAsJsonObject("data")?.getAsJsonObject("body")?.getAsJsonArray("item_song")
-                ?: error("QQ音乐搜索结果格式异常")
-            songs.mapNotNull { it.takeIf { v -> v.isJsonObject }?.asJsonObject?.toTrack() }
+            searchCache[key] = android.os.SystemClock.elapsedRealtime() to result
+            while (searchCache.size > 120) searchCache.remove(searchCache.keys.first())
+            Result.success(result)
+        } catch (e: Exception) {
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            Result.failure(e)
+        } finally {
+            searchMutex.unlock()
         }
+    }
+
+    suspend fun searchSongs(keyword: String): Result<List<Track>> = searchBody(keyword, 0).mapCatching { result ->
+        val songs = result.getAsJsonObject("song")?.getAsJsonArray("list") ?: error("QQ音乐搜索结果格式异常")
+        songs.mapNotNull { it.takeIf { value -> value.isJsonObject }?.asJsonObject?.toTrack() }
+    }
+
+    suspend fun searchEntities(keyword: String, category: com.hypermusic.miuix.data.model.SearchCategory): Result<List<com.hypermusic.miuix.data.model.SearchEntity>> {
+        require(category != com.hypermusic.miuix.data.model.SearchCategory.SONG)
+        return searchBody(keyword, category.qqType).mapCatching { SearchEntityParser.parseQq(it, category) }
     }
 
     private fun JsonObject.text(key: String): String = get(key)?.takeUnless { it.isJsonNull }?.asString.orEmpty()
@@ -443,10 +479,10 @@ object QqMusicApi {
             qqSongId = text("id").toLongOrNull() ?: 0L)
     }
 
-    private fun request(module: String, method: String, params: JsonObject, auth: Credential? = credential, loginTypeOverride: Int? = null): JsonObject {
+    private fun request(module: String, method: String, params: JsonObject, auth: Credential? = credential, loginTypeOverride: Int? = null, web: Boolean = false): JsonObject {
         val body = JsonObject().apply {
             add("comm", JsonObject().apply {
-                addProperty("ct", 11); addProperty("cv", 14090008); addProperty("tmeAppID", "qqmusic")
+                addProperty("ct", if (web) 24 else 11); addProperty("cv", if (web) 0 else 14090008); addProperty("tmeAppID", "qqmusic")
                 addProperty("uin", auth?.musicId ?: "0")
                 if (auth != null) { addProperty("qq", auth.musicId); addProperty("authst", auth.musicKey); addProperty("tmeLoginType", auth.loginType) }
                 else if (loginTypeOverride != null) addProperty("tmeLoginType", loginTypeOverride)
@@ -465,6 +501,56 @@ object QqMusicApi {
         val code = result.get("code")?.asInt
         check(code == 0) { if (code == 2001) "QQ音乐请求过于频繁，请稍后再试" else "QQ音乐请求失败 ($code)" }
         return result.getAsJsonObject("data") ?: error("QQ音乐响应数据缺失")
+    }
+
+    data class TopChart(val id: Int, val title: String, val cover: String = "", val updateDate: String = "")
+
+    val featuredTopCharts = listOf(
+        TopChart(62, "飙升榜"), TopChart(26, "热歌榜"), TopChart(27, "新歌榜"),
+        TopChart(5, "内地榜"), TopChart(59, "港区榜"), TopChart(61, "台区榜"),
+        TopChart(3, "欧美榜"), TopChart(16, "韩国榜"), TopChart(17, "日本榜")
+    )
+
+    suspend fun getTopCharts(): Result<List<TopChart>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val data = request("musicToplist.ToplistInfoServer", "GetAll", JsonObject(), null, web = true)
+            val entries = data.getAsJsonArray("group")?.flatMap { group ->
+                group.asJsonObject.getAsJsonArray("toplist")?.mapNotNull { it.takeIf { v -> v.isJsonObject }?.asJsonObject } ?: emptyList()
+            }.orEmpty().associateBy { it.text("topId").toIntOrNull() }
+            featuredTopCharts.map { chart ->
+                val entry = entries[chart.id]
+                chart.copy(cover = entry?.text("headPicUrl").orEmpty().replace("http://", "https://"),
+                    updateDate = entry?.text("updateTime").orEmpty())
+            }
+        }
+    }
+
+    suspend fun getTopChartDetail(chartId: Int): Result<PlaylistDetail> = withContext(Dispatchers.IO) {
+        runCatching {
+            val chart = featuredTopCharts.firstOrNull { it.id == chartId } ?: error("不支持的榜单")
+            val tracks = mutableListOf<Track>()
+            var info: JsonObject? = null
+            var offset = 0
+            var period = ""
+            while (true) {
+                val response = request("musicToplist.ToplistInfoServer", "GetDetail", JsonObject().apply {
+                    addProperty("topId", chartId); addProperty("offset", offset); addProperty("num", 100); addProperty("period", period)
+                }, null)
+                val metadata = response.getAsJsonObject("data") ?: error("QQ音乐榜单数据缺失")
+                info = metadata
+                period = metadata.text("period")
+                val songs = response.getAsJsonArray("songInfoList") ?: error("QQ音乐榜单歌曲缺失")
+                tracks.addAll(songs.mapNotNull { it.takeIf { value -> value.isJsonObject }?.asJsonObject?.toTrack() })
+                offset += songs.size()
+                val total = metadata.text("totalNum").toIntOrNull() ?: offset
+                if (songs.size() == 0 || offset >= total) break
+            }
+            val metadata = requireNotNull(info)
+            PlaylistDetail(Playlist(id = "qqtop:$chartId", title = chart.title,
+                coverImgUrl = metadata.text("headPicUrl").replace("http://", "https://"),
+                sourceUrl = "https://y.qq.com/n/ryqq/toplist/$chartId", trackCount = tracks.size,
+                description = metadata.text("updateTime")), tracks)
+        }
     }
 
     enum class HomeFeature(val title: String) {
@@ -765,20 +851,16 @@ object QqMusicApi {
         }
     }
 
-    data class AudioUrl(val url: String, val bitrate: Int)
-
+    data class AudioUrl(val url: String, val bitrate: Int, val quality: String, val extension: String)
     suspend fun getSongUrl(mid: String, mediaMid: String = ""): Result<String> =
-        getSongAudio(mid, mediaMid, 3).map { it.url }
+        getSongAudio(mid, mediaMid, 0).map { it.url }
 
-    suspend fun getSongAudio(mid: String, mediaMid: String = "", qualityIndex: Int = 3): Result<AudioUrl> = withContext(Dispatchers.IO) {
+    suspend fun getSongAudio(mid: String, mediaMid: String = "", qualityIndex: Int = 0): Result<AudioUrl> = withContext(Dispatchers.IO) {
         runCatching {
             require(mid.isNotBlank()) { "歌曲标识为空" }
             val playbackAuth = accounts.find { it.credential.musicId == playbackAccountId }?.credential
             val guid = java.util.UUID.randomUUID().toString().replace("-", "").take(16)
-            val formats = listOf(Triple("F000", ".flac", 999000), Triple("M800", ".mp3", 320000),
-                Triple("M500", ".mp3", 128000), Triple("C400", ".m4a", 96000))
-            val start = when (qualityIndex) { 0, 1 -> 0; 2 -> 1; 3 -> 2; else -> 3 }
-            val candidates = formats.drop(start)
+            val candidates = com.hypermusic.miuix.data.model.QqAudioFormats.candidates(qualityIndex)
             val baseName = mediaMid.ifBlank { mid + mid }
             val params = JsonObject().apply {
                 addProperty("uin", playbackAuth?.musicId ?: "0")
@@ -786,17 +868,33 @@ object QqMusicApi {
                 addProperty("ctx", 0)
                 add("songmid", com.google.gson.JsonArray().apply { candidates.forEach { _ -> add(mid) } })
                 add("songtype", com.google.gson.JsonArray().apply { candidates.forEach { _ -> add(0) } })
-                add("filename", com.google.gson.JsonArray().apply { candidates.forEach { (prefix, suffix, _) -> add("$prefix$baseName$suffix") } })
+                add("filename", com.google.gson.JsonArray().apply { candidates.forEach { format -> add("${format.prefix}$baseName.${format.extension}") } })
             }
             val data = request("music.vkey.GetVkey", "UrlGetVkey", params, playbackAuth)
             val items = data.getAsJsonArray("midurlinfo") ?: error("QQ音乐没有返回播放地址")
             val base = data.getAsJsonArray("sip")?.firstOrNull()?.asString
                 ?.takeIf { it.startsWith("https://") } ?: "https://isure.stream.qqmusic.qq.com/"
-            items.mapIndexedNotNull { index, value ->
-                val item = value.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapIndexedNotNull null
+            val returned = items.mapNotNull { value ->
+                val item = value.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
                 val path = item.text("purl")
-                if (path.isBlank()) null else AudioUrl(base + path, candidates.getOrNull(index)?.third ?: 0)
-            }.firstOrNull() ?: error("QQ音乐未提供该歌曲的播放地址")
+                if (path.isBlank()) null else {
+                    val filename = item.text("filename").ifBlank { path.substringBefore('?').substringAfterLast('/') }
+                    val format = com.hypermusic.miuix.data.model.QqAudioFormats.match(candidates, filename)
+                        ?: com.hypermusic.miuix.data.model.QqAudioFormats.match(candidates, path)
+                    format?.let { AudioUrl(if (path.startsWith("https://")) path else base + path, it.bitrate, it.quality, it.extension) }
+                }
+            }
+            candidates.asSequence().mapNotNull { format -> returned.firstOrNull { it.quality == format.quality } }
+                .firstOrNull { audio ->
+                    runCatching {
+                        val probe = Request.Builder().url(audio.url).header("Referer", "https://y.qq.com/")
+                            .header("Range", "bytes=0-0").build()
+                        audioProbeClient.newCall(probe).execute().use { response ->
+                            val contentType = response.header("Content-Type").orEmpty()
+                            response.isSuccessful && !contentType.startsWith("text/", ignoreCase = true)
+                        }
+                    }.getOrDefault(false)
+                } ?: error("QQ音乐未提供可访问的播放地址")
         }
     }
 

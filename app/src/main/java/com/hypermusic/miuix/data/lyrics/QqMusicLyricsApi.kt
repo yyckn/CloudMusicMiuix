@@ -156,6 +156,7 @@ object QqMusicLyricsApi {
         val encryptedText = runCatching { QqMusicQrcDecryptor.decrypt(lyricHex) }.getOrNull()
             ?: return null
         val translation = decryptMaybePlain(data.str("trans"))
+        val phonetic = if (com.hypermusic.miuix.ui.theme.ThemeSettings.showJapaneseRomaji) decryptMaybePlain(data.str("roma")) else ""
 
         val lyrics = if (qrcTimestamp != 0L && encryptedText.trimStart().startsWith("<")) {
             LyricParser.parseQrc(
@@ -164,7 +165,8 @@ object QqMusicLyricsApi {
                 songTitle = track.title,
                 songArtist = track.artist,
                 songAlbum = track.album,
-                artistNames = track.artistNames
+                artistNames = track.artistNames,
+                phonetic = phonetic
             )
         } else {
             LyricParser.parse(
@@ -174,7 +176,8 @@ object QqMusicLyricsApi {
                 songTitle = track.title,
                 songArtist = track.artist,
                 songAlbum = track.album,
-                artistNames = track.artistNames
+                artistNames = track.artistNames,
+                phonetic = phonetic
             )
         }
 
@@ -216,6 +219,7 @@ object QqMusicLyricsApi {
         val lyric = root.str("lyric") ?: return null
         if (lyric.isBlank()) return null
         val translation = decodeMaybeBase64(root.str("trans") ?: "")
+        val phonetic = if (com.hypermusic.miuix.ui.theme.ThemeSettings.showJapaneseRomaji) decryptMaybePlain(root.str("roma")) else ""
 
         val lyrics = LyricParser.parse(
             lrc = lyric,
@@ -224,7 +228,8 @@ object QqMusicLyricsApi {
             songTitle = track.title,
             songArtist = track.artist,
             songAlbum = track.album,
-            artistNames = track.artistNames
+            artistNames = track.artistNames,
+            phonetic = phonetic
         )
         if (lyrics.lines.isEmpty()) return null
         return PlatformLyricResult(

@@ -57,6 +57,8 @@ import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.PullToRefresh
+import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.TabRow
@@ -109,6 +111,8 @@ fun ArtistPage(
     val qqMid = artistId.removePrefix("qqartist_")
     val songsPageSize = if (isQq) 30 else 50
     val scrollBehavior = MiuixScrollBehavior()
+    val pullToRefreshState = rememberPullToRefreshState()
+    var isRefreshing by remember { mutableStateOf(false) }
     var artistInfo by remember { mutableStateOf<ArtistInfo?>(null) }
     var artistSongs by remember { mutableStateOf<List<Track>>(emptyList()) }
     var artistAlbums by remember { mutableStateOf<List<AlbumInfo>>(emptyList()) }
@@ -120,6 +124,8 @@ fun ArtistPage(
     var hasMoreAlbums by remember { mutableStateOf(true) }
     var isLoadingMoreSongs by remember { mutableStateOf(false) }
     var isLoadingMoreAlbums by remember { mutableStateOf(false) }
+    var loadMoreSongsJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var loadMoreAlbumsJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     val coroutineScope = rememberCoroutineScope()
     var showMoreSheet by remember { mutableStateOf(false) }
     var selectedTrack by remember { mutableStateOf<Track?>(null) }
@@ -161,9 +167,9 @@ fun ArtistPage(
 
     // 加载更多单曲
     fun loadMoreSongs() {
-        if (isLoadingMoreSongs || !hasMoreSongs) return
+        if (isLoading || isLoadingMoreSongs || !hasMoreSongs) return
         isLoadingMoreSongs = true
-        coroutineScope.launch {
+        loadMoreSongsJob = coroutineScope.launch {
             val result = if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistSongs(qqMid, offset = songsOffset)
                 else NeteaseApi.getArtistSongs(artistId, offset = songsOffset)
             result.fold(
@@ -184,9 +190,9 @@ fun ArtistPage(
 
     // 加载更多专辑
     fun loadMoreAlbums() {
-        if (isLoadingMoreAlbums || !hasMoreAlbums) return
+        if (isLoading || isLoadingMoreAlbums || !hasMoreAlbums) return
         isLoadingMoreAlbums = true
-        coroutineScope.launch {
+        loadMoreAlbumsJob = coroutineScope.launch {
             val result = if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistAlbums(qqMid, offset = albumsOffset)
                 else NeteaseApi.getArtistAlbums(artistId, offset = albumsOffset)
             result.fold(
@@ -205,7 +211,12 @@ fun ArtistPage(
         }
     }
 
-    LaunchedEffect(artistId) {
+    var refreshGeneration by remember(artistId) { mutableIntStateOf(0) }
+    LaunchedEffect(artistId, refreshGeneration) {
+        loadMoreSongsJob?.cancel()
+        loadMoreAlbumsJob?.cancel()
+        isLoadingMoreSongs = false
+        isLoadingMoreAlbums = false
         isLoading = true
         artistInfo = null
         artistSongs = emptyList()
@@ -214,7 +225,6 @@ fun ArtistPage(
         albumsOffset = 0
         hasMoreSongs = true
         hasMoreAlbums = true
-        selectedTab = 0
         // 获取歌手信息
         val infoResult = if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistInfo(qqMid) else NeteaseApi.getArtistInfo(artistId)
         infoResult.fold(
@@ -244,6 +254,7 @@ fun ArtistPage(
             onFailure = { hasMoreAlbums = false }
         )
         isLoading = false
+        isRefreshing = false
     }
 
     val blurBackdrop = rememberPageBlurBackdrop()
@@ -285,11 +296,18 @@ fun ArtistPage(
             }
         }
     ) { paddingValues ->
+        PullToRefresh(
+            isRefreshing = isRefreshing,
+            onRefresh = { if (!isLoading) { isRefreshing = true; refreshGeneration++ } },
+            pullToRefreshState = pullToRefreshState,
+            topAppBarScrollBehavior = scrollBehavior,
+            refreshTexts = listOf("继续下拉以刷新", "松手后刷新", "正在刷新...", "刷新成功"),
+            modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
+        ) {
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = paddingValues.calculateTopPadding())
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .pageLayerBackdrop(blurBackdrop),
@@ -523,6 +541,8 @@ fun ArtistPage(
             }
         }
         
+        }
+
         // 更多面板
         OverlayBottomSheet(
             show = showMoreSheet,

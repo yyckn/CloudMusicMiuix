@@ -64,6 +64,7 @@ fun PlaylistPage(
     onLoadCloudDiskCover: () -> Unit = {},
     onNavigateToAlbum: (Long) -> Unit = {},
     onSearchClick: () -> Unit = {},
+    showSearchAction: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -114,7 +115,7 @@ fun PlaylistPage(
         topBar = {
             BlurredBar(backdrop = blurBackdrop) {
                 TopAppBar(
-                    actions = { com.hypermusic.miuix.ui.components.SearchPlatformActions(onSearchClick) },
+                    actions = { com.hypermusic.miuix.ui.components.SearchPlatformActions(onSearchClick, showSearchAction) },
                     title = "我的收藏",
                     largeTitle = "我的收藏",
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,

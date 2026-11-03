@@ -62,11 +62,9 @@ import com.hypermusic.miuix.ui.components.rememberBlurBackdrop
 import com.hypermusic.miuix.ui.effects.BgEffectBackground
 import com.hypermusic.miuix.ui.effects.ColorBlendToken
 import com.hypermusic.miuix.ui.theme.LocalEnableBlur
-import com.hypermusic.miuix.ui.theme.ThemeSettings
 import com.hypermusic.miuix.ui.theme.isInDarkTheme
 import com.hypermusic.miuix.viewmodel.MusicPlayerViewModel
 import kotlinx.coroutines.flow.onEach
-import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
@@ -74,8 +72,9 @@ import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
-import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurBlendMode
 import top.yukonga.miuix.kmp.blur.BlurColors
@@ -94,11 +93,11 @@ fun AboutPage(
     onBackClick: () -> Unit,
     onOpenSourceClick: () -> Unit,
     viewModel: MusicPlayerViewModel,
-    onCheckUpdate: () -> Unit = {},
     onViewHistory: () -> Unit = {},
     onDeveloperOptionsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var showCurrentLog by remember { mutableStateOf(false) }
     val topAppBarScrollBehavior = MiuixScrollBehavior()
     val lazyListState = rememberLazyListState()
     var logoHeightPx by remember { mutableIntStateOf(0) }
@@ -158,7 +157,7 @@ fun AboutPage(
         ) {
             AboutContent(
                 viewModel = viewModel,
-                onCheckUpdate = onCheckUpdate,
+                onCurrentLogClick = { showCurrentLog = true },
                 onViewHistory = onViewHistory,
                 onDeveloperOptionsClick = onDeveloperOptionsClick,
                 innerPadding = innerPadding,
@@ -169,15 +168,21 @@ fun AboutPage(
             )
         }
 
-        // 更新日志抽屉
-        UpdateLogSheet(viewModel = viewModel)
+        OverlayDialog(
+            show = showCurrentLog,
+            title = "当前版本更新日志",
+            onDismissRequest = { showCurrentLog = false },
+            content = {
+                TextButton(text = "关闭", onClick = { showCurrentLog = false }, modifier = Modifier.fillMaxWidth())
+            }
+        )
     }
 }
 
 @Composable
 private fun AboutContent(
     viewModel: MusicPlayerViewModel,
-    onCheckUpdate: () -> Unit,
+    onCurrentLogClick: () -> Unit,
     onViewHistory: () -> Unit,
     onDeveloperOptionsClick: () -> Unit,
     innerPadding: PaddingValues,
@@ -189,7 +194,6 @@ private fun AboutContent(
     val context = LocalContext.current
     val layoutDirection = LocalLayoutDirection.current
     val density = LocalDensity.current
-    var autoCheckUpdate by remember { mutableStateOf(ThemeSettings.autoCheckUpdate) }
     var versionTapCount by remember { mutableStateOf(0) }
     var versionLastTapAt by remember { mutableStateOf(0L) }
     fun onSecretTap() {
@@ -476,25 +480,9 @@ private fun AboutContent(
                             Color.Transparent,
                         ),
                     ) {
-                        BasicComponent(
-                            title = "打开应用时自动检查更新",
-                            endActions = {
-                                Switch(
-                                    checked = autoCheckUpdate,
-                                    onCheckedChange = { newValue ->
-                                        autoCheckUpdate = newValue
-                                        ThemeSettings.updateAutoCheckUpdate(newValue)
-                                    }
-                                )
-                            },
-                            onClick = {
-                                autoCheckUpdate = !autoCheckUpdate
-                                ThemeSettings.updateAutoCheckUpdate(autoCheckUpdate)
-                            }
-                        )
                         ArrowPreference(
-                            title = "立即检查更新",
-                            onClick = onCheckUpdate
+                            title = "查看当前版本更新日志",
+                            onClick = onCurrentLogClick
                         )
                         ArrowPreference(
                             title = "查看历史版本",

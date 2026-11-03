@@ -34,7 +34,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 @Composable
 fun QqMusicPage(tab: Int, viewModel: MusicPlayerViewModel, onPlaylistClick: (String, String, String) -> Unit,
-                onLoginClick: () -> Unit, onSearchClick: () -> Unit = {},
+                onLoginClick: () -> Unit, onSearchClick: () -> Unit = {}, showSearchAction: Boolean = true,
+                onTopChartClick: (QqMusicApi.TopChart) -> Unit = {},
                 onFeatureClick: (com.hypermusic.miuix.data.model.PlaylistDetail) -> Unit = {}) {
     var favoritePlaylists by remember(QqMusicApi.dataAccountId) { mutableStateOf<List<RecommendPlaylist>>(emptyList()) }
     var favoriteError by remember(QqMusicApi.dataAccountId) { mutableStateOf<String?>(null) }
@@ -62,7 +63,7 @@ fun QqMusicPage(tab: Int, viewModel: MusicPlayerViewModel, onPlaylistClick: (Str
     Scaffold(topBar = {
         BlurredBar(backdrop = blurBackdrop) {
             TopAppBar(title = if (tab == 0) "推荐" else "我的收藏", largeTitle = if (tab == 0) "推荐" else "我的收藏",
-                actions = { com.hypermusic.miuix.ui.components.SearchPlatformActions(onSearchClick, tab != 0 || scrollBehavior.state.collapsedFraction >= 0.99f) }, scrollBehavior = scrollBehavior,
+                actions = { com.hypermusic.miuix.ui.components.SearchPlatformActions(onSearchClick, showSearchAction && (tab != 0 || scrollBehavior.state.collapsedFraction >= 0.99f)) }, scrollBehavior = scrollBehavior,
                 color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                 defaultWindowInsetsPadding = false)
         }
@@ -115,6 +116,14 @@ fun QqMusicPage(tab: Int, viewModel: MusicPlayerViewModel, onPlaylistClick: (Str
                                     modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                                 else Box(Modifier.fillMaxSize())
                             }
+                        }
+                    }
+                }
+                item {
+                    HomeSection(title = "热榜") {
+                        items(viewModel.qqHomeCharts) { chart ->
+                            CoverCard(coverUrl = chart.cover, title = chart.title,
+                                subtitle = chart.updateDate, onClick = { onTopChartClick(chart) })
                         }
                     }
                 }

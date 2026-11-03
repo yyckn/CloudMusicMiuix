@@ -75,7 +75,7 @@ object AppIconSettings {
             AppIcon.QQ_CLASSIC to ".IconQqClassic"
         )
         val changes = aliases.flatMap { (appIcon, alias) -> AppName.entries.mapNotNull { name ->
-            val component = ComponentName(packageName, packageName + alias + name.suffix)
+            val component = ComponentName(packageName, com.hypermusic.miuix.MainActivity::class.java.name.substringBeforeLast('.') + alias + name.suffix)
             val desired = if (appIcon == icon && name == currentName) {
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED
             } else {

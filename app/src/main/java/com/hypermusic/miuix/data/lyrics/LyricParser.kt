@@ -256,7 +256,15 @@ object LyricParser {
         if (tlyric.isEmpty()) return map
         val leadingTagsRegex = Regex("""^\s*((?:\[\d+:\d+(?:\.\d+)?])+)(.*)$""")
         val tagRegex = Regex("""\[(\d+):(\d+(?:\.\d+)?)]""")
-        for (line in tlyric.split("\n")) {
+        val qrcHeader = Regex("""^\s*\[(\d+),(\d+)](.*)$""")
+        val qrcTiming = Regex("""\(\d+,\d+\)""")
+        for (line in extractQrcContent(tlyric).split("\n")) {
+            val qrc = qrcHeader.find(line)
+            if (qrc != null) {
+                val text = normalizeTranslationText(qrcTiming.replace(qrc.groupValues[3], ""))
+                if (text.isNotEmpty()) map[qrc.groupValues[1].toLong()] = text
+                continue
+            }
             val match = leadingTagsRegex.find(line) ?: continue
             val tag = tagRegex.find(match.groupValues[1]) ?: continue
             val time = tag.groupValues[1].toLong() * 60_000L +

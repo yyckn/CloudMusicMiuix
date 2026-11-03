@@ -57,6 +57,8 @@ import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.PullToRefresh
+import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
@@ -107,6 +109,8 @@ fun AlbumPage(
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
+    val pullToRefreshState = rememberPullToRefreshState()
+    var isRefreshing by remember { mutableStateOf(false) }
     var albumInfo by remember { mutableStateOf<AlbumInfo?>(null) }
     var albumSongs by remember { mutableStateOf<List<Track>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -125,7 +129,8 @@ fun AlbumPage(
         onBackClick()
     }
 
-    LaunchedEffect(albumId, isQq) {
+    var refreshGeneration by remember(albumId, isQq) { mutableStateOf(0) }
+    LaunchedEffect(albumId, isQq, refreshGeneration) {
         isLoading = true
         loadError = null
         albumInfo = null
@@ -138,6 +143,7 @@ fun AlbumPage(
             onFailure = { loadError = it.message ?: "专辑加载失败" }
         )
         isLoading = false
+        isRefreshing = false
     }
 
     val blurBackdrop = rememberPageBlurBackdrop()
@@ -179,11 +185,18 @@ fun AlbumPage(
             }
         }
     ) { paddingValues ->
+        PullToRefresh(
+            isRefreshing = isRefreshing,
+            onRefresh = { if (!isLoading) { isRefreshing = true; refreshGeneration++ } },
+            pullToRefreshState = pullToRefreshState,
+            topAppBarScrollBehavior = scrollBehavior,
+            refreshTexts = listOf("继续下拉以刷新", "松手后刷新", "正在刷新...", "刷新成功"),
+            modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
+        ) {
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = paddingValues.calculateTopPadding())
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .pageLayerBackdrop(blurBackdrop),
@@ -321,6 +334,8 @@ fun AlbumPage(
             }
         }
         
+        }
+
         // 更多面板
         OverlayBottomSheet(
             show = showMoreSheet,

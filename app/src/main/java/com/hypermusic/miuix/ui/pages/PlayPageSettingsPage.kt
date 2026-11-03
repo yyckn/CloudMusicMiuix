@@ -78,7 +78,7 @@ fun PlayPageSettingsPage(
     }
 
     val playerColorSchemeOptions = remember {
-        listOf("跟随深浅色设置", "浅色流光", "深色流光")
+        listOf("跟随深浅色设置", "浅色流光", "深色流光（推荐）")
     }
 
     BackHandler {
@@ -155,14 +155,94 @@ fun PlayPageSettingsPage(
             contentPadding = PaddingValues(bottom = FeedBottomPads.None),
             overscrollEffect = null
         ) {
-            // 背景颜色
             item { Spacer(modifier = Modifier.height(12.dp)) }
+            // 布局样式设置
+            item { SmallTitle("布局样式") }
             item {
                 Card(
                     modifier = Modifier
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 12.dp)
                 ) {
+                    TabRowWithContour(
+                        tabs = listOf("小屏布局", "大屏布局"),
+                        selectedTabIndex = coverStyleTab,
+                        onTabSelected = { coverStyleTab = it },
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+                    )
+                    val currentCoverStyle = if (coverStyleTab == 0) smallScreenCoverStyle else largeScreenCoverStyle
+
+                    RadioButtonPreference(
+                        title = "卡片封面",
+                        selected = currentCoverStyle == 0,
+                        onClick = {
+                            if (coverStyleTab == 0) {
+                                smallScreenCoverStyle = 0
+                                ThemeSettings.updateSmallScreenCoverStyle(0)
+                            } else {
+                                largeScreenCoverStyle = 0
+                                ThemeSettings.updateLargeScreenCoverStyle(0)
+                            }
+                        }
+                    )
+                    RadioButtonPreference(
+                        title = "全屏渐变封面",
+                        selected = currentCoverStyle == 1,
+                        onClick = {
+                            if (coverStyleTab == 0) {
+                                smallScreenCoverStyle = 1
+                                ThemeSettings.updateSmallScreenCoverStyle(1)
+                            } else {
+                                largeScreenCoverStyle = 1
+                                ThemeSettings.updateLargeScreenCoverStyle(1)
+                            }
+                        }
+                    )
+
+                    if (coverStyleTab == 1) {
+                        RadioButtonPreference(
+                            title = "车机布局",
+                            selected = currentCoverStyle == 2,
+                            onClick = {
+                                largeScreenCoverStyle = 2
+                                ThemeSettings.updateLargeScreenCoverStyle(2)
+                            }
+                        )
+                    }
+
+                    // 卡片和车机布局共用圆形封面与旋转设置。
+                    if (currentCoverStyle == 0 || (coverStyleTab == 1 && currentCoverStyle == 2)) {
+                        BasicComponent(
+                            title = "使用圆形封面",
+                            endActions = {
+                                Switch(
+                                    checked = useRoundCover,
+                                    onCheckedChange = { newValue ->
+                                        useRoundCover = newValue
+                                        ThemeSettings.updateUseRoundCover(newValue)
+                                    }
+                                )
+                            },
+                            onClick = {
+                                useRoundCover = !useRoundCover
+                                ThemeSettings.updateUseRoundCover(useRoundCover)
+                            }
+                        )
+
+                        // 封面旋转（仅在圆形封面开启时显示）
+                        if (useRoundCover) {
+                            WindowDropdownPreference(
+                                title = "封面旋转",
+                                items = coverRotationOptions,
+                                selectedIndex = coverRotationIndex,
+                                onSelectedIndexChange = { newIndex ->
+                                    coverRotationIndex = newIndex
+                                    ThemeSettings.updateCoverRotationIndex(newIndex)
+                                }
+                            )
+                        }
+                    }
+
                     WindowDropdownPreference(
                         title = "背景颜色",
                         items = playerColorSchemeOptions,
@@ -174,6 +254,7 @@ fun PlayPageSettingsPage(
                     )
                 }
             }
+
             // 歌词设置
             item { SmallTitle("歌词样式") }
             item {
@@ -236,95 +317,6 @@ fun PlayPageSettingsPage(
                             )
                         }
                     )
-                }
-            }
-
-            // 封面样式设置
-            item { SmallTitle("封面样式") }
-            item {
-                Card(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp)
-                ) {
-                    TabRowWithContour(
-                        tabs = listOf("小屏布局", "大屏布局"),
-                        selectedTabIndex = coverStyleTab,
-                        onTabSelected = { coverStyleTab = it },
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
-                    )
-                    val currentCoverStyle = if (coverStyleTab == 0) smallScreenCoverStyle else largeScreenCoverStyle
-
-                    RadioButtonPreference(
-                        title = "卡片",
-                        selected = currentCoverStyle == 0,
-                        onClick = {
-                            if (coverStyleTab == 0) {
-                                smallScreenCoverStyle = 0
-                                ThemeSettings.updateSmallScreenCoverStyle(0)
-                            } else {
-                                largeScreenCoverStyle = 0
-                                ThemeSettings.updateLargeScreenCoverStyle(0)
-                            }
-                        }
-                    )
-                    RadioButtonPreference(
-                        title = "全屏渐变",
-                        selected = currentCoverStyle == 1,
-                        onClick = {
-                            if (coverStyleTab == 0) {
-                                smallScreenCoverStyle = 1
-                                ThemeSettings.updateSmallScreenCoverStyle(1)
-                            } else {
-                                largeScreenCoverStyle = 1
-                                ThemeSettings.updateLargeScreenCoverStyle(1)
-                            }
-                        }
-                    )
-
-                    if (coverStyleTab == 1) {
-                        RadioButtonPreference(
-                            title = "车机",
-                            selected = currentCoverStyle == 2,
-                            onClick = {
-                                largeScreenCoverStyle = 2
-                                ThemeSettings.updateLargeScreenCoverStyle(2)
-                            }
-                        )
-                    }
-
-                    // 卡片和车机布局共用圆形封面与旋转设置。
-                    if (currentCoverStyle == 0 || (coverStyleTab == 1 && currentCoverStyle == 2)) {
-                        BasicComponent(
-                            title = "使用圆形封面",
-                            endActions = {
-                                Switch(
-                                    checked = useRoundCover,
-                                    onCheckedChange = { newValue ->
-                                        useRoundCover = newValue
-                                        ThemeSettings.updateUseRoundCover(newValue)
-                                    }
-                                )
-                            },
-                            onClick = {
-                                useRoundCover = !useRoundCover
-                                ThemeSettings.updateUseRoundCover(useRoundCover)
-                            }
-                        )
-
-                        // 封面旋转（仅在圆形封面开启时显示）
-                        if (useRoundCover) {
-                            WindowDropdownPreference(
-                                title = "封面旋转",
-                                items = coverRotationOptions,
-                                selectedIndex = coverRotationIndex,
-                                onSelectedIndexChange = { newIndex ->
-                                    coverRotationIndex = newIndex
-                                    ThemeSettings.updateCoverRotationIndex(newIndex)
-                                }
-                            )
-                        }
-                    }
                 }
             }
 
@@ -391,7 +383,7 @@ fun PlayPageSettingsPage(
                 ) {
                     // 显示小米妙播快捷按钮
                     BasicComponent(
-                        title = "显示小米妙播快捷按钮",
+                        title = "显示音频投放按钮",
                         endActions = {
                             Switch(
                                 checked = showCastButton,

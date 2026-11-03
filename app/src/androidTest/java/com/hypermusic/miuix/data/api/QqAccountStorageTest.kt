@@ -39,13 +39,23 @@ class QqAccountStorageTest {
             assertEquals("202", QqMusicApi.playbackAccountId)
             assertTrue(QqMusicApi.switchDataAccount("202"))
             assertEquals("Second", QqMusicApi.accountName)
+            assertTrue(QqMusicApi.switchPlaybackAccount("101"))
+            val updateProfile = QqMusicApi::class.java.getDeclaredMethod(
+                "updateAccountProfile", QqMusicApi.Credential::class.java, String::class.java, String::class.java
+            ).apply { isAccessible = true }
+            updateProfile.invoke(QqMusicApi, first, "First updated", "")
+            updateProfile.invoke(QqMusicApi, second, "Second", "")
+            QqMusicApi.init(context)
+            assertEquals("202", QqMusicApi.dataAccountId)
+            assertEquals("101", QqMusicApi.playbackAccountId)
+            assertEquals("Second", QqMusicApi.accountName)
             QqMusicApi.logout()
             assertEquals("101", QqMusicApi.dataAccountId)
             assertEquals("101", QqMusicApi.playbackAccountId)
             assertEquals(1, QqMusicApi.accounts.size)
             assertTrue(prefs.getBoolean("multi_account_enabled", false))
             QqMusicApi.init(context)
-            assertEquals("First", QqMusicApi.accountName)
+            assertEquals("First updated", QqMusicApi.accountName)
             assertFalse(QqMusicApi.switchDataAccount("missing"))
         } finally {
             prefs.edit().clear().commit()

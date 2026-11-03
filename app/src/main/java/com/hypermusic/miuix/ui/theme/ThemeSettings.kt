@@ -31,12 +31,10 @@ object ThemeSettings {
     private const val KEY_SHOW_CAST_BUTTON = "show_cast_button"
     private const val KEY_SHOW_QUALITY = "show_quality"
     private const val KEY_PLAYER_COLOR_SCHEME = "player_color_scheme"
-    private const val KEY_AUTO_CHECK_UPDATE = "auto_check_update"
     private const val KEY_FADE_ENABLED = "fade_enabled"
     private const val KEY_LYRIC_SOURCE = "lyric_source_preference"
     private const val KEY_AUTO_UPGRADE_LYRICS = "auto_upgrade_lyrics"
     private const val KEY_SHOW_JAPANESE_ROMAJI = "show_japanese_romaji"
-    private const val KEY_JAPANESE_NO_UPGRADE = "japanese_no_upgrade"
 
     // 0 = 浅色模式, 1 = 深色模式, 2 = 跟随系统
     var themeModeIndex by mutableIntStateOf(2)
@@ -87,9 +85,6 @@ object ThemeSettings {
     var showJapaneseRomaji by mutableStateOf(true)
         private set
 
-    // 日语歌曲不升级为其他平台的逐字歌词（用于保留网易云罗马音）
-    var japaneseNoUpgrade by mutableStateOf(false)
-        private set
 
     // 是否使用圆形封面
     var useRoundCover by mutableStateOf(false)
@@ -123,10 +118,6 @@ object ThemeSettings {
     var playerColorSchemeIndex by mutableIntStateOf(2)
         private set
 
-    // 打开应用时自动检查更新
-    var autoCheckUpdate by mutableStateOf(true)
-        private set
-
     // 播放/暂停时音频渐入渐出
     var fadeEnabled by mutableStateOf(false)
         private set
@@ -151,11 +142,9 @@ object ThemeSettings {
         lyricSourcePreferenceIndex = prefs?.getInt(KEY_LYRIC_SOURCE, 0) ?: 0
         autoUpgradeLyrics = prefs?.getBoolean(KEY_AUTO_UPGRADE_LYRICS, true) ?: true
         showJapaneseRomaji = prefs?.getBoolean(KEY_SHOW_JAPANESE_ROMAJI, true) ?: true
-        japaneseNoUpgrade = prefs?.getBoolean(KEY_JAPANESE_NO_UPGRADE, false) ?: false
         showCastButton = prefs?.getBoolean(KEY_SHOW_CAST_BUTTON, true) ?: true
         showQuality = prefs?.getBoolean(KEY_SHOW_QUALITY, true) ?: true
         playerColorSchemeIndex = prefs?.getInt(KEY_PLAYER_COLOR_SCHEME, 2) ?: 2
-        autoCheckUpdate = prefs?.getBoolean(KEY_AUTO_CHECK_UPDATE, true) ?: true
         fadeEnabled = prefs?.getBoolean(KEY_FADE_ENABLED, false) ?: false
     }
 
@@ -239,10 +228,7 @@ object ThemeSettings {
         prefs?.edit()?.putBoolean(KEY_SHOW_JAPANESE_ROMAJI, value)?.apply()
     }
 
-    fun updateJapaneseNoUpgrade(value: Boolean) {
-        japaneseNoUpgrade = value
-        prefs?.edit()?.putBoolean(KEY_JAPANESE_NO_UPGRADE, value)?.apply()
-    }
+
 
     fun updateShowCastButton(value: Boolean) {
         showCastButton = value
@@ -257,11 +243,6 @@ object ThemeSettings {
     fun updatePlayerColorSchemeIndex(index: Int) {
         playerColorSchemeIndex = index
         prefs?.edit()?.putInt(KEY_PLAYER_COLOR_SCHEME, index)?.apply()
-    }
-
-    fun updateAutoCheckUpdate(value: Boolean) {
-        autoCheckUpdate = value
-        prefs?.edit()?.putBoolean(KEY_AUTO_CHECK_UPDATE, value)?.apply()
     }
 
     fun updateFadeEnabled(value: Boolean) {

@@ -32,4 +32,11 @@ object OnboardingSettings {
         prefs?.edit()?.putBoolean("completed", true)?.remove("step")?.commit()
         completed = true
     }
+
+    fun restart() {
+        step = 0
+        prefs?.edit()?.putBoolean("started", true)?.putInt("step", 0)
+            ?.putBoolean("completed", false)?.commit()
+        completed = false
+    }
 }

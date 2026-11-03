@@ -26,6 +26,11 @@
 -keep class com.google.zxing.** { *; }
 -dontwarn com.google.zxing.**
 
+# ML Kit discovers barcode components through Firebase registrars at runtime.
+# Preserve the registered classes and their factories in optimized builds.
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.firebase.components.** { *; }
+
 # Keep Coil
 -keep class coil.** { *; }
 -dontwarn coil.**

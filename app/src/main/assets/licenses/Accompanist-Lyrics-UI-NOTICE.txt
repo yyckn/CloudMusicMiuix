@@ -1,0 +1,4 @@
+Accompanist Lyrics UI 2.0.0-rc.1
+Source: https://github.com/6xingyv/accompanist-lyrics-ui
+License: Apache License 2.0; see Accompanist-Lyrics-UI-Apache-2.0.txt.
+Local Android source adapts expect/actual declarations and fixes interlude height changes.

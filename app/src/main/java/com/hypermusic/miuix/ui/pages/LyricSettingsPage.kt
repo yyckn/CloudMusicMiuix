@@ -53,7 +53,6 @@ fun LyricSettingsPage(
     var sourceIndex by remember { mutableStateOf(ThemeSettings.lyricSourcePreferenceIndex) }
     var autoUpgrade by remember { mutableStateOf(ThemeSettings.autoUpgradeLyrics) }
     var showJapaneseRomaji by remember { mutableStateOf(ThemeSettings.showJapaneseRomaji) }
-    var japaneseNoUpgrade by remember { mutableStateOf(ThemeSettings.japaneseNoUpgrade) }
     var exclusionEnabled by remember { mutableStateOf(LyricExclusionRules.enabled) }
 
     val sourceOptions = listOf(
@@ -117,8 +116,8 @@ fun LyricSettingsPage(
                         }
                     )
                     SwitchPreference(
-                        title = "日语歌曲显示罗马音",
-                        summary = "此功能由网易云提供，仅限在使用网易云平台的歌词时使用",
+                        title = "日韩歌曲显示罗马音",
+                        summary = "此功能由网易云音乐和QQ音乐提供，仅供参考",
                         checked = showJapaneseRomaji,
                         onCheckedChange = { enabled ->
                             showJapaneseRomaji = enabled
@@ -158,18 +157,7 @@ fun LyricSettingsPage(
                                 if (enabled) onLyricSettingsChanged()
                             }
                         )
-                        if (autoUpgrade && showJapaneseRomaji) {
-                            SwitchPreference(
-                                title = "日语歌曲不升级为其他平台的逐字歌词",
-                                summary = "因除网易云音乐的其他平台暂无法获取罗马音，故提供此选项便于显示歌词罗马音",
-                                checked = japaneseNoUpgrade,
-                                onCheckedChange = { enabled ->
-                                    japaneseNoUpgrade = enabled
-                                    ThemeSettings.updateJapaneseNoUpgrade(enabled)
-                                    onLyricSettingsChanged()
-                                }
-                            )
-                        }
+
                     }
                 }
             }

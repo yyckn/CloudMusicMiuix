@@ -1013,6 +1013,23 @@ object NeteaseApi {
         }
     }
 
+    suspend fun searchEntities(keyword: String, category: com.hypermusic.miuix.data.model.SearchCategory): Result<List<com.hypermusic.miuix.data.model.SearchEntity>> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(category != com.hypermusic.miuix.data.model.SearchCategory.SONG)
+            ensureCookie()
+            val body = FormBody.Builder().add("s", keyword).add("offset", "0").add("limit", "30")
+                .add("type", category.neteaseType.toString()).build()
+            val req = Request.Builder().url("https://music.163.com/api/search/pc").post(body)
+                .header("Referer", "https://music.163.com").header("User-Agent", "Mozilla/5.0")
+                .header("Cookie", cookies).build()
+            val result = client.newCall(req).execute().use { response ->
+                check(response.isSuccessful) { "搜索请求失败 (${response.code})" }
+                gson.fromJson(response.body?.string(), JsonObject::class.java)?.getAsJsonObject("result") ?: error("搜索结果格式异常")
+            }
+            SearchEntityParser.parseNetease(result, category)
+        }
+    }
+
     suspend fun searchSongs(keyword: String, page: Int = 1): Result<List<Track>> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()

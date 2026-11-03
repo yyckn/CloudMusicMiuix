@@ -1,20 +1,19 @@
 package com.hypermusic.miuix.ui.pages
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.hypermusic.miuix.viewmodel.MusicPlayerViewModel
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -30,7 +29,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @Composable
 fun UpdateLogSheet(viewModel: MusicPlayerViewModel) {
     val updateInfo = viewModel.selectedUpdateLog ?: return
-    val context = LocalContext.current
+    val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.7f
     OverlayBottomSheet(
         show = viewModel.showUpdateLog,
         title = "更新日志",
@@ -50,6 +49,8 @@ fun UpdateLogSheet(viewModel: MusicPlayerViewModel) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = maxHeight)
+                .verticalScroll(rememberScrollState())
                 .padding(bottom = 32.dp)
         ) {
             Text(
@@ -82,23 +83,7 @@ fun UpdateLogSheet(viewModel: MusicPlayerViewModel) {
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = {
-                    if (updateInfo.downloadUrl.isNotEmpty()) {
-                        try {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo.downloadUrl))
-                            )
-                        } catch (_: Exception) {
-                        }
-                    }
-                },
-                colors = ButtonDefaults.buttonColorsPrimary(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(text = "立即下载")
-            }
+
         }
     }
 }
