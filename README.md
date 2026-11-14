@@ -1,151 +1,186 @@
 <p align="center">
-  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" width="120" alt="MusicHub for Miuix" />
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" width="112" alt="HyperMusic" />
 </p>
 
-<h1 align="center">MusicHub for Miuix</h1>
+<h1 align="center">HyperMusic</h1>
 
+<p align="center">使用 Kotlin、Jetpack Compose 与 Miuix 构建的多音源 Android 音乐播放器</p>
+<p align="center">网易云音乐 · QQ 音乐 · 波点音乐 · 酷狗音乐 · 汽水音乐</p>
 <p align="center">
-  基于 Miuix 设计语言打造的第三方网易云音乐 Android 客户端
+  <a href="https://github.com/yyckn/CloudMusicMiuix/releases">下载版本</a> ·
+  <a href="app/src/main/java/com/hypermusic/miuix/data/model/VersionHistory.kt">历史更新日志</a> ·
+  <a href="LICENSE">AGPL-3.0</a>
 </p>
-
-<p align="center">
-  <code>Kotlin</code> · <code>Jetpack Compose</code> · <code>Miuix</code> · <code>Media3</code>
-</p>
-
----
 
 ## 简介
 
-**MusicHub for Miuix**（以下简称 MusicHub）是一款使用 Kotlin 与 Jetpack Compose 开发的第三方网易云音乐客户端。界面完全基于 [Miuix](https://compose-miuix-ui.github.io/miuix/) 组件库构建，力求在 Android 上带来接近 MIUI / HyperOS 系统级音乐应用的体验。
+**HyperMusic** 是一款采用 Miuix 设计语言的第三方音乐客户端，支持手机、折叠屏和平板，提供音乐发现、分类搜索、后台播放、多来源歌词、多账号、缓存与内置下载器。
 
-项目支持手机、折叠屏与平板布局，内置完整的播放、歌词、歌单、音乐云盘与多账号能力。
+各平台的账号、收藏、播放队列与音质设置独立管理，主题、歌词渲染和通用界面组件共用。切换平台时保留各自的歌曲与队列，恢复后默认暂停。
 
-> 当前版本：**1.2.2**（versionCode 54）  
-> 更新日志见 [`updatelog.json`](updatelog.json)
+- 当前开发版本：`2.1.0-dev2`，以 [构建配置](app/build.gradle.kts) 为准。
+- 应用包名：`com.hypermusic.miuix`。
+- 运行要求：Android 13（API 33）及以上；当前 APK 仅包含 `arm64-v8a` 架构。
 
-> ⚠️ 本项目为个人学习与研究项目，与网易云音乐官方无任何隶属、合作或授权关系。
+## 功能
 
-## 功能特性
+### 多音源与音乐发现
 
-### 音乐发现
+| 平台 | 推荐内容 |
+| --- | --- |
+| 网易云音乐 | 每日推荐、私人 FM、心动模式、随机播放、专属歌单、雷达歌单、新碟上架 |
+| QQ 音乐 | 雷达推荐、每日 30 首、推荐新歌、猜你喜欢、推荐歌单与分类榜单 |
+| 波点音乐 | 私人 FM、潮趣日推、新歌打赏及推荐歌单 |
+| 酷狗音乐 | 每日推荐、私人 FM、VIP 专属推荐、私人专属好歌及推荐歌单 |
+| 汽水音乐 | 私人 FM、专注模式及驾车、通勤、健身等场景推荐 |
 
-- 推荐首页：专属推荐、雷达歌单、每日推荐、新碟上架、歌手推荐
-- 每日推荐、随机播放、私人 FM、心动模式
-- 歌曲 / 歌单 / 歌手 / 专辑搜索
-- 歌单、专辑、歌手详情与评论
+- 独立搜索页，按单曲、歌单、专辑、歌手分类展示结果，保留搜索状态并共用搜索历史。
+- 歌单、专辑、歌手、排行榜详情，支持页面内搜索和下拉刷新。
+- 收藏音乐、歌单、专辑，以及播放、随机播放、评论等操作。
+- 网易云音乐云盘浏览与播放。
+- 手机与大屏自适应布局、封面过渡动画和滚动位置保留。
 
-### 播放
+不同平台的接口能力、登录方式和可用内容存在差异；推荐结果、音质、收藏与播放权限以平台及当前账号实际返回为准。
 
-- 基于 Media3 ExoPlayer 的在线播放
-- 后台播放、通知栏控制、耳机按键、音频焦点处理
-- 播放速度、渐入渐出、音质选择
-- 播放队列、收藏、分享、下载
+### 播放与音频
+
+- AndroidX Media3 / ExoPlayer 播放引擎，支持后台播放、媒体通知、耳机按键与音频焦点管理。
+- 各平台独立设置播放音质，依据歌曲和账号权限回退，并显示实际取得的音质。
+- 播放速度、渐入渐出；关闭、智能平衡、单曲、专辑四种响度平衡模式。
+- 音效预设、10 段均衡器与 9 项高级音频设置，支持保存用户预设。
+- 卡片封面、卡片封面（车机布局）、渐变封面、黑胶唱片四种封面样式。
+- 圆形封面、播放时旋转、黑胶滑动切歌和封面／歌词切换。
+- 媒体通知收藏与关闭按钮、系统音频投放入口、可自定义组合键快捷键。
+- 桌面快捷菜单“播放每日推荐”，根据当前音源播放对应推荐。
 
 ### 歌词
 
-- 逐字歌词、翻译歌词、日语罗马音副行
-- 网易云 / QQ 音乐 / 酷狗音乐多来源歌词，支持自动升级逐字歌词
-- 歌词排除规则：默认规则 + 自定义关键词 / 歌曲信息 / 正则 / 时长
-- 单曲升级 / 恢复原歌词管理
-- Lyricon 词幕适配
+- 网易云音乐、QQ 音乐、酷狗音乐与 Apple Music（AMLL TTML DB）多来源匹配。
+- 智能选择或指定来源偏好，支持自动升级逐字歌词，并按设置优先保留罗马音。
+- 原文、翻译、罗马音与逐字高亮；AMLL 歌词支持衬词动画和对唱左右对齐。
+- 手动匹配歌词、查看候选歌曲的逐字／罗马音／对唱标签，并保存单曲匹配结果。
+- 内置与自定义歌词排除规则，支持包含、开头、末尾、完全匹配、正则表达式及时长条件。
+- 歌手行处理、纯音乐提示，以及词幕接口适配。
 
-### 账号与云盘
+### 账号
 
-- 扫码登录、多账号管理
-- 播放账号与数据账号分离
-- 音乐云盘浏览与播放（云盘歌曲自动使用数据账号 Cookie）
+- 各平台独立登录与多账号管理，可分别选择播放账号和数据账号。
+- 网易云 PC 端扫码登录；QQ 音乐统一二维码支持 QQ 手机版、微信、QQ 音乐扫码。
+- QQ 与微信登录属于不同账号体系，在账号页面及切换选项中区分展示。
+- 登录凭据导入、二维码分享与扫描，支持通过 `hypermusic://` 链接唤起导入。
+- 首次启动引导（OOBE），完成协议确认、音乐平台选择与账号登录。
 
-### 界面与个性化
+凭据二维码包含登录信息，请仅在自己的可信设备之间传递。
 
-- Miuix 组件：大标题、交互卡片、胶囊按钮、偏好设置、液态玻璃底栏
-- 深色 / 浅色 / 跟随系统 / 莫奈取色
-- 可切换应用图标（音符 / 网易云 / 酷狗）
-- 播放页封面与歌词样式、悬浮底栏
-- 手机 / 折叠屏 / 平板自适应布局
-- 用户协议、开发者选项、自动检查更新
+### 缓存与下载
 
-## 技术栈
+- 歌曲文件、封面、封面缩略图和歌手头像分类缓存，支持查看占用、设置容量和分别清理。
+- 音频缓存区分平台、歌曲与实际音质，复用完整或部分缓存，并按最近使用情况淘汰。
+- 全局下载抽屉，区分正在下载与历史下载，显示进度、大小、实际音质和失败原因。
+- 后台下载、任务持久化、重试、取消、分享、目录导出与删除。
+- 独立的下载音质设置，支持跟随播放设置、非 Wi-Fi 提醒及并发数量设置。
+- 下载完成后尝试写入歌曲信息、封面、原文与翻译歌词；不支持或获取失败的项目会提示。
 
-| 分类 | 方案 |
-| --- | --- |
-| 语言 | Kotlin |
-| UI | Jetpack Compose + Miuix |
-| 播放 | AndroidX Media3 / ExoPlayer |
-| 网络 | OkHttp |
-| 序列化 | Gson |
-| 图片 | Coil |
-| 歌词 | accompanist-lyrics + Lyricon |
+下载文件与播放缓存分开保存，清理缓存不会删除下载文件。下载默认存放在应用内部，卸载会移除；需要长期保留的文件可导出至系统目录。
 
-## 环境要求
+### 主题与界面
 
-- Android 13（API 33）及以上
-- JDK 17
-- Android SDK 37
-- Gradle Wrapper（仓库自带）
+- Miuix 大小标题、卡片、搜索组件、抽屉、菜单与下拉刷新。
+- 深色、浅色、跟随系统，Monet 取色、自选强调色与跟随音乐来源主题色。
+- 色彩风格、色彩标准、主题预览、界面缩放与预测性返回手势。
+- 标准底栏、可选高斯模糊、悬浮底栏与液态玻璃迷你播放条。
+- 自定义应用图标和名称，支持预览、暂存修改及保存后重启。
+- 开发者选项提供硬件信息、歌词原始数据及最终处理结果等调试工具。
 
 ## 构建
 
-```bash
-# Debug
-./gradlew :app:assembleDebug
-
-# Release
-./gradlew :app:assembleRelease
-```
+准备 Android Studio、**JDK 21**、Android SDK 37，以及项目自带的 Gradle Wrapper。SDK 路径通过本地 `local.properties` 的 `sdk.dir` 配置，该文件不提交到仓库。
 
 Windows PowerShell：
 
 ```powershell
+# Debug
+.\gradlew.bat :app:assembleDebug
+
+# Release
 .\gradlew.bat :app:assembleRelease
 ```
 
-产物路径：
+macOS / Linux：
+
+```bash
+./gradlew :app:assembleDebug
+./gradlew :app:assembleRelease
+```
+
+产物分别位于：
 
 ```text
+app/build/outputs/apk/debug/app-debug.apk
 app/build/outputs/apk/release/app-release.apk
 ```
 
-按项目约定重命名后的产物：
+Release 按项目约定命名为 `HyperMusic-v<versionName>.apk`。Windows 构建后可执行：
 
-```text
-app/build/outputs/apk/release/CloudMusicMiuix-v<versionName>.apk
+```powershell
+$versionName = (Select-String -Path app/build.gradle.kts -Pattern 'versionName = "([^"]+)"').Matches[0].Groups[1].Value
+Copy-Item app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/HyperMusic-v$versionName.apk" -Force
 ```
 
-> Release 构建使用仓库内置的签名配置。如需自行分发，请替换 `app/release-key.jks` 并在 `app/build.gradle.kts` 中修改签名信息。
+自行分发时请配置自己的 Release 签名。当前默认只打包 `arm64-v8a`，其他架构设备或模拟器需要自行调整构建配置。
+
+单元测试与已连接设备测试：
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest
+.\gradlew.bat :app:connectedDebugAndroidTest
+```
 
 ## 项目结构
 
 ```text
-app/src/main/java/com/musichub/miuix/
-├── data/
-│   ├── api/          # 网易云等接口与加密
-│   ├── lyrics/       # 歌词解析、来源选择、排除规则
-│   └── model/        # 数据模型
-├── service/          # 播放服务、Lyricon 词幕
-├── ui/
-│   ├── components/   # 通用组件（播放条、歌词视图等）
-│   ├── pages/        # 页面
-│   ├── theme/        # 主题与设置
-│   └── effects/      # 液体玻璃等视觉效果
-├── viewmodel/        # 播放状态与业务逻辑
-└── MainActivity.kt   # 入口与页面导航
+app/src/main/
+├── java/com/hypermusic/miuix/
+│   ├── data/
+│   │   ├── api/          # 各平台接口、登录与账号
+│   │   ├── cache/        # 分类缓存
+│   │   ├── lyrics/       # 歌词获取、匹配、解析与处理
+│   │   └── model/        # 数据模型及本地版本记录
+│   ├── service/          # 播放服务、媒体通知与词幕
+│   ├── ui/               # 页面、组件、主题、导航与扫码
+│   ├── viewmodel/        # 播放状态与业务逻辑
+│   └── MainActivity.kt   # 应用入口
+├── assets/licenses/      # 第三方许可证与署名
+└── res/                  # 图标、图片及其他资源
 ```
 
-## 免责声明
-
-- 本项目是第三方客户端，与网易云音乐、QQ 音乐、酷狗音乐均无关联。
-- 本项目仅供个人学习、研究使用，请勿用于任何商业用途。
-- 使用非官方客户端登录第三方平台可能触发平台风控，账号存在被限制的风险；请在 App 内阅读并确认完整《用户协议与免责声明》。
-- 通过本项目访问的音乐、歌词、封面等内容的版权归原权利人所有，请支持正版。
+构建和调试日志属于可重新生成的临时文件，不随源码维护；`.gitignore` 已忽略 `*.log`。
 
 ## 致谢
 
-- [Miuix](https://github.com/compose-miuix-ui/miuix) — 优秀的 Compose 设计语言组件库
-- NeteaseCloudMusicApi / Listen1 — 接口与加密参考
-- SPlayer-Next — 歌词来源与实现思路参考
-- accompanist-lyrics / Lyricon — 歌词渲染与词幕支持
-- 所有开源依赖的贡献者
+| 项目 | 用途 |
+| --- | --- |
+| [Miuix](https://github.com/compose-miuix-ui/miuix) | UI 框架、组件与交互效果 |
+| [SukiSU Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra/) | 部分 Miuix 界面与主题设置样式参考 |
+| [BuJuan](https://github.com/2697a/bujuan) | 网易云登录、推荐与播放实现参考 |
+| [SPlayer-Next](https://github.com/SPlayer-Dev/SPlayer-Next) | 平台接口、缓存与歌词处理参考 |
+| [词幕](https://github.com/tomakino/lyricon) | 系统状态栏歌词接口 |
+| [音理音理!](https://github.com/cwuom/NeriPlayer) | 词幕适配等实现参考 |
+| [LyricInfo](https://github.com/limczhh/LyricInfo) | 歌词信息接口 |
+| [Accompanist Lyrics UI](https://github.com/6xingyv/accompanist-lyrics-ui) | 歌词渲染组件 |
+| [Folia](https://github.com/chthollyphile/folia-major) | 响度平衡、音效及多平台接口参考 |
+| [HyperCeiler](https://github.com/ReChronoRain/HyperCeiler) | OOBE 交互及部分图标 |
 
-## License
+感谢 AndroidX、OkHttp、Coil、Gson，以及所有开源依赖的维护者与贡献者。仓库中保留的第三方源码、资源、许可证与署名仍遵循各自的许可条款，详见 [第三方许可证目录](app/src/main/assets/licenses/) 及对应源码说明。
 
-[MIT](LICENSE) © 2026 yyckn
+## 内容与平台说明
+
+HyperMusic 是独立的第三方客户端，与所接入的音乐平台无隶属、合作或授权关系。平台接口可能变化，部分功能依赖账号、会员权限和网络环境。
+
+音乐、歌词、封面和平台商标的权利归各自权利人所有，仓库的开源许可证不授予这些内容的使用权。请遵守对应平台的服务条款，并在应用内阅读《用户协议与免责声明》。
+
+## 许可证
+
+Copyright © 2026 王尧。
+
+本项目采用 **GNU Affero General Public License v3.0（SPDX：`AGPL-3.0-only`）**，完整条款见 [LICENSE](LICENSE)。第三方组件和资源保留其原有许可证及署名。
