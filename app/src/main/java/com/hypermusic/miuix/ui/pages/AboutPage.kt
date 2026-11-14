@@ -3,7 +3,7 @@ package com.hypermusic.miuix.ui.pages
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import com.hypermusic.miuix.data.model.VersionHistory
 import com.hypermusic.miuix.R
 import com.hypermusic.miuix.ui.components.BlurredBar
 import com.hypermusic.miuix.ui.components.rememberBlurBackdrop
@@ -73,8 +74,6 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurBlendMode
 import top.yukonga.miuix.kmp.blur.BlurColors
@@ -97,7 +96,6 @@ fun AboutPage(
     onDeveloperOptionsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var showCurrentLog by remember { mutableStateOf(false) }
     val topAppBarScrollBehavior = MiuixScrollBehavior()
     val lazyListState = rememberLazyListState()
     var logoHeightPx by remember { mutableIntStateOf(0) }
@@ -157,7 +155,7 @@ fun AboutPage(
         ) {
             AboutContent(
                 viewModel = viewModel,
-                onCurrentLogClick = { showCurrentLog = true },
+                onCurrentLogClick = { viewModel.openUpdateLog(VersionHistory.current) },
                 onViewHistory = onViewHistory,
                 onDeveloperOptionsClick = onDeveloperOptionsClick,
                 innerPadding = innerPadding,
@@ -168,14 +166,7 @@ fun AboutPage(
             )
         }
 
-        OverlayDialog(
-            show = showCurrentLog,
-            title = "当前版本更新日志",
-            onDismissRequest = { showCurrentLog = false },
-            content = {
-                TextButton(text = "关闭", onClick = { showCurrentLog = false }, modifier = Modifier.fillMaxWidth())
-            }
-        )
+        UpdateLogSheet(viewModel = viewModel)
     }
 }
 
@@ -536,10 +527,10 @@ private fun OpenSourceEntries(context: android.content.Context) {
         }
     )
     ArrowPreference(
-        title = "accompanist-lyrics-ui",
-        summary = "提供类似 Apple Music 的歌词渲染引擎",
+        title = "SukiSU Ultra",
+        summary = "参考了此项目的部分Miuix界面样式",
         onClick = {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/6xingyv/accompanist-lyrics-ui")))
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SukiSU-Ultra/SukiSU-Ultra/")))
         }
     )
     ArrowPreference(
@@ -547,13 +538,6 @@ private fun OpenSourceEntries(context: android.content.Context) {
         summary = "通过此项目实现网易云音乐扫码登录、每日推荐、歌曲播放等功能",
         onClick = {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/2697a/bujuan")))
-        }
-    )
-    ArrowPreference(
-        title = "音理音理!",
-        summary = "通过此项目适配词幕接口",
-        onClick = {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/cwuom/NeriPlayer")))
         }
     )
     ArrowPreference(
@@ -571,10 +555,31 @@ private fun OpenSourceEntries(context: android.content.Context) {
         }
     )
     ArrowPreference(
+        title = "音理音理!",
+        summary = "通过此项目适配词幕接口",
+        onClick = {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/cwuom/NeriPlayer")))
+        }
+    )
+    ArrowPreference(
         title = "LyricInfo",
         summary = "提供系统媒体播放歌词识别",
         onClick = {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/limczhh/LyricInfo")))
+        }
+    )
+    ArrowPreference(
+        title = "accompanist-lyrics-ui",
+        summary = "提供类似 Apple Music 的歌词渲染引擎",
+        onClick = {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/6xingyv/accompanist-lyrics-ui")))
+        }
+    )
+    ArrowPreference(
+        title = "Folia",
+        summary = "提供响度平衡和音效功能",
+        onClick = {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/chthollyphile/folia-major")))
         }
     )
 }

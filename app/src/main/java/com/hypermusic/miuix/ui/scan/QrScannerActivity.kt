@@ -51,6 +51,12 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 class QrScannerActivity : ComponentActivity() {
+    private val scanSoundPreset get() = intent?.getStringExtra(EXTRA_KIND) == KIND_SOUND
+    private fun isValidResult(value: String): Boolean = if (scanSoundPreset) {
+        runCatching { com.hypermusic.miuix.data.audio.SoundPresetLink.decode(value) }.isSuccess
+    } else {
+        runCatching { UserCredentialLink.decode(value) }.isSuccess
+    }
     private val executor = Executors.newSingleThreadExecutor()
     private val scanner = BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build())
     private val handled = AtomicBoolean(false)
@@ -123,8 +129,8 @@ class QrScannerActivity : ComponentActivity() {
                     val image = frame.image
                     if (image == null) frame.close() else scanner.process(InputImage.fromMediaImage(image, frame.imageInfo.rotationDegrees))
                         .addOnSuccessListener { codes -> codes.firstOrNull()?.rawValue?.let { result ->
-                            if (runCatching { UserCredentialLink.decode(result) }.isSuccess) finishWithResult(result)
-                            else error = "请扫描 HyperMusic 用户数据二维码"
+                            if (isValidResult(result)) finishWithResult(result)
+                            else error = if (scanSoundPreset) "请扫描 HyperMusic 音效二维码" else "请扫描 HyperMusic 用户数据二维码"
                         } }.addOnCompleteListener { frame.close() }
                 }
                 provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis).also { camera = it }
@@ -135,8 +141,8 @@ class QrScannerActivity : ComponentActivity() {
         val image = runCatching { InputImage.fromFilePath(this, uri) }.getOrElse { error = "无法读取图片"; return }
         scanner.process(image).addOnSuccessListener { codes ->
             val value = codes.firstOrNull()?.rawValue
-            if (value != null && runCatching { UserCredentialLink.decode(value) }.isSuccess) finishWithResult(value)
-            else Toast.makeText(this, "未找到有效的用户数据二维码", Toast.LENGTH_SHORT).show()
+            if (value != null && isValidResult(value)) finishWithResult(value)
+            else Toast.makeText(this, if (scanSoundPreset) "未找到有效的音效二维码" else "未找到有效的用户数据二维码", Toast.LENGTH_SHORT).show()
         }.addOnFailureListener { Toast.makeText(this, "无法识别二维码", Toast.LENGTH_SHORT).show() }
     }
     private fun finishWithResult(value: String) {
@@ -144,5 +150,9 @@ class QrScannerActivity : ComponentActivity() {
         runOnUiThread { setResult(RESULT_OK, Intent().putExtra(EXTRA_RESULT, value)); finish() }
     }
     override fun onDestroy() { super.onDestroy(); scanner.close(); executor.shutdown() }
-    companion object { const val EXTRA_RESULT = "result" }
+    companion object {
+        const val EXTRA_RESULT = "result"
+        const val EXTRA_KIND = "scan_kind"
+        const val KIND_SOUND = "sound"
+    }
 }

@@ -17,7 +17,10 @@ data class Track(
     val artistIds: List<String> = emptyList(), // 原始歌手ID列表
     val isCloudDisk: Boolean = false, // 是否为音乐云盘歌曲
     val qqMediaMid: String = "",
-    val qqSongId: Long = 0
+    val qqSongId: Long = 0,
+    val bodianFreeSign: String = "",
+    val kugouHash: String = "",
+    val kugouAlbumAudioId: String = ""
 )
 
 data class Playlist(
@@ -26,7 +29,11 @@ data class Playlist(
     val coverImgUrl: String,
     val sourceUrl: String,
     val trackCount: Int = 0,
-    val description: String = ""
+    val description: String = "",
+    val kugouCreatorId: String = "",
+    val kugouOriginalListId: String = "",
+    val kugouCreatorGid: String = "",
+    val creatorId: String = ""
 )
 
 data class PlaylistDetail(
@@ -41,8 +48,27 @@ data class RecommendPlaylist(
     val playCount: Long = 0,
     val trackCount: Int = 0,
     val description: String = "",
-    val isCloudDisk: Boolean = false
+    val isCloudDisk: Boolean = false,
+    val isPersonalCollection: Boolean = false,
+    val isOwned: Boolean = false
 )
+
+/** QQ 音乐喜欢列表的展示名称；其他歌单名称保持不变。 */
+fun displayQqLikedPlaylistTitle(title: String, accountName: String?): String {
+    val name = when {
+        title == "我喜欢" || title == "我喜欢的音乐" -> accountName.orEmpty().trim()
+        title.endsWith("的我喜欢") -> title.removeSuffix("的我喜欢").trim()
+        else -> return title
+    }
+    return if (name.isBlank()) "收藏的音乐" else "$name 收藏的音乐"
+}
+
+/** 详情接口可能只返回“我喜欢”，保留列表中已经确定的歌单主人。 */
+fun displayQqPlaylistDetailTitle(rawTitle: String?, initialTitle: String, accountName: String?): String {
+    if (rawTitle == null) return initialTitle
+    if ((rawTitle == "我喜欢" || rawTitle == "我喜欢的音乐") && initialTitle.endsWith(" 收藏的音乐")) return initialTitle
+    return displayQqLikedPlaylistTitle(rawTitle, accountName)
+}
 
 /** 「XXX喜欢的音乐」→「XXX 收藏的音乐」（仅展示用） */
 fun displayPlaylistTitle(title: String): String {
@@ -78,7 +104,9 @@ data class LyricLine(
     val endAt: Long = 0, // 毫秒
     val words: List<LyricWord>? = null, // 逐字歌词
     val isArtistLine: Boolean = false, // 是否为歌手行
-    val phonetic: String = "" // 音译/罗马音副行
+    val phonetic: String = "", // 音译/罗马音副行
+    val isBackingVocal: Boolean = false, // 仅 AMLL 中被英文括号完整包裹的衬词
+    val amllAgent: String = "" // 仅 AMLL 设置：v1 左侧、v2 右侧；其他来源保持为空
 )
 
 data class LyricWord(

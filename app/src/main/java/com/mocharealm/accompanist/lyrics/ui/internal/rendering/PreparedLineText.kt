@@ -55,6 +55,7 @@ internal fun PreparedLineText(
     LyricsReveal(
         visible = playback.line(prepared).visible.value,
         animateInitial = prepared.source is KaraokeLine.AccompanimentKaraokeLine,
+        backingVocal = prepared.source is KaraokeLine.AccompanimentKaraokeLine,
         origin =
             if (prepared.source is KaraokeLine.AccompanimentKaraokeLine)
                 androidx.compose.ui.graphics.TransformOrigin(

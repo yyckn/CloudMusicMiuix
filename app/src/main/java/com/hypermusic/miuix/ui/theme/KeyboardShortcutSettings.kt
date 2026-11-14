@@ -11,9 +11,10 @@ enum class ShortcutAction(val title: String, val defaultKeyCode: Int) {
     PlayPause("暂停/播放歌曲", KeyEvent.KEYCODE_SPACE),
     Previous("上一首", KeyEvent.KEYCODE_DPAD_UP),
     Next("下一首", KeyEvent.KEYCODE_DPAD_DOWN),
-    SeekBackward("后退10秒", KeyEvent.KEYCODE_DPAD_LEFT),
-    SeekForward("快进10秒", KeyEvent.KEYCODE_DPAD_RIGHT),
+    SeekBackward("后退5秒", KeyEvent.KEYCODE_DPAD_LEFT),
+    SeekForward("快进5秒", KeyEvent.KEYCODE_DPAD_RIGHT),
     Like("收藏歌曲", KeyEvent.KEYCODE_S),
+    More("打开更多面板", KeyEvent.KEYCODE_M),
 }
 
 object KeyboardShortcutSettings {
@@ -31,12 +32,15 @@ object KeyboardShortcutSettings {
         ShortcutAction.entries.associateWith { it.defaultKeyCode }
     )
         private set
+    var modifiers by mutableStateOf<Map<ShortcutAction, Int>>(emptyMap())
+        private set
 
     fun init(context: Context) {
         val p = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs = p
         enabled = p.getBoolean(KEY_ENABLED, true)
         keys = ShortcutAction.entries.associateWith { p.getInt(keyName(it), it.defaultKeyCode) }
+        modifiers = ShortcutAction.entries.associateWith { normalizeModifiers(p.getInt("modifiers_${it.name}", 0)) }
     }
 
     fun updateEnabled(value: Boolean) {
@@ -46,12 +50,32 @@ object KeyboardShortcutSettings {
 
     fun keyFor(action: ShortcutAction): Int = keys[action] ?: action.defaultKeyCode
 
-    fun updateKey(action: ShortcutAction, keyCode: Int) {
+    fun updateKey(action: ShortcutAction, keyCode: Int, metaState: Int = 0) {
         keys = keys + (action to keyCode)
-        prefs?.edit()?.putInt(keyName(action), keyCode)?.apply()
+        val normalized = normalizeModifiers(metaState)
+        modifiers = modifiers + (action to normalized)
+        prefs?.edit()?.putInt(keyName(action), keyCode)?.putInt("modifiers_${action.name}", normalized)?.apply()
     }
 
-    fun keyLabel(action: ShortcutAction): String = keyCodeLabel(keyFor(action))
+    fun matches(action: ShortcutAction, keyCode: Int, metaState: Int): Boolean =
+        keyFor(action) == keyCode && (modifiers[action] ?: 0) == normalizeModifiers(metaState)
+
+    fun normalizeModifiers(state: Int): Int =
+        (if (state and (KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON or KeyEvent.META_CTRL_RIGHT_ON) != 0) KeyEvent.META_CTRL_ON else 0) or
+        (if (state and (KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON or KeyEvent.META_SHIFT_RIGHT_ON) != 0) KeyEvent.META_SHIFT_ON else 0) or
+        (if (state and (KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON or KeyEvent.META_ALT_RIGHT_ON) != 0) KeyEvent.META_ALT_ON else 0)
+
+    fun isModifierKey(keyCode: Int): Boolean = keyCode in setOf(KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_CTRL_RIGHT,
+        KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.KEYCODE_SHIFT_RIGHT, KeyEvent.KEYCODE_ALT_LEFT, KeyEvent.KEYCODE_ALT_RIGHT,
+        KeyEvent.KEYCODE_META_LEFT, KeyEvent.KEYCODE_META_RIGHT, KeyEvent.KEYCODE_FUNCTION, KeyEvent.KEYCODE_UNKNOWN)
+
+    fun keyLabel(action: ShortcutAction): String = buildList {
+        val state = modifiers[action] ?: 0
+        if (state and KeyEvent.META_CTRL_ON != 0) add("Ctrl")
+        if (state and KeyEvent.META_SHIFT_ON != 0) add("Shift")
+        if (state and KeyEvent.META_ALT_ON != 0) add("Alt")
+        add(keyCodeLabel(keyFor(action)))
+    }.joinToString(" + ")
 
     fun keyCodeLabel(keyCode: Int): String = when (keyCode) {
         KeyEvent.KEYCODE_SPACE -> "空格键"

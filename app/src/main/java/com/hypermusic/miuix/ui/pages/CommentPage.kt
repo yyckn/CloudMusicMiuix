@@ -1,6 +1,6 @@
 package com.hypermusic.miuix.ui.pages
 
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -42,7 +42,7 @@ import androidx.compose.ui.graphics.Color
 import com.hypermusic.miuix.ui.components.BlurredBar
 import com.hypermusic.miuix.ui.components.pageLayerBackdrop
 import com.hypermusic.miuix.ui.components.rememberPageBlurBackdrop
-import coil.compose.AsyncImage
+import com.hypermusic.miuix.ui.components.AsyncImage
 import com.hypermusic.miuix.R
 import com.hypermusic.miuix.data.api.NeteaseApi
 import com.hypermusic.miuix.data.model.Comment
@@ -321,7 +321,7 @@ private fun CommentItem(
                         .size(36.dp)
                         .clip(CircleShape),
                     contentScale = ContentScale.Crop,
-                    error = painterResource(R.drawable.ic_launcher_foreground)
+                    error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -398,8 +398,6 @@ internal fun QqCommentItem(comment: Comment) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Box(Modifier.size(36.dp).clip(CircleShape).background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
                     contentAlignment = Alignment.Center) {
-                    Icon(imageVector = MiuixIcons.Contacts, contentDescription = null, modifier = Modifier.size(22.dp),
-                        tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f))
                     AsyncImage(model = comment.avatarUrl.takeIf { it.isNotBlank() }, contentDescription = comment.nickname,
                         modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 }
@@ -444,7 +442,7 @@ private fun ReplyItem(
                 .size(28.dp)
                 .clip(CircleShape),
             contentScale = ContentScale.Crop,
-            error = painterResource(R.drawable.ic_launcher_foreground)
+            error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
         )
 
         Spacer(modifier = Modifier.width(8.dp))

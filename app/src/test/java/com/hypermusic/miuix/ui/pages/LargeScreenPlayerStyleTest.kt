@@ -18,4 +18,8 @@ class LargeScreenPlayerStyleTest {
         assertEquals(2, resolveLargeScreenPlayerStyle(2, 2f))
         assertEquals(2, resolveLargeScreenPlayerStyle(2, 0.5f))
     }
+    @Test fun vinylRemainsSelectedAtDifferentAspectRatios() {
+        assertEquals(3, resolveLargeScreenPlayerStyle(3, 2f))
+        assertEquals(3, resolveLargeScreenPlayerStyle(3, 0.6f))
+    }
 }

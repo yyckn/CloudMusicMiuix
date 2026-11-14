@@ -7,6 +7,7 @@ import com.google.gson.JsonObject
 import com.hypermusic.miuix.data.model.SongLyrics
 import com.hypermusic.miuix.data.model.Track
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -19,7 +20,9 @@ import java.util.concurrent.TimeUnit
 data class PlatformLyricResult(
     val lyrics: SongLyrics,
     val hasWordLines: Boolean,
-    val platform: String
+    val platform: String,
+    val rawDebugText: String = "",
+    val matchedTrack: Track? = null
 )
 
 /**
@@ -36,6 +39,7 @@ object QqMusicLyricsApi {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     private val client = OkHttpClient.Builder()
+        .addInterceptor(com.hypermusic.miuix.data.lyrics.LyricRequests)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(12, TimeUnit.SECONDS)
         .build()
@@ -77,12 +81,17 @@ object QqMusicLyricsApi {
         }
     }
 
-    suspend fun fetch(track: Track): PlatformLyricResult? = withContext(Dispatchers.IO) {
+    suspend fun fetch(track: Track, showRomanization: Boolean = com.hypermusic.miuix.ui.theme.ThemeSettings.showJapaneseRomaji): PlatformLyricResult? = withContext(Dispatchers.IO) {
         try {
-            val ref = if (track.source == "qqmusic" && track.qqSongId > 0) SongRef(track.qqSongId.toString(), track.id) else refCache[track.id]
-                ?: search(track)?.also { refCache[track.id] = it }
-                ?: return@withContext null
-            fetchLyric(track, ref) ?: fetchLrc(track, ref.mid)
+            val mid = track.id.removePrefix("qqtrack_").takeIf { track.source == "qqmusic" && it.matches(Regex("[A-Za-z0-9]{1,64}")) }
+            val ref = (if (track.source == "qqmusic" && track.qqSongId > 0) SongRef(track.qqSongId.toString(), mid.orEmpty())
+            else if (track.source == "qqmusic") search(track, exactMid = track.id.removePrefix("qqtrack_"))
+            else refCache["${track.source}:${track.id}"]
+                ?: search(track)?.also { refCache["${track.source}:${track.id}"] = it })
+            if (ref == null) mid?.let { fetchLrc(track, it, showRomanization) }
+            else fetchLyric(track, ref, showRomanization) ?: fetchLrc(track, ref.mid, showRomanization)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "fetch failed: ${e.message}")
             null
@@ -147,18 +156,18 @@ object QqMusicLyricsApi {
         return (best.extra as? SongRef)?.takeIf { it.id.isNotEmpty() }
     }
 
-    private fun fetchLyric(track: Track, ref: SongRef): PlatformLyricResult? {
+    private fun fetchLyric(track: Track, ref: SongRef, showRomanization: Boolean): PlatformLyricResult? {
         val data = requestLyricData(track, ref) ?: return null
         val lyricHex = data.str("lyric") ?: return null
         if (lyricHex.isBlank()) return null
 
-        val qrcTimestamp = data.str("qrc_t")?.toLongOrNull() ?: 0L
-        val encryptedText = runCatching { QqMusicQrcDecryptor.decrypt(lyricHex) }.getOrNull()
-            ?: return null
+        val encryptedText = decryptMaybePlain(lyricHex)
+        if (encryptedText.isBlank()) return null
         val translation = decryptMaybePlain(data.str("trans"))
-        val phonetic = if (com.hypermusic.miuix.ui.theme.ThemeSettings.showJapaneseRomaji) decryptMaybePlain(data.str("roma")) else ""
+        val rawRomanization = decryptMaybePlain(data.str("roma"))
+        val phonetic = if (showRomanization) rawRomanization else ""
 
-        val lyrics = if (qrcTimestamp != 0L && encryptedText.trimStart().startsWith("<")) {
+        val lyrics = if (isQrcContent(encryptedText)) {
             LyricParser.parseQrc(
                 qrc = encryptedText,
                 tlyric = translation,
@@ -181,13 +190,18 @@ object QqMusicLyricsApi {
             )
         }
 
-        if (lyrics.lines.isEmpty()) return null
+        if (lyrics.lines.isEmpty() && !lyrics.isPureMusic) return null
         return PlatformLyricResult(
             lyrics = lyrics,
             hasWordLines = lyrics.lines.any { !it.words.isNullOrEmpty() },
-            platform = "qq"
+            platform = "qq",
+            rawDebugText = formatRawLyricSections("QQ 歌曲 ID" to ref.id, "QQ 歌曲 MID" to ref.mid,
+                "QQ 原歌词 / QRC（解密后）" to encryptedText, "翻译" to translation, "罗马音" to rawRomanization)
         )
     }
+
+    internal fun isQrcContent(text: String): Boolean =
+        text.contains("LyricContent=") || Regex("(?m)^\\s*\\[\\d+,\\d+]\\s*.*\\(\\d+,\\d+\\)").containsMatchIn(text)
 
     private fun requestLyricData(track: Track, ref: SongRef): JsonObject? {
         val param = JsonObject().apply {
@@ -213,13 +227,13 @@ object QqMusicLyricsApi {
         return root.obj("request")?.obj("data")
     }
 
-    private fun fetchLrc(track: Track, mid: String): PlatformLyricResult? {
+    private fun fetchLrc(track: Track, mid: String, showRomanization: Boolean): PlatformLyricResult? {
         if (mid.isBlank()) return null
         val root = getJson(lrcUrl(mid)) ?: return null
-        val lyric = root.str("lyric") ?: return null
+        val lyric = decodeMaybeBase64(root.str("lyric") ?: return null)
         if (lyric.isBlank()) return null
         val translation = decodeMaybeBase64(root.str("trans") ?: "")
-        val phonetic = if (com.hypermusic.miuix.ui.theme.ThemeSettings.showJapaneseRomaji) decryptMaybePlain(root.str("roma")) else ""
+        val phonetic = if (showRomanization) decryptMaybePlain(root.str("roma")) else ""
 
         val lyrics = LyricParser.parse(
             lrc = lyric,
@@ -231,11 +245,13 @@ object QqMusicLyricsApi {
             artistNames = track.artistNames,
             phonetic = phonetic
         )
-        if (lyrics.lines.isEmpty()) return null
+        if (lyrics.lines.isEmpty() && !lyrics.isPureMusic) return null
         return PlatformLyricResult(
             lyrics = lyrics,
             hasWordLines = false,
-            platform = "qq"
+            platform = "qq",
+            rawDebugText = formatRawLyricSections("QQ 歌曲 MID" to mid, "QQ 原歌词 / LRC" to lyric,
+                "翻译" to translation, "罗马音" to decryptMaybePlain(root.str("roma")))
         )
     }
 
@@ -245,7 +261,7 @@ object QqMusicLyricsApi {
     private fun decryptMaybePlain(value: String?): String {
         val text = value?.trim().orEmpty()
         if (text.isEmpty()) return ""
-        if (text.startsWith("[")) return text
+        if (text.startsWith("[") || text.startsWith("<")) return text
         runCatching { QqMusicQrcDecryptor.decrypt(text) }
             .getOrNull()
             ?.takeIf { it.isNotBlank() }

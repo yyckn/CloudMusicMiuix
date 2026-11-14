@@ -27,6 +27,7 @@ object QqMusicApi {
         .readTimeout(15, TimeUnit.SECONDS).build()
     private val audioProbeClient = client.newBuilder().callTimeout(4, TimeUnit.SECONDS).build()
     private var preferences: android.content.SharedPreferences? = null
+    private var appContext: android.content.Context? = null
     data class Credential(val musicId: String, val musicKey: String, val encryptUin: String, val loginType: Int)
     data class Account(val credential: Credential, val name: String, val avatarUrl: String = "")
     private val gson = com.google.gson.Gson()
@@ -42,6 +43,7 @@ object QqMusicApi {
 
     @Synchronized
     fun init(context: android.content.Context) {
+        appContext = context.applicationContext
         preferences = context.applicationContext.getSharedPreferences("qqmusic_prefs", android.content.Context.MODE_PRIVATE)
         val prefs = preferences ?: return
         accounts = runCatching {
@@ -113,10 +115,10 @@ object QqMusicApi {
 
     fun isLoggedIn(): Boolean = credential != null
     @Synchronized
-    fun logout() {
-        val removed = dataAccountId
+    fun logout(accountId: String? = null) {
+        val removed = accountId ?: dataAccountId
         accounts = accounts.filterNot { it.credential.musicId == removed }
-        dataAccountId = accounts.firstOrNull()?.credential?.musicId
+        if (dataAccountId == removed) dataAccountId = accounts.firstOrNull()?.credential?.musicId
         if (playbackAccountId == removed) playbackAccountId = dataAccountId
         updateActiveAccount()
         persistAccounts()
@@ -135,7 +137,8 @@ object QqMusicApi {
 
     fun currentAccount(): Account? = accounts.find { it.credential.musicId == dataAccountId }
 
-    fun exportCredential(): String? = credential?.let { auth ->
+    fun exportCredential(accountId: String? = null): String? = (if (accountId == null) credential else
+        accounts.find { it.credential.musicId == accountId }?.credential)?.let { auth ->
         JsonObject().apply {
             addProperty("musicid", auth.musicId)
             addProperty("musickey", auth.musicKey)
@@ -155,9 +158,10 @@ object QqMusicApi {
         persistAccounts()
     }
 
-    suspend fun getProfile(): Result<UserProfile> = withContext(Dispatchers.IO) {
+    suspend fun getProfile(accountId: String? = null): Result<UserProfile> = withContext(Dispatchers.IO) {
         runCatching {
-            val auth = credential ?: error("请先登录QQ音乐")
+            val auth = (if (accountId == null) credential else accounts.find { it.credential.musicId == accountId }?.credential)
+                ?: error("请先登录QQ音乐")
             check(auth.encryptUin.isNotBlank()) { "QQ音乐登录凭据缺少用户标识，请重新登录" }
             val info = request("music.UnifiedHomepage.UnifiedHomepageSrv", "GetHomepageHeader", JsonObject().apply {
                 addProperty("uin", auth.encryptUin)
@@ -220,6 +224,64 @@ object QqMusicApi {
     }
 
     data class QrCode(val image: ByteArray, val signature: String, val loginType: Int = 2)
+    internal class UnifiedQr(val image: ByteArray, val id: String, val device: QqQrDevice, val channel: QqQrChannel) : java.io.Closeable {
+        override fun close() = channel.close()
+    }
+
+    internal suspend fun createUnifiedQr(): Result<UnifiedQr> = withContext(Dispatchers.IO) {
+        runCatching {
+            val context = requireNotNull(appContext) { "QQ 音乐未初始化" }
+            val device = QqQrDevice.load(context)
+            device.requestQimei(client)
+            device.refreshSession(client)
+            device.save(context)
+            val (id, image) = device.createQr(client)
+            val channel = QqQrChannel(client, id)
+            try {
+                channel.open()
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                UnifiedQr(image, id, device, channel)
+            }
+            catch (error: Throwable) { channel.close(); throw error }
+        }
+    }
+
+    internal suspend fun nextUnifiedQrEvent(qr: UnifiedQr): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching {
+            val event = kotlinx.coroutines.withTimeoutOrNull(1000) { qr.channel.nextEvent() } ?: return@runCatching 69
+            when (event.type) {
+                "waiting" -> 66
+                "scanned" -> 67
+                "timeout", "loginFailed" -> 65
+                "canceled" -> 68
+                "cookies" -> {
+                    val payload = JsonParser.parseString(event.payload).asJsonObject
+                    val cookies = payload.getAsJsonObject("cookies") ?: error("扫码结果缺少账号信息")
+                    fun cookie(name: String) = cookies.getAsJsonObject(name)?.get("value")?.asString.orEmpty()
+                    val id = cookie("qqmusic_uin")
+                    val token = cookie("qqmusic_key")
+                    check(id.matches(Regex("\\d{1,19}")) && token.isNotBlank()) { "扫码结果缺少登录凭证" }
+                    val type = if (cookie("tmeLoginType") == "1") 1 else 2
+                    val result = qr.device.musicu(client, "music.login.LoginServer", "Login",
+                        mapOf("musicid" to java.math.BigInteger(id), "qrCodeID" to qr.id, "token" to token), mapOf("tmeLoginType" to 6))
+                    val musicId = result.text("str_musicid").takeIf { it.isNotBlank() && it != "0" } ?: result.text("musicid").ifBlank { id }
+                    val key = result.text("musickey")
+                    val actualType = result.text("loginType").toIntOrNull()?.let { if (it == 1) 1 else 2 } ?: type
+                    val encrypted = result.text("encryptUin").ifBlank { result.text("encrypt_uin") }
+                    check(musicId.isNotBlank() && key.isNotBlank() && encrypted.isNotBlank()) { "登录响应缺少账号凭证或用户标识" }
+                    val candidate = Credential(musicId, key, encrypted, actualType)
+                    val base = runCatching { request("music.UnifiedHomepage.UnifiedHomepageSrv", "GetHomepageHeader",
+                        JsonObject().apply { addProperty("uin", encrypted); addProperty("IsQueryTabDetail", 1) }, candidate)
+                        .getAsJsonObject("Info")?.getAsJsonObject("BaseInfo") }.getOrNull()
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                    saveAccount(candidate, base?.text("Name")?.takeIf { it.isNotBlank() } ?: musicId, base?.text("Avatar").orEmpty())
+                    qr.close()
+                    0
+                }
+                else -> 69
+            }
+        }
+    }
     private val loginClient = client.newBuilder().followRedirects(false).followSslRedirects(false).build()
 
     suspend fun createQrCode(): Result<QrCode> = withContext(Dispatchers.IO) {
@@ -576,11 +638,15 @@ object QqMusicApi {
                 }
                 HomeFeature.GUESS -> {
                     val data = request("music.radioProxy.MbTrackRadioSvr", "get_radio_track", JsonObject().apply {
-                        addProperty("id", 99); addProperty("num", 20); addProperty("from", 0); addProperty("scene", 0)
-                        add("song_ids", com.google.gson.JsonArray().apply { excludedSongIds.filter { it > 0 }.takeLast(100).forEach { add(it) } })
+                        // Keep the Android recommendation contract: larger batches and
+                        // queue history in song_ids can be rejected with business code 1000.
+                        addProperty("id", 99); addProperty("num", 5); addProperty("from", 0); addProperty("scene", 0)
+                        add("song_ids", com.google.gson.JsonArray())
                     }, auth)
                     val songs = data.getAsJsonArray("tracks") ?: error("猜你喜欢暂不可用")
+                    val excluded = excludedSongIds.filter { it > 0 }.toHashSet()
                     songs.mapNotNull { it.takeIf { e -> e.isJsonObject }?.asJsonObject?.toTrack() }
+                        .distinctBy { it.id }.filterNot { it.qqSongId > 0 && it.qqSongId in excluded }
                 }
                 HomeFeature.NEW_SONGS -> {
                     val data = request("newsong.NewSongServer", "get_new_song_info", JsonObject().apply { addProperty("type", 5) }, auth)
@@ -668,30 +734,96 @@ object QqMusicApi {
         runCatching {
             val auth = credential ?: error("请先登录QQ音乐")
             val created = request("music.musicasset.PlaylistBaseRead", "GetPlaylistByUin", JsonObject().apply { addProperty("uin", auth.musicId) }, auth)
-            val all = created.getAsJsonArray("v_playlist")?.toMutableList() ?: mutableListOf()
+            val all = created.getAsJsonArray("v_playlist")?.map { it to true }?.toMutableList() ?: mutableListOf()
+            val removedIds = mutableSetOf<String>()
+            created.getAsJsonArray("v_delTid")?.forEach { removedIds.add(it.asString) }
             var offset = 0
             do {
                 val fav = request("music.musicasset.PlaylistFavRead", "CgiGetPlaylistFavInfo", JsonObject().apply {
                     addProperty("uin", auth.encryptUin); addProperty("offset", offset); addProperty("size", 100)
                 }, auth)
+                fav.getAsJsonArray("v_delTids")?.forEach { removedIds.add(it.asString) }
+                fav.getAsJsonArray("v_failTids")?.forEach { removedIds.add(it.asString) }
                 val page = fav.getAsJsonArray("v_list") ?: error("QQ音乐收藏歌单格式异常")
-                all.addAll(page)
+                all.addAll(page.map { it to false })
                 offset += page.size()
                 val more = fav.text("hasmore") == "1" && page.size() > 0
             } while (more)
-            all.mapNotNull { value ->
+            all.mapNotNull { (value, isCreated) ->
                 val obj = value.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
                 if (obj.text("invalid") == "true" || obj.text("invalid") == "1") return@mapNotNull null
                 val tid = obj.text("tid").ifBlank { obj.text("id") }.ifBlank { obj.text("dissid") }
+                val title = obj.text("title").ifBlank { obj.text("dirName") }.ifBlank { obj.text("name") }
+                if (tid in removedIds || title == "歌单已删除" || title.endsWith("的每日30首")) return@mapNotNull null
                 val dir = obj.text("dirid").ifBlank { obj.text("dirId") }
                 val id = if (tid.isNotBlank() && tid != "0") tid else if (dir.isNotBlank() && dir != "0") "qqdir:$dir" else return@mapNotNull null
                 RecommendPlaylist(id = id, title = obj.text("title").ifBlank { obj.text("dirName") }.ifBlank { obj.text("name") },
                     coverImgUrl = obj.text("picurl").ifBlank { obj.text("picUrl") }.replace("http://", "https://"),
-                    trackCount = obj.text("songNum").ifBlank { obj.text("songnum") }.toIntOrNull() ?: 0)
+                    trackCount = obj.text("songNum").ifBlank { obj.text("songnum") }.toIntOrNull() ?: 0,
+                    isOwned = isCreated,
+                    isPersonalCollection = isCreated || dir == "201" || title == "我喜欢" ||
+                        title.endsWith("喜欢的音乐") || title.endsWith("收藏的音乐") || title.endsWith("的我喜欢"))
             }.let { list ->
-                if (list.any { it.id == "qqdir:201" || it.title.contains("我喜欢") }) list
-                else listOf(RecommendPlaylist(id = "qqdir:201", title = "我喜欢", coverImgUrl = "")) + list
+                if (list.any { it.id == "qqdir:201" || (it.isPersonalCollection && it.title.startsWith("我喜欢")) }) list
+                else listOf(RecommendPlaylist(id = "qqdir:201", title = "我喜欢", coverImgUrl = "", isPersonalCollection = true)) + list
             }.distinctBy { it.id }
+        }
+    }
+
+    suspend fun getFavoriteAlbums(): Result<List<AlbumInfo>> {
+        val auth = credential ?: return Result.failure(IllegalStateException("请先登录QQ音乐"))
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val albums = mutableListOf<AlbumInfo>()
+                var offset = 0
+                do {
+                    val data = request("music.musicasset.AlbumFavRead", "CgiGetAlbumFavInfo", JsonObject().apply {
+                        addProperty("euin", auth.encryptUin); addProperty("offset", offset); addProperty("size", 100)
+                    }, auth)
+                    val page = data.getAsJsonArray("v_list") ?: error("QQ音乐收藏专辑格式异常")
+                    page.forEach { item ->
+                        val obj = item.asJsonObject
+                        val id = obj.text("id").toLongOrNull() ?: return@forEach
+                        val mid = obj.text("pmid").ifBlank { obj.text("mid") }
+                        val artist = obj.getAsJsonArray("v_singer")?.joinToString(" / ") { it.asJsonObject.text("name") }.orEmpty()
+                        albums.add(AlbumInfo(id = id, name = obj.text("name"), artist = artist,
+                            size = obj.text("songnum").toIntOrNull() ?: 0,
+                            picUrl = if (mid.isNotBlank()) "https://y.gtimg.cn/music/photo_new/T002R500x500M000$mid.jpg" else ""))
+                    }
+                    offset += page.size()
+                    val more = data.text("hasmore") == "1" && page.size() > 0
+                } while (more)
+                albums.distinctBy { it.id }
+            }
+        }
+    }
+
+    suspend fun favoriteAlbum(albumId: Long, favorite: Boolean = true): Result<Unit> {
+        val auth = credential ?: return Result.failure(IllegalStateException("请先登录QQ音乐"))
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                require(albumId > 0) { "无效的专辑" }
+                val data = request("music.musicasset.AlbumFavWrite", if (favorite) "FavAlbum" else "UnFavAlbum", JsonObject().apply {
+                    add("v_albumId", com.google.gson.JsonArray().apply { add(albumId) })
+                }, auth)
+                check(data.get("result")?.asInt == 0 && data.getAsJsonArray("v_failedAlbumId")?.size().let { it == null || it == 0 }) { "收藏专辑失败" }
+            }
+        }
+    }
+
+    suspend fun favoritePlaylist(playlistId: String, favorite: Boolean = true): Result<Unit> {
+        val auth = credential ?: return Result.failure(IllegalStateException("请先登录QQ音乐"))
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val id = playlistId.toLongOrNull()?.takeIf { it > 0 } ?: error("无效的歌单")
+                val data = request("music.musicasset.PlaylistFavWrite", if (favorite) "FavPlaylist" else "DelFavPlaylist", JsonObject().apply {
+                    addProperty("uin", auth.encryptUin)
+                    add("v_playlistId", com.google.gson.JsonArray().apply { add(id) })
+                }, auth)
+                check(data.get("result")?.asInt == 0) { "收藏歌单失败" }
+                val failed = data.getAsJsonArray("v_failedPlaylistId")
+                check(failed?.none { it.asString == id.toString() } != false) { "收藏歌单失败" }
+            }
         }
     }
 
@@ -855,10 +987,10 @@ object QqMusicApi {
     suspend fun getSongUrl(mid: String, mediaMid: String = ""): Result<String> =
         getSongAudio(mid, mediaMid, 0).map { it.url }
 
-    suspend fun getSongAudio(mid: String, mediaMid: String = "", qualityIndex: Int = 0): Result<AudioUrl> = withContext(Dispatchers.IO) {
+    suspend fun getSongAudio(mid: String, mediaMid: String = "", qualityIndex: Int = 0, playbackAccountOverride: String? = null): Result<AudioUrl> = withContext(Dispatchers.IO) {
         runCatching {
             require(mid.isNotBlank()) { "歌曲标识为空" }
-            val playbackAuth = accounts.find { it.credential.musicId == playbackAccountId }?.credential
+            val playbackAuth = accounts.find { it.credential.musicId == (playbackAccountOverride ?: playbackAccountId) }?.credential
             val guid = java.util.UUID.randomUUID().toString().replace("-", "").take(16)
             val candidates = com.hypermusic.miuix.data.model.QqAudioFormats.candidates(qualityIndex)
             val baseName = mediaMid.ifBlank { mid + mid }

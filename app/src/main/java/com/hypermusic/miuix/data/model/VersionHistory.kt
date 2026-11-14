@@ -1,8 +1,41 @@
 package com.hypermusic.miuix.data.model
 
+import com.hypermusic.miuix.BuildConfig
+
 /** 随应用发布的历史版本记录。 */
 object VersionHistory {
+    val current = UpdateInfo(version = "${BuildConfig.VERSION_NAME}更新")
+
     val entries = listOf(
+        UpdateInfo(
+            version = "2.0.0-release更新",
+            changelog = listOf(
+                "【重要更新】",
+                "- 新增：QQ音乐音源，完整支持扫码登录、播放、收藏、歌单、排行榜等。",
+                "- 新增：统一管理缓存和下载：增加可视化下载界面，歌曲下载后可保存本地或分享；增加缓存管理，可清空图片、封面、歌曲等缓存数据。",
+                "- 新增：响度平衡和音效设置（包含预设音效、10档均衡器、9项高级音频设置），感谢Folia项目（https://github.com/chthollyphile/folia-major）。",
+                "- 新增：独立搜索页面，支持歌曲/专辑/歌单/歌手分类搜索。",
+                "- 新增：重构OOBE（软件初步设置），增加登录账号引导。",
+                "- 新增：自定义APP图标和名称，软件默认名称改为HyperMusic（包名com.hypermusic.miuix）。",
+                "【功能更新】",
+                "- 新增：修改主题色、修改色彩风格和色彩标准。",
+                "- 新增：榜单功能。",
+                "- 新增：预测性返回手势。",
+                "- 新增：界面缩放。",
+                "- 新增：支持在安卓媒体通知上直接关闭音乐和收藏音乐。",
+                "- 新增：播放页新增“卡片封面（车机布局）”和“黑胶唱片”布局。",
+                "- 新增：歌单页面以随机顺序播放歌单。",
+                "- 新增：粤语和韩语的音乐罗马音注释（此功能由QQ音乐提供）。",
+                "- 新增：适配HyperOS/OriginOS/ColorOS/原生安卓等系统的媒体切换器。",
+                "- 新增：二维码分享和导入用户信息，二维码分享和导入音效。",
+                "- 新增：桌面图标快捷菜单新增“播放每日推荐”。",
+                "【优化修复】",
+                "- 优化：登录页面的UI布局。",
+                "- 优化：补全部分设置项缺少的图标。",
+                "- 修复：当歌词包含间奏时，歌词滚动动画错误的问题。",
+                "- 修复：部分已知问题。"
+            )
+        ),
         UpdateInfo(
             version = "1.3.0更新",
             date = "2025-10-31",
@@ -54,7 +87,7 @@ object VersionHistory {
             )
         ),
         UpdateInfo(
-            version = "1.0.0更新 → 相较于v0.10.0-dev",
+            version = "1.0.0更新",
             date = "2025-10-06",
             changelog = listOf(
                 "- APP更名为“音乐”（包名更改为com.musichub.miuix）。",

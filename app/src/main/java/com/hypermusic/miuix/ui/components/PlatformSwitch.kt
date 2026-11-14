@@ -23,19 +23,52 @@ import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 @Composable
 fun PlatformSwitch() {
     val platform = PlatformManager.current
-    OverlayIconDropdownMenu(entry = DropdownEntry(items = listOf(
+    OverlayIconDropdownMenu(entries = listOf(
+        DropdownEntry(items = listOf(
         DropdownItem(text = "网易云音乐", selected = platform == MusicPlatform.NETEASE,
-            onClick = { PlatformManager.select(MusicPlatform.NETEASE) }),
+            icon = { PlatformLogo(MusicPlatform.NETEASE, it) },
+            onClick = { PlatformManager.select(MusicPlatform.NETEASE) })
+        )),
+        DropdownEntry(items = listOf(
         DropdownItem(text = "QQ音乐", selected = platform == MusicPlatform.QQ,
-            onClick = { PlatformManager.select(MusicPlatform.QQ) })
-    ))) {
-        Box(modifier = Modifier.size(24.dp).clip(CircleShape)
-            .background(if (platform == MusicPlatform.NETEASE) Color(0xFFE60026) else Color.White)) {
-            Image(
-                painter = painterResource(if (platform == MusicPlatform.NETEASE) R.drawable.ic_launcher_foreground else R.drawable.ic_qqmusic_classic),
-                contentDescription = "切换音乐平台",
-                modifier = Modifier.fillMaxSize().then(if (platform == MusicPlatform.NETEASE) Modifier.scale(1.5f) else Modifier)
-            )
-        }
+            icon = { PlatformLogo(MusicPlatform.QQ, it) },
+            onClick = { PlatformManager.select(MusicPlatform.QQ) }),
+        DropdownItem(text = "波点音乐", summary = "QQ音乐简洁版", selected = platform == MusicPlatform.BODIAN,
+            icon = { PlatformLogo(MusicPlatform.BODIAN, it) },
+            onClick = { PlatformManager.select(MusicPlatform.BODIAN) }),
+        DropdownItem(text = "酷狗音乐", selected = platform == MusicPlatform.KUGOU,
+            icon = { PlatformLogo(MusicPlatform.KUGOU, it) },
+            onClick = { PlatformManager.select(MusicPlatform.KUGOU) })
+        )),
+        DropdownEntry(items = listOf(
+        DropdownItem(text = "汽水音乐", selected = platform == MusicPlatform.QISHUI,
+            icon = { PlatformLogo(MusicPlatform.QISHUI, it) },
+            onClick = { PlatformManager.select(MusicPlatform.QISHUI) })
+        ))
+    ), collapseOnSelection = true) {
+        PlatformLogo(platform, contentDescription = "切换音乐平台")
+    }
+}
+
+@Composable
+private fun PlatformLogo(platform: MusicPlatform, modifier: Modifier = Modifier, contentDescription: String? = null) {
+    val background = when (platform) {
+        MusicPlatform.NETEASE -> Color(0xFFE60026)
+        MusicPlatform.KUGOU -> Color(0xFF0062FF)
+        MusicPlatform.BODIAN -> Color(0xFF05E8B2)
+        MusicPlatform.QISHUI -> Color.Black
+        else -> Color.White
+    }
+    val drawable = when (platform) {
+        MusicPlatform.NETEASE -> R.drawable.ic_launcher_foreground
+        MusicPlatform.QQ -> R.drawable.ic_qqmusic_classic
+        MusicPlatform.BODIAN -> R.drawable.ic_bodian_classic
+        MusicPlatform.KUGOU -> R.drawable.ic_launcher_kugou_foreground
+        MusicPlatform.QISHUI -> R.drawable.ic_qishui_classic
+    }
+    val foregroundScale = if (platform == MusicPlatform.NETEASE || platform == MusicPlatform.KUGOU) 1.5f else 1f
+    Box(modifier = modifier.size(24.dp).clip(CircleShape).background(background)) {
+        Image(painter = painterResource(drawable), contentDescription = contentDescription,
+            modifier = Modifier.fillMaxSize().scale(foregroundScale))
     }
 }

@@ -1,6 +1,6 @@
 package com.hypermusic.miuix.ui.pages
 
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.runtime.saveable.rememberSaveable
+import top.yukonga.miuix.kmp.basic.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
@@ -67,16 +70,37 @@ fun AppIconPage(
     val scrollBehavior = MiuixScrollBehavior()
     val blurBackdrop = rememberPageBlurBackdrop()
     val context = LocalContext.current
-    val current = AppIconSettings.current
-    var pendingIcon by remember { mutableStateOf<AppIconSettings.AppIcon?>(null) }
-    var pendingName by remember { mutableStateOf<AppIconSettings.AppName?>(null) }
-    val requestIconChange: (AppIconSettings.AppIcon) -> Unit = { newIcon ->
-        if (current != newIcon) {
-            pendingIcon = newIcon
+    val originalIcon = remember { AppIconSettings.current }
+    val originalName = remember { AppIconSettings.currentName }
+    var current by rememberSaveable { mutableStateOf(originalIcon) }
+    var currentName by rememberSaveable { mutableStateOf(originalName) }
+    var deferred by rememberSaveable { mutableStateOf(false) }
+    var pendingChange by rememberSaveable { mutableStateOf<String?>(null) }
+    var showSaveDialog by rememberSaveable { mutableStateOf(false) }
+    var showLeaveDialog by rememberSaveable { mutableStateOf(false) }
+    val dirty = current != originalIcon || currentName != originalName
+    val requestBack: () -> Unit = {
+        if (dirty) showLeaveDialog = true else onBackClick()
+    }
+    val saveAndRestart: () -> Unit = {
+        runCatching {
+            AppIconSettings.save(context, current, currentName)
+            context.startActivity(android.content.Intent(context, com.hypermusic.miuix.AppRestartActivity::class.java)
+                .putExtra("previous_pid", android.os.Process.myPid())
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure {
+            android.widget.Toast.makeText(context, it.message ?: "保存失败，请重试", android.widget.Toast.LENGTH_LONG).show()
         }
     }
-
-    BackHandler { onBackClick() }
+    val requestIconChange: (AppIconSettings.AppIcon) -> Unit = { newIcon ->
+        if (current != newIcon) {
+            current = newIcon
+            if (!deferred) pendingChange = "图标"
+        }
+    }
+    BackHandler {
+        if (pendingChange == null && !showSaveDialog && !showLeaveDialog) requestBack()
+    }
 
     Scaffold(
         topBar = {
@@ -86,13 +110,18 @@ fun AppIconPage(
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                     scrollBehavior = scrollBehavior,
                     defaultWindowInsetsPadding = false,
+                    actions = {
+                        if (deferred && dirty) IconButton(onClick = { showSaveDialog = true }) {
+                            Icon(Icons.Filled.Save, contentDescription = "保存图标和名称")
+                        }
+                    },
                     navigationIcon = {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
                             modifier = Modifier
                                 .padding(start = 8.dp)
-                                .clickable { onBackClick() }
+                                .clickable { requestBack() }
                         )
                     }
                 )
@@ -124,17 +153,20 @@ fun AppIconPage(
                         corner = 22.dp
                     )
                     Spacer(Modifier.height(8.dp))
-                    Text(AppIconSettings.currentName.label, style = MiuixTheme.textStyles.body2)
+                    Text(currentName.label, style = MiuixTheme.textStyles.body2)
                 }
             }
             item {
                 Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                     val names = AppIconSettings.AppName.entries
                     OverlayDropdownPreference(title = "应用名称", items = names.map { it.label },
-                        selectedIndex = names.indexOf(AppIconSettings.currentName),
+                        selectedIndex = names.indexOf(currentName),
                         onSelectedIndexChange = { index ->
                             val name = names[index]
-                            if (name != AppIconSettings.currentName) pendingName = name
+                            if (name != currentName) {
+                                currentName = name
+                                if (!deferred) pendingChange = "名称"
+                            }
                         })
                 }
             }
@@ -216,66 +248,38 @@ fun AppIconPage(
                             selected = current == AppIconSettings.AppIcon.QQ_CLASSIC,
                             onClick = { requestIconChange(AppIconSettings.AppIcon.QQ_CLASSIC) })
                     }
+                    item {
+                        IconChoice(icon = AppIconSettings.AppIcon.BODIAN_CLASSIC, label = "波点音乐",
+                            selected = current == AppIconSettings.AppIcon.BODIAN_CLASSIC,
+                            onClick = { requestIconChange(AppIconSettings.AppIcon.BODIAN_CLASSIC) })
+                    }
                 }
             }
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
         }
 
-        OverlayDialog(
-            show = pendingIcon != null,
-            title = "切换图标",
-            summary = "切换图标需要重启APP后生效，是否继续？",
-            onDismissRequest = { pendingIcon = null },
-            content = {
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    TextButton(
-                        text = "取消",
-                        onClick = { pendingIcon = null },
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(20.dp))
-                    TextButton(
-                        text = "继续",
-                        onClick = {
-                            val icon = pendingIcon
-                            if (icon != null) {
-                                AppIconSettings.select(context, icon)
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "图标已切换，重启APP后生效",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                            pendingIcon = null
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.textButtonColorsPrimary()
-                    )
-                }
+        OverlayDialog(show = pendingChange != null, title = "切换${pendingChange.orEmpty()}",
+            summary = "切换图标或名称需要重启APP后生效，是否继续", onDismissRequest = {}) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(text = "稍后保存并重启", onClick = { deferred = true; pendingChange = null }, modifier = Modifier.fillMaxWidth())
+                TextButton(text = "继续", onClick = saveAndRestart, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.textButtonColorsPrimary())
             }
-        )
-        OverlayDialog(
-            show = pendingName != null,
-            title = "切换名称",
-            summary = "切换名称需要重启APP后生效，是否继续？",
-            onDismissRequest = { pendingName = null },
-            content = {
-                Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(text = "取消", onClick = { pendingName = null }, modifier = Modifier.weight(1f))
-                    Spacer(modifier = Modifier.width(20.dp))
-                    TextButton(text = "继续", onClick = {
-                        pendingName?.let { name ->
-                            AppIconSettings.selectName(context, name)
-                            android.widget.Toast.makeText(context, "名称已切换，重启APP后生效", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                        pendingName = null
-                    }, modifier = Modifier.weight(1f), colors = ButtonDefaults.textButtonColorsPrimary())
-                }
+        }
+        OverlayDialog(show = showSaveDialog, title = "保存新图标或名称",
+            summary = "切换图标或名称需要重启APP后生效，是否继续", onDismissRequest = {}) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(text = "取消", onClick = { showSaveDialog = false }, modifier = Modifier.weight(1f))
+                TextButton(text = "继续", onClick = saveAndRestart, modifier = Modifier.weight(1f), colors = ButtonDefaults.textButtonColorsPrimary())
             }
-        )
+        }
+        OverlayDialog(show = showLeaveDialog, title = "是否保存新的图标或名称",
+            summary = "您修改的图标或名称还未保存，是否保存此次更改？（注意：保存需要重启APP后生效）", onDismissRequest = {}) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(text = "废弃更改", onClick = { showLeaveDialog = false; onBackClick() }, modifier = Modifier.weight(1f))
+                TextButton(text = "保存", onClick = saveAndRestart, modifier = Modifier.weight(1f), colors = ButtonDefaults.textButtonColorsPrimary())
+            }
+        }
     }
 }
 
@@ -337,8 +341,12 @@ private fun AppIconPreview(
             .size(size)
             .clip(RoundedCornerShape(corner))
     ) {
-        if (icon == AppIconSettings.AppIcon.QISHUI_CLASSIC || icon == AppIconSettings.AppIcon.QQ_CLASSIC) {
-            Image(painter = painterResource(if (icon == AppIconSettings.AppIcon.QQ_CLASSIC) R.drawable.ic_qqmusic_classic else R.drawable.ic_qishui_classic),
+        if (icon in setOf(AppIconSettings.AppIcon.QISHUI_CLASSIC, AppIconSettings.AppIcon.QQ_CLASSIC, AppIconSettings.AppIcon.BODIAN_CLASSIC)) {
+            Image(painter = painterResource(when (icon) {
+                AppIconSettings.AppIcon.QQ_CLASSIC -> R.drawable.ic_qqmusic_classic
+                AppIconSettings.AppIcon.BODIAN_CLASSIC -> R.drawable.ic_bodian_classic
+                else -> R.drawable.ic_qishui_classic
+            }),
                 contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
         when (icon) {
@@ -359,7 +367,7 @@ private fun AppIconPreview(
                         .background(Color(0xFF0062FF))
                 )
             }
-            AppIconSettings.AppIcon.QISHUI_CLASSIC, AppIconSettings.AppIcon.QQ_CLASSIC -> Unit
+            AppIconSettings.AppIcon.QISHUI_CLASSIC, AppIconSettings.AppIcon.QQ_CLASSIC, AppIconSettings.AppIcon.BODIAN_CLASSIC -> Unit
             AppIconSettings.AppIcon.NETEASE_CLASSIC -> {
                 Box(
                     modifier = Modifier
@@ -377,6 +385,7 @@ private fun AppIconPreview(
             AppIconSettings.AppIcon.KUGOU_CLASSIC -> R.drawable.ic_launcher_kugou_foreground
             AppIconSettings.AppIcon.QISHUI_CLASSIC -> R.drawable.ic_qishui_classic
             AppIconSettings.AppIcon.QQ_CLASSIC -> R.drawable.ic_qqmusic_classic
+            AppIconSettings.AppIcon.BODIAN_CLASSIC -> R.drawable.ic_bodian_classic
         }
         val foregroundFraction = if (icon == AppIconSettings.AppIcon.NOTES) 0.66f else 1.5f
         Image(

@@ -28,11 +28,24 @@ import java.util.concurrent.TimeUnit
 object NeteaseApi {
 
     private val client = OkHttpClient.Builder()
+        .addInterceptor(com.hypermusic.miuix.data.lyrics.LyricRequests)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
+
+    class CredentialExpiredException : Exception("登录凭据已过期，请重新登录")
+    private var lastExpiredNoticeAt = 0L
+    @Synchronized fun notifyCredentialExpired() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (lastExpiredNoticeAt != 0L && now - lastExpiredNoticeAt < 10000L) return
+        lastExpiredNoticeAt = now
+        val appContext = context ?: return
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(appContext, "登录凭据已过期，请重新登录", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
 
     private val gson = Gson()
 
@@ -784,7 +797,8 @@ object NeteaseApi {
                 id = "neplaylist_$id",
                 title = displayPlaylistTitle(playlist.get("name").asString),
                 coverImgUrl = playlist.get("coverImgUrl").asString,
-                sourceUrl = "https://music.163.com/#/playlist?id=$id"
+                sourceUrl = "https://music.163.com/#/playlist?id=$id",
+                creatorId = playlist.getAsJsonObject("creator")?.get("userId")?.asString.orEmpty()
             )
 
             val trackIdsArray = playlist.getAsJsonArray("trackIds")
@@ -1110,24 +1124,32 @@ object NeteaseApi {
     }
 
     // 二维码登录相关API
+    private fun pcQrRequest(path: String, key: String? = null): Request {
+        val prefs = requireNotNull(context).getSharedPreferences("netease_prefs", android.content.Context.MODE_PRIVATE)
+        val deviceId = prefs.getString("qr_pc_device_id", null) ?: java.util.UUID.randomUUID().toString().replace("-", "").also {
+            prefs.edit().putString("qr_pc_device_id", it).apply()
+        }
+        val header = JsonObject().apply {
+            addProperty("os", "pc"); addProperty("osver", "10"); addProperty("appver", "2.9.7")
+            addProperty("versioncode", "140"); addProperty("deviceId", deviceId)
+            addProperty("resolution", "1920x1080"); addProperty("channel", "netease")
+            addProperty("requestId", "${System.currentTimeMillis()}_${(1000..9999).random()}")
+            cookies.split(';').map { it.trim().split('=', limit = 2) }.filter { it.size == 2 && it[0] in setOf("MUSIC_A", "NMTID") }
+                .forEach { addProperty(it[0], it[1]) }
+        }
+        val data = JsonObject().apply { addProperty("type", 3); if (key != null) addProperty("key", key); add("header", header) }
+        val apiPath = "/api/login/qrcode/$path"
+        val body = FormBody.Builder().add("params", NeteaseCrypto.eapi(apiPath, data.toString()).getValue("params")).build()
+        return Request.Builder().url("https://interfacepc.music.163.com/eapi/login/qrcode/$path")
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .header("Cookie", header.entrySet().joinToString("; ") { "${it.key}=${it.value.asString}" })
+            .post(body).build()
+    }
+
     suspend fun getLoginQrKey(): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val url = "https://music.163.com/weapi/login/qrcode/unikey"
-            val reqData = """{"type":1}"""
-            val encrypted = NeteaseCrypto.weapi(reqData)
-
-            val body = FormBody.Builder()
-                .add("params", encrypted["params"]!!)
-                .add("encSecKey", encrypted["encSecKey"]!!)
-                .build()
-
-            val request = Request.Builder()
-                .url(url)
-                .post(body)
-                .header("Referer", "https://music.163.com")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .build()
+            ensureCookie()
+            val request = pcQrRequest("unikey")
 
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
@@ -1157,31 +1179,7 @@ object NeteaseApi {
     suspend fun checkQrLoginStatus(key: String): Result<Int> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()
-            // 使用weapi
-            val url = "https://music.163.com/weapi/login/qrcode/client/login"
-            val reqData = """{"key":"$key","type":1}"""
-            val encrypted = NeteaseCrypto.weapi(reqData)
-
-            val body = FormBody.Builder()
-                .add("params", encrypted["params"]!!)
-                .add("encSecKey", encrypted["encSecKey"]!!)
-                .build()
-
-            val cookieStr = buildString {
-                if (cookies.isNotEmpty()) append(cookies)
-                if (isNotEmpty()) append("; ")
-                append("os=pc; appver=2.9.7; osver=13; channel=netease; deviceId=0")
-            }
-            val request = Request.Builder()
-                .url(url)
-                .post(body)
-                .header("Referer", "https://music.163.com/")
-                .header("User-Agent", "NeteaseMusic/2.9.7 (Linux; Android 13; Pixel 7 Pro)")
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("Cookie", cookieStr)
-                .header("X-Real-IP", "192.168.1.1")
-                .header("X-Forwarded-For", "192.168.1.1")
-                .build()
+            val request = pcQrRequest("client/login", key)
 
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
@@ -1196,32 +1194,18 @@ object NeteaseApi {
                 ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
 
             val code = if (json.has("code")) json.get("code").asInt else -1
-            android.util.Log.d("NeteaseApi", "checkQrLoginStatus code: $code, json: $json")
+            android.util.Log.d("NeteaseApi", "checkQrLoginStatus code: $code")
 
             // 800: 二维码过期, 801: 等待扫码, 802: 待确认, 803: 登录成功
             if (code == 803) {
-                // 从响应头中获取cookie
-                val responseCookies = response.headers("Set-Cookie")
-                
-                // 构建cookie字符串
-                val cookieBuilder = StringBuilder()
-                for (cookie in responseCookies) {
-                    // 提取cookie的name=value部分
-                    val cookieParts = cookie.split(";")[0]
-                    if (cookieBuilder.isNotEmpty()) {
-                        cookieBuilder.append("; ")
-                    }
-                    cookieBuilder.append(cookieParts)
-                }
-                
-                if (cookieBuilder.isNotEmpty()) {
-                    setCookie(cookieBuilder.toString())
-                } else {
-                    // 如果没有从响应头获取到cookie，尝试从JSON中获取
-                    if (json.has("cookie")) {
-                        setCookie(json.get("cookie").asString)
-                    }
-                }
+                val headerCookies = response.headers("Set-Cookie").map { it.substringBefore(';').trim() }
+                val bodyCookies = json.get("cookie")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty().split(';').map(String::trim)
+                val entries = (headerCookies + bodyCookies).mapNotNull { value ->
+                    val parts = value.split('=', limit = 2)
+                    if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) parts[0] to parts[1] else null
+                }.toMap()
+                check(!entries["MUSIC_U"].isNullOrBlank()) { "扫码已确认，但网易云未返回登录凭证，请重试" }
+                setCookie(entries.entries.joinToString("; ") { "${it.key}=${it.value}" })
             }
             
             Result.success(code)
@@ -1294,16 +1278,22 @@ object NeteaseApi {
 
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
-                return@withContext Result.failure(Exception("HTTP ${response.code}"))
+                return@withContext Result.failure(Exception("网易云账号接口请求失败（HTTP ${response.code}），请稍后重试"))
             }
             val responseBody = response.body?.string()
             
             if (responseBody.isNullOrEmpty()) {
-                return@withContext Result.failure(Exception("Empty response"))
+                return@withContext Result.failure(Exception("网易云账号接口返回空响应，请检查网络后重试"))
             }
             val json = gson.fromJson(responseBody, JsonObject::class.java)
-                ?: return@withContext Result.failure(Exception("Failed to parse JSON"))
+                ?: return@withContext Result.failure(Exception("网易云账号接口返回了无法识别的数据"))
 
+            val code = json.get("code")?.takeUnless { it.isJsonNull }?.asInt
+            if (code != null && code != 200) {
+                val detail = json.get("message")?.takeUnless { it.isJsonNull }?.asString
+                    ?: json.get("msg")?.takeUnless { it.isJsonNull }?.asString
+                return@withContext Result.failure(Exception("网易云账号验证失败（代码 $code）" + if (detail.isNullOrBlank()) "" else "：$detail"))
+            }
             if (json.has("profile") && !json.get("profile").isJsonNull) {
                 val profile = json.getAsJsonObject("profile")
                 android.util.Log.d("NeteaseApi", "Parsing profile: ${profile.toString().take(200)}")
@@ -1328,10 +1318,17 @@ object NeteaseApi {
                 if (candidateCookie == null) saveUserProfileToCache(userProfile)
                 Result.success(userProfile)
             } else {
-                Result.failure(Exception("No profile found"))
+                if (candidateCookie == null && isLoggedIn()) notifyCredentialExpired()
+                Result.failure(CredentialExpiredException())
             }
+        } catch (e: java.net.SocketTimeoutException) {
+            Result.failure(Exception("连接网易云超时，请检查网络后重试", e))
+        } catch (e: java.io.IOException) {
+            Result.failure(Exception("无法连接网易云，请检查网络后重试", e))
+        } catch (e: com.google.gson.JsonParseException) {
+            Result.failure(Exception("网易云账号接口返回的数据格式异常", e))
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception("解析网易云账号资料失败：${e.message ?: "未知错误"}", e))
         }
     }
 
@@ -1435,6 +1432,15 @@ object NeteaseApi {
             }
             android.util.Log.d("NeteaseApi", "User profile cache cleared")
         }
+    }
+
+    @Synchronized
+    fun removeAccount(accountId: String? = null): Boolean {
+        val activeId = userId?.toString() ?: accounts.firstOrNull { it.cookies == cookies }?.userId
+        if (accountId == null || accountId == activeId) return logoutCurrentAccount()
+        accounts = accounts.filterNot { it.userId == accountId }.toMutableList()
+        saveAccounts()
+        return isLoggedIn()
     }
 
     @Synchronized
@@ -1597,7 +1603,8 @@ object NeteaseApi {
                             coverImgUrl = if (obj.has("coverImgUrl")) obj.get("coverImgUrl").asString else "",
                             playCount = if (obj.has("playCount")) obj.get("playCount").asLong else 0,
                             trackCount = if (obj.has("trackCount")) obj.get("trackCount").asInt else 0,
-                            description = if (obj.has("description") && !obj.get("description").isJsonNull) obj.get("description").asString else ""
+                            description = if (obj.has("description") && !obj.get("description").isJsonNull) obj.get("description").asString else "",
+                            isOwned = obj.getAsJsonObject("creator")?.get("userId")?.asString == userId.toString()
                         )
                     )
                 } catch (e: Exception) {
@@ -1977,6 +1984,50 @@ object NeteaseApi {
         return Result.success(CloudDiskResult(tracks, hasMore, count, rawFetched))
     }
 
+    suspend fun favoriteAlbum(albumId: Long, favorite: Boolean = true): Result<Unit> {
+        val cookie = getCookie()
+        if (!isLoggedIn()) return Result.failure(IllegalStateException("请先登录网易云音乐"))
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                require(albumId > 0) { "无效的专辑" }
+                val request = NeteaseCollectionRequest.build("album", albumId, favorite, cookie)
+                client.newCall(request).execute().use { response ->
+                    check(response.isSuccessful) { "收藏专辑失败 (HTTP ${response.code})" }
+                    val json = gson.fromJson(response.body?.string(), JsonObject::class.java) ?: error("收藏专辑响应为空")
+                    check(json.get("code")?.asInt == 200) { json.get("message")?.takeUnless { it.isJsonNull }?.asString ?: "收藏专辑失败" }
+                }
+            }
+        }
+    }
+
+    suspend fun favoritePlaylist(playlistId: String, favorite: Boolean = true): Result<Unit> {
+        val cookie = getCookie()
+        if (!isLoggedIn()) return Result.failure(IllegalStateException("请先登录网易云音乐"))
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val id = playlistId.removePrefix("neplaylist_").toLongOrNull()?.takeIf { it > 0 }
+                    ?: error("无效的歌单")
+                val request = NeteaseCollectionRequest.build("playlist", id, favorite, cookie)
+                fun execute(request: Request): JsonObject = client.newCall(request).execute().use { response ->
+                    check(response.isSuccessful) { "收藏歌单失败 (HTTP ${response.code})" }
+                    gson.fromJson(response.body?.string(), JsonObject::class.java)
+                        ?: error("收藏歌单响应为空")
+                }
+                var json = execute(request)
+                val rejectedMessage = json.get("message")?.takeUnless { it.isJsonNull }?.asString
+                    ?: json.get("msg")?.takeUnless { it.isJsonNull }?.asString.orEmpty()
+                if (json.get("code")?.asInt != 200 && rejectedMessage.contains("illegal request", ignoreCase = true)) {
+                    json = execute(NeteaseCollectionRequest.buildPcPlaylist(id, favorite, cookie))
+                }
+                check(json.get("code")?.asInt == 200) {
+                    val message = json.get("message")?.takeUnless { it.isJsonNull }?.asString
+                        ?: json.get("msg")?.takeUnless { it.isJsonNull }?.asString ?: "歌单收藏操作失败"
+                    "$message（code=${json.get("code")?.asString ?: "未知"}）"
+                }
+            }
+        }
+    }
+
     suspend fun likeSong(songId: String, like: Boolean = true): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()
@@ -2083,7 +2134,7 @@ object NeteaseApi {
         }
     }
 
-    suspend fun getSongLyric(songId: String, songTitle: String = "", songArtist: String = "", songAlbum: String = "", songDuration: Long = 0, artistNames: List<String> = emptyList()): Result<SongLyrics> = withContext(Dispatchers.IO) {
+    suspend fun getSongLyric(songId: String, songTitle: String = "", songArtist: String = "", songAlbum: String = "", songDuration: Long = 0, artistNames: List<String> = emptyList(), showRomanization: Boolean = com.hypermusic.miuix.ui.theme.ThemeSettings.showJapaneseRomaji): Result<Pair<SongLyrics, RawLyrics>> = withContext(Dispatchers.IO) {
         try {
             ensureCookie()
             val id = songId.removePrefix("netrack_")
@@ -2100,7 +2151,7 @@ object NeteaseApi {
             // 逐字歌词优先使用配套的 ytlrc（时间戳与 yrc 行边界对齐）
             val translation = if (ytlrc.isNotEmpty()) ytlrc else tlyric
             // 罗马音优先使用逐字配套的 yromalrc；可在设置中关闭
-            val phonetic = if (com.hypermusic.miuix.ui.theme.ThemeSettings.showJapaneseRomaji) {
+            val phonetic = if (showRomanization) {
                 if (yromalrc.isNotEmpty()) yromalrc else romalrc
             } else {
                 ""
@@ -2129,7 +2180,9 @@ object NeteaseApi {
                 "getSongLyric - parsed ${result.lines.size} lines, " +
                     "wordLines=${result.lines.count { !it.words.isNullOrEmpty() }}, isPureMusic=${result.isPureMusic}"
             )
-            Result.success(result)
+            Result.success(result to RawLyrics(lrc, yrc, tlyric, ytlrc, romalrc, yromalrc))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("NeteaseApi", "getSongLyric error: ${e.message}")
             Result.failure(e)

@@ -1,6 +1,6 @@
 package com.hypermusic.miuix.ui.pages
 
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -25,15 +25,19 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hypermusic.miuix.ui.FeedBottomPads
+import com.hypermusic.miuix.R
+import com.hypermusic.miuix.ui.components.SettingsItemIcon
 import com.hypermusic.miuix.ui.components.BlurredBar
 import com.hypermusic.miuix.ui.components.pageLayerBackdrop
 import com.hypermusic.miuix.ui.components.rememberPageBlurBackdrop
 import com.hypermusic.miuix.ui.theme.ThemeSettings
+import com.hypermusic.miuix.data.api.MusicPlatform
+import com.hypermusic.miuix.data.model.AudioQuality
 import com.hypermusic.miuix.viewmodel.MusicPlayerViewModel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import kotlin.math.roundToInt
-import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -46,8 +50,6 @@ import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Music
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
@@ -58,11 +60,11 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 fun SongSettingsPage(
     viewModel: MusicPlayerViewModel,
     onBackClick: () -> Unit,
+    onSoundEffectsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     val blurBackdrop = rememberPageBlurBackdrop()
-    val qualityOptions = com.hypermusic.miuix.data.model.AudioQuality.options(com.hypermusic.miuix.data.api.PlatformManager.current)
     var showSpeedDialog by remember { mutableStateOf(false) }
     var speedInput by remember { mutableStateOf("") }
 
@@ -74,7 +76,7 @@ fun SongSettingsPage(
         topBar = {
             BlurredBar(backdrop = blurBackdrop) {
                 SmallTopAppBar(
-                    title = "歌曲设置",
+                    title = "音频设置",
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                     scrollBehavior = scrollBehavior,
                     defaultWindowInsetsPadding = false,
@@ -102,24 +104,42 @@ fun SongSettingsPage(
             overscrollEffect = null
         ) {
             item { Spacer(modifier = Modifier.height(12.dp)) }
-            item { SmallTitle("播放选项") }
+            item { SmallTitle("音质") }
+            item {
+                Text(AudioQuality.summary, modifier = Modifier.padding(start = 26.dp, end = 26.dp, bottom = 8.dp),
+                    style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            }
             item {
                 Card(
                     modifier = Modifier
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 12.dp)
                 ) {
-                    WindowDropdownPreference(
-                        title = "音质",
-                        summary = "设置播放及下载的最高音质；播放时切歌生效，实际音质取决于歌曲和账号权限",
-                        items = qualityOptions,
-                        selectedIndex = viewModel.audioQualityIndex,
-                        startAction = { Icon(imageVector = MiuixIcons.Music, contentDescription = null, modifier = Modifier.size(24.dp)) },
-                        onSelectedIndexChange = { viewModel.updateAudioQualityIndex(it) }
-                    )
+                    for (platform in MusicPlatform.entries) {
+                        WindowDropdownPreference(
+                            title = when (platform) {
+                                MusicPlatform.NETEASE -> "网易云音乐"
+                                MusicPlatform.QQ -> "QQ音乐"
+                                MusicPlatform.BODIAN -> "波点音乐"
+                                MusicPlatform.KUGOU -> "酷狗音乐"
+                                MusicPlatform.QISHUI -> "汽水音乐"
+                            },
+                            items = AudioQuality.options(platform),
+                            selectedIndex = viewModel.platformAudioQualityIndex(platform),
+                            onSelectedIndexChange = { viewModel.updatePlatformAudioQualityIndex(platform, it) }
+                        )
+                    }
+                }
+            }
+            item { SmallTitle("播放选项") }
+            item {
+                Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                    com.hypermusic.miuix.ui.components.LoudnessPreference()
+                    ArrowPreference(title = "音效", startAction = { SettingsItemIcon(R.drawable.ic_md3_equalizer) }, onClick = onSoundEffectsClick)
 
-                    BasicComponent(
+                    ArrowPreference(
                         title = "播放速度",
+                        startAction = { SettingsItemIcon(R.drawable.ic_md3_speed) },
                         endActions = {
                             Text(
                                 text = "${formatSongSpeedValue(viewModel.playbackSpeed)}x",
@@ -135,7 +155,9 @@ fun SongSettingsPage(
                                 },
                                 valueRange = 0.1f..5f,
                                 steps = 48,
-                                magnetThreshold = 0.1f,
+                                showKeyPoints = true,
+                                keyPoints = listOf(1f),
+                                magnetThreshold = 0.005f,
                                 hapticEffect = SliderDefaults.SliderHapticEffect.Step,
                                 modifier = Modifier.padding(vertical = 4.dp)
                             )
@@ -148,6 +170,7 @@ fun SongSettingsPage(
 
                     SwitchPreference(
                         title = "渐入渐出",
+                        startAction = { SettingsItemIcon(R.drawable.ic_md3_line_curve) },
                         summary = "在播放和暂停歌曲时音频渐入渐出",
                         checked = ThemeSettings.fadeEnabled,
                         onCheckedChange = { ThemeSettings.updateFadeEnabled(it) }

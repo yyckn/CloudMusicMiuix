@@ -1,0 +1,29 @@
+{
+  "data": {
+    "song_list": [
+      {
+        "hash": "142459D5D8448B248CCFF90195B3E114",
+        "mixsongid": "309990257",
+        "songid": 155045877,
+        "songname": "一字一句",
+        "ori_audio_name": "一字一句",
+        "author_name": "胡66",
+        "singerinfo": [
+          {
+            "is_publish": "1",
+            "name": "胡66",
+            "id": "766987"
+          }
+        ],
+        "authors": null,
+        "time_length": 292,
+        "timelength": null,
+        "album_id": "43856841",
+        "album_name": null,
+        "sizable_cover": null,
+        "album_info": null,
+        "pay_type": 3
+      }
+    ]
+  }
+}

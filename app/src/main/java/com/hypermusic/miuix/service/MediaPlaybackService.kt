@@ -21,10 +21,26 @@ import androidx.core.app.NotificationCompat
 import androidx.media.MediaBrowserServiceCompat
 import androidx.media3.common.AudioAttributes as Media3AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Metadata
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.extractor.metadata.flac.VorbisComment
+import androidx.media3.extractor.metadata.id3.TextInformationFrame
+import androidx.media3.extractor.metadata.id3.InternalFrame
+import androidx.media3.extractor.metadata.id3.CommentFrame
+import androidx.media3.container.MdtaMetadataEntry
+import com.hypermusic.miuix.data.audio.AudioSettings
+import com.hypermusic.miuix.data.audio.ReplayGainInfo
+import com.hypermusic.miuix.data.audio.SoundAudioProcessor
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import com.hypermusic.miuix.data.cache.AudioCache
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.hypermusic.miuix.MainActivity
@@ -39,16 +55,21 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.TimeUnit
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class MediaPlaybackService : MediaBrowserServiceCompat() {
 
     private lateinit var mediaSession: MediaSessionCompat
     private lateinit var audioManager: AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
     private var player: ExoPlayer? = null
+    private var audioProcessor: SoundAudioProcessor? = null
+    @Volatile private var albumPlayback = false
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private var currentTrack: Track? = null
     private var currentUrl: String? = null
+    private var currentCacheFormat = "unknown"
+    private var currentIsPreview = false
     private var playlist: List<Track> = emptyList()
     private var isPlaying = false
     private var playbackPosition = 0L
@@ -71,7 +92,36 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
             .build()
     }
 
+    private fun applyReplayGainMetadata(metadata: Metadata?) {
+        if (metadata == null) return
+        var info = audioProcessor?.replayGain ?: ReplayGainInfo()
+        for (index in 0 until metadata.length()) {
+            when (val entry = metadata[index]) {
+                is VorbisComment -> info = info.withTag(entry.key, entry.value)
+                is TextInformationFrame -> entry.description?.let { key -> entry.values.firstOrNull()?.let { info = info.withTag(key, it) } }
+                is InternalFrame -> info = info.withTag(entry.description, entry.text)
+                is CommentFrame -> info = info.withTag(entry.description, entry.text)
+                is MdtaMetadataEntry -> info = info.withTag(entry.key.substringAfterLast(':'), entry.value.toString(Charsets.UTF_8))
+            }
+        }
+        audioProcessor?.replayGain = info
+    }
+
     private val playerListener = object : Player.Listener {
+        override fun onMetadata(metadata: Metadata) = applyReplayGainMetadata(metadata)
+
+        override fun onTracksChanged(tracks: Tracks) {
+            for (group in tracks.groups) {
+                if (group.type != C.TRACK_TYPE_AUDIO) continue
+                for (index in 0 until group.length) {
+                    if (group.isTrackSelected(index)) {
+                        val format = group.getTrackFormat(index)
+                        applyReplayGainMetadata(format.metadata)
+                        currentTrack?.let { onAudioFormatChanged?.invoke(it, format, currentCacheFormat) }
+                    }
+                }
+            }
+        }
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
                 Player.STATE_BUFFERING -> {
@@ -111,11 +161,16 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 "onPlayerError: ${error.errorCodeName} (${error.errorCode}) at ${player?.currentPosition}",
                 error
             )
+            val resumeAfterFallback = isPlaying
+            val position = player?.currentPosition ?: 0L
             isPlaying = false
             onPlaybackStateChanged?.invoke(false)
             updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
             lyriconManager?.setPlaybackState(false)
-            recoverFromError()
+            val track = currentTrack
+            if (currentUrl == "https://127.0.0.1/cached" && track != null && onCachedPlaybackError != null) {
+                onCachedPlaybackError?.invoke(track, position, resumeAfterFallback, currentCacheFormat)
+            } else recoverFromError()
         }
     }
     private var currentBitmap: Bitmap? = null
@@ -127,6 +182,8 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     
     // 回调接口，用于通知ViewModel播放状态变化
     var onPlaybackStateChanged: ((Boolean) -> Unit)? = null
+    var onAudioFormatChanged: ((Track, androidx.media3.common.Format, String) -> Unit)? = null
+    var onCachedPlaybackError: ((Track, Long, Boolean, String) -> Unit)? = null
     var onNotificationClose: (() -> Unit)? = null
     var onNotificationFavorite: ((Track) -> Unit)? = null
     private var favoriteTrack: Track? = null
@@ -173,6 +230,8 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     override fun onCreate() {
         super.onCreate()
         ThemeSettings.init(this)
+        AudioSettings.init(this)
+        com.hypermusic.miuix.data.lyrics.LyricMatches.init(this)
         createNotificationChannel()
         initializeMediaSession()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -253,6 +312,11 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
+    fun setAlbumPlayback(enabled: Boolean) {
+        albumPlayback = enabled
+        audioProcessor?.albumPlayback = enabled
+    }
+
     fun setPlaylist(tracks: List<Track>) {
         playlist = tracks
     }
@@ -271,7 +335,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
-    fun playTrackWithUrl(track: Track, url: String) {
+    fun playTrackWithUrl(track: Track, url: String, cacheFormat: String = "unknown", isPreview: Boolean = false) {
+        currentCacheFormat = cacheFormat
+        currentIsPreview = isPreview
         currentTrack = track
         errorRetryCount = 0
         serviceScope.launch {
@@ -290,7 +356,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
-    fun restoreTrackWithUrl(track: Track, url: String, position: Long, resume: Boolean) {
+    fun restoreTrackWithUrl(track: Track, url: String, position: Long, resume: Boolean, cacheFormat: String = "unknown", isPreview: Boolean = false) {
+        currentCacheFormat = cacheFormat
+        currentIsPreview = isPreview
         currentTrack = track
         errorRetryCount = 0
         serviceScope.launch {
@@ -305,6 +373,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     fun prepareTrackWithUrl(track: Track, url: String) {
+        currentIsPreview = false
         currentTrack = track
         errorRetryCount = 0
         serviceScope.launch {
@@ -346,7 +415,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
             else PlaybackStateCompat.STATE_PAUSED
         )
 
-        newPlayer.setMediaItem(MediaItem.fromUri(url))
+        val mediaItem = MediaItem.Builder().setUri(url)
+            .setCustomCacheKey(AudioCache.key(track.source, track.id, currentCacheFormat)).build()
+        newPlayer.setMediaItem(mediaItem)
         if (startPosition > 0L) {
             newPlayer.seekTo(startPosition)
         }
@@ -359,11 +430,28 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun createPlayer(track: Track): ExoPlayer {
-        val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
-            .setUserAgent(USER_AGENT)
-            .setDefaultRequestProperties(mapOf("Referer" to if (track.source == "qqmusic") "https://y.qq.com/" else "https://music.163.com"))
-        return ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+        val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient).setUserAgent(USER_AGENT)
+        when (track.source) {
+            "qqmusic" -> dataSourceFactory.setDefaultRequestProperties(mapOf("Referer" to "https://y.qq.com/"))
+            "netease" -> dataSourceFactory.setDefaultRequestProperties(mapOf("Referer" to "https://music.163.com"))
+        }
+        val cachedDataSource = if (currentIsPreview) null else runCatching {
+            CacheDataSource.Factory().setCache(AudioCache.get(applicationContext))
+                .setUpstreamDataSourceFactory(dataSourceFactory)
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        }.getOrNull()
+        val soundProcessor = SoundAudioProcessor().also { it.albumPlayback = albumPlayback }
+        audioProcessor = soundProcessor
+        val renderers = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+                DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(false)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessors(arrayOf<AudioProcessor>(soundProcessor))
+                    .build()
+        }
+        return ExoPlayer.Builder(this, renderers)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(cachedDataSource ?: dataSourceFactory))
             .build()
             .apply {
                 setAudioAttributes(media3AudioAttributes, false)
@@ -380,6 +468,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         player?.removeListener(playerListener)
         player?.release()
         player = null
+        audioProcessor = null
     }
 
     private fun recoverFromError() {
@@ -411,6 +500,8 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     fun getCurrentPosition(): Long {
         return player?.currentPosition ?: playbackPosition
     }
+
+    fun getCurrentTrack(): Track? = currentTrack
 
     fun getDuration(): Long {
         val duration = player?.duration ?: C.TIME_UNSET
@@ -586,6 +677,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         favorite = false
         currentTrack = null
         currentUrl = null
+        currentIsPreview = false
         currentLyrics = null
         currentBitmap = null
         playlist = emptyList()
@@ -614,12 +706,19 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         if (onNotificationClose != null) {
             onNotificationClose?.invoke()
         } else {
-            val snapshotKey = if (currentTrack?.source == "qqmusic") "playback_snapshot_qq" else "playback_snapshot_netease"
+            val platform = com.hypermusic.miuix.data.api.MusicPlatform.fromTrackSource(currentTrack?.source)
             clearPlayback()
-            getSharedPreferences("player_prefs", Context.MODE_PRIVATE).edit()
-                .remove(snapshotKey)
-                .remove("last_track").remove("last_playlist").remove("play_mode_type")
-                .remove("intelligence_song_id").remove("intelligence_playlist_id").apply()
+            val prefs = getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
+            val legacySource = runCatching { com.google.gson.Gson().fromJson(prefs.getString("last_track", null), Track::class.java)?.source }.getOrNull()
+            prefs.edit().apply {
+                platform?.let { remove("playback_snapshot_${it.storageKey}") }
+                if (platform != null && legacySource == platform.trackSource) {
+                    remove("last_track"); remove("last_playlist")
+                }
+                if (platform == com.hypermusic.miuix.data.api.MusicPlatform.NETEASE) {
+                    remove("play_mode_type"); remove("intelligence_song_id"); remove("intelligence_playlist_id")
+                }
+            }.apply()
             stopSelf()
         }
     }
@@ -632,19 +731,75 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         }
         if (favoriteJob?.isActive == true) return
         favoriteJob = serviceScope.launch {
-            val result = if (track.source == "qqmusic") {
-                QqMusicApi.isLiked(track).fold({ QqMusicApi.setLiked(track, !it) }, { kotlin.Result.failure(it) })
-            } else {
-                NeteaseApi.checkSongLiked(track.id).fold({ liked -> NeteaseApi.likeSong(track.id, !liked).map { success ->
-                    check(success) { "收藏操作失败" }; !liked
-                } }, { kotlin.Result.failure(it) })
-            }
+            val result = try {
+                when (track.source) {
+                    "qqmusic" -> QqMusicApi.isLiked(track).fold({ QqMusicApi.setLiked(track, !it) }, { kotlin.Result.failure(it) })
+                    "netease" -> NeteaseApi.checkSongLiked(track.id).fold({ liked -> NeteaseApi.likeSong(track.id, !liked).map { success ->
+                        check(success) { "收藏操作失败" }; !liked
+                    } }, { kotlin.Result.failure(it) })
+                    else -> kotlin.Result.success(toggleAdditionalFavorite(track))
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { kotlin.Result.failure(e) }
             result.fold({ liked ->
                 if (currentTrack == track) setFavoriteState(track, liked)
                 android.widget.Toast.makeText(this@MediaPlaybackService, if (liked) "已收藏" else "已取消收藏", android.widget.Toast.LENGTH_SHORT).show()
             }, { error ->
                 android.widget.Toast.makeText(this@MediaPlaybackService, error.message ?: "收藏操作失败", android.widget.Toast.LENGTH_SHORT).show()
             })
+        }
+    }
+
+    private suspend fun toggleAdditionalFavorite(track: Track): Boolean {
+        return when (track.source) {
+            "bodian" -> {
+                val client = com.hypermusic.miuix.data.api.BodianClient(this)
+                val auth = com.hypermusic.miuix.data.api.BodianAuth(this, client)
+                val account = auth.currentAccount()?.uid ?: error("请先登录波点音乐")
+                val revision = auth.sessionRevision()
+                val library = com.hypermusic.miuix.data.api.BodianLibrary(client, auth, com.hypermusic.miuix.data.api.BodianCatalog(client))
+                var offset = 0
+                var found = false
+                var more = true
+                while (more && offset < 20_000) {
+                    val page = library.likedSongs(offset, 100)
+                    check(auth.sessionRevision() == revision && auth.currentAccount()?.uid == account) { "波点音乐账号已切换，请重试" }
+                    if (page.items.any { it.id == track.id }) { found = true; break }
+                    more = page.hasMore
+                    check(!more || page.nextOffset > offset) { "波点音乐收藏分页异常" }
+                    offset = page.nextOffset
+                }
+                check(!more || found) { "波点音乐收藏列表过长" }
+                library.setSongLiked(track.id, !found, account)
+                check(auth.sessionRevision() == revision) { "账号已切换，请刷新收藏状态" }
+                !found
+            }
+            "kugou" -> {
+                val client = com.hypermusic.miuix.data.api.KugouClient(this)
+                val auth = com.hypermusic.miuix.data.api.KugouAuth(this, client)
+                val account = auth.account()?.userId ?: error("请先登录酷狗音乐")
+                val generation = auth.sessionGeneration()
+                val library = com.hypermusic.miuix.data.api.KugouLibrary(client, auth)
+                val liked = library.isLiked(track)
+                check(auth.sessionGeneration() == generation) { "酷狗音乐账号已切换，请重试" }
+                library.setLiked(track, !liked, account)
+                check(auth.sessionGeneration() == generation) { "账号已切换，请刷新收藏状态" }
+                !liked
+            }
+            "qishui" -> {
+                val client = com.hypermusic.miuix.data.api.QishuiClient(this)
+                val auth = com.hypermusic.miuix.data.api.QishuiAuth(this, client)
+                val account = auth.account()?.userId ?: error("请先登录汽水音乐")
+                val generation = auth.sessionGeneration()
+                val library = com.hypermusic.miuix.data.api.QishuiLibrary(client, auth)
+                val id = track.id.removePrefix("qishui_")
+                val liked = library.isSongLiked(id)
+                check(auth.sessionGeneration() == generation) { "汽水音乐账号已切换，请重试" }
+                library.setSongLiked(id, !liked, account)
+                check(auth.sessionGeneration() == generation) { "账号已切换，请刷新收藏状态" }
+                !liked
+            }
+            else -> error("不支持的音乐平台")
         }
     }
 
@@ -934,6 +1089,13 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         result: Result<List<MediaBrowserCompat.MediaItem>>
     ) {
         result.sendResult(emptyList())
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            com.hypermusic.miuix.data.cache.ImageCaches.clearMemory()
+        }
     }
 
     override fun onDestroy() {

@@ -1,6 +1,6 @@
 package com.hypermusic.miuix.ui.pages
 
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -18,13 +18,13 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import com.hypermusic.miuix.ui.components.BlurredBar
+import com.hypermusic.miuix.R
+import com.hypermusic.miuix.ui.components.SettingsItemIcon
 import com.hypermusic.miuix.ui.components.pageLayerBackdrop
 import com.hypermusic.miuix.ui.components.rememberPageBlurBackdrop
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.hypermusic.miuix.ui.FeedBottomPads
 import com.hypermusic.miuix.ui.theme.ThemeSettings
-import com.hypermusic.miuix.data.lyrics.LyricUpgradeBlacklist
-import com.hypermusic.miuix.data.lyrics.LyricUpgradeRequiredList
 import com.hypermusic.miuix.data.lyrics.LyricExclusionRules
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -56,7 +56,7 @@ fun LyricSettingsPage(
     var exclusionEnabled by remember { mutableStateOf(LyricExclusionRules.enabled) }
 
     val sourceOptions = listOf(
-        0 to "智能选择", 1 to "优先网易云音乐", 2 to "优先QQ音乐", 3 to "优先酷狗音乐"
+        0 to "智能选择", 1 to "优先网易云音乐", 2 to "优先QQ音乐", 3 to "优先酷狗音乐", 4 to "优先Apple Music"
     )
 
     BackHandler { onBackClick() }
@@ -104,6 +104,7 @@ fun LyricSettingsPage(
                 ) {
                     WindowDropdownPreference(
                         title = "歌词来源偏好",
+                        startAction = { SettingsItemIcon(R.drawable.ic_md3_category) },
                         items = sourceOptions.map { it.second },
                         selectedIndex = sourceOptions
                             .indexOfFirst { it.first == sourceIndex }
@@ -116,7 +117,8 @@ fun LyricSettingsPage(
                         }
                     )
                     SwitchPreference(
-                        title = "日韩歌曲显示罗马音",
+                        title = "粤日韩语言的歌曲显示罗马音",
+                        startAction = { SettingsItemIcon(R.drawable.ic_md3_letter_switch) },
                         summary = "此功能由网易云音乐和QQ音乐提供，仅供参考",
                         checked = showJapaneseRomaji,
                         onCheckedChange = { enabled ->
@@ -125,6 +127,7 @@ fun LyricSettingsPage(
                             onLyricSettingsChanged()
                         }
                     )
+                    ArrowPreference(title = "管理歌词匹配", startAction = { SettingsItemIcon(R.drawable.ic_md3_swap_horiz) }, onClick = onManageLyricUpgradesClick)
                 }
             }
 
@@ -137,6 +140,7 @@ fun LyricSettingsPage(
                 ) {
                     SwitchPreference(
                         title = "逐字歌词",
+                        startAction = { SettingsItemIcon(R.drawable.ic_md3_match_case) },
                         summary = "启用卡拉OK逐字歌词",
                         checked = wordByWord,
                         onCheckedChange = { enabled ->
@@ -149,6 +153,7 @@ fun LyricSettingsPage(
                     if (wordByWord) {
                         SwitchPreference(
                             title = "自动升级为逐字歌词",
+                            startAction = { SettingsItemIcon(R.drawable.ic_md3_keyboard_double_arrow_up) },
                             summary = "当前歌词非逐字歌词时，尝试从其他平台获取逐字歌词覆盖",
                             checked = autoUpgrade,
                             onCheckedChange = { enabled ->
@@ -162,21 +167,6 @@ fun LyricSettingsPage(
                 }
             }
 
-            item {
-                Card(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp)
-                ) {
-                    ArrowPreference(
-                        title = "管理歌曲是否需要升级逐字歌词",
-                        summary = "需要升级 ${LyricUpgradeRequiredList.entries.size} 首 · " +
-                            "不需要升级 ${LyricUpgradeBlacklist.entries.size} 首",
-                        onClick = onManageLyricUpgradesClick
-                    )
-                }
-            }
-
             item { SmallTitle("歌词处理") }
             item {
                 Card(
@@ -186,6 +176,7 @@ fun LyricSettingsPage(
                 ) {
                     SwitchPreference(
                         title = "启用歌词排除",
+                        startAction = { SettingsItemIcon(R.drawable.ic_md3_contract_delete) },
                         summary = "自动清理放在歌词头尾的元数据行（如词、曲、编曲、制作人等）",
                         checked = exclusionEnabled,
                         onCheckedChange = { enabled ->
@@ -197,6 +188,7 @@ fun LyricSettingsPage(
                     if (exclusionEnabled) {
                         ArrowPreference(
                             title = "歌词排除规则",
+                            startAction = { SettingsItemIcon(R.drawable.ic_md3_rule) },
                             summary = "默认规则已启用 ${LyricExclusionRules.enabledDefaultRuleCount}/" +
                                 "${LyricExclusionRules.defaultRules.size} 条 · " +
                                 "用户规则 ${LyricExclusionRules.userRules.size} 条",

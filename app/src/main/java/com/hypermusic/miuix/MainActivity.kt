@@ -1,5 +1,7 @@
 package com.hypermusic.miuix
 
+import com.hypermusic.miuix.data.model.shareText
+
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Spacer
@@ -10,6 +12,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionLayout
@@ -86,8 +91,6 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hypermusic.miuix.data.api.NeteaseApi
-import com.hypermusic.miuix.data.lyrics.LyricUpgradeBlacklist
-import com.hypermusic.miuix.data.lyrics.LyricUpgradeRequiredList
 import com.hypermusic.miuix.data.lyrics.LyricExclusionRules
 import com.hypermusic.miuix.ui.components.PlayerBar
 import com.hypermusic.miuix.ui.pages.AboutPage
@@ -158,17 +161,21 @@ sealed class Screen {
     data class PlaylistDetail(
         val coverUrl: String = "",
         val title: String = "",
-        val isTopChart: Boolean = false
+        val isTopChart: Boolean = false,
+        val sharedCoverKey: String? = null
     ) : Screen()
     object Login : Screen()
     object QrLogin : Screen()
     object ThemeSettings : Screen()
     object PlayPageSettings : Screen()
     object SongSettings : Screen()
+    object SoundEffects : Screen()
+    object CacheSettings : Screen()
+    object DownloadSettings : Screen()
     object About : Screen()
-    object Profile : Screen()
+    data class Profile(val accountId: String? = null) : Screen()
     data class Artist(val artistId: String) : Screen()
-    data class Album(val albumId: Long, val qq: Boolean = false) : Screen()
+    data class Album(val albumId: Long, val qq: Boolean = false, val initialCoverUrl: String = "", val sharedCoverKey: String? = null) : Screen()
     object LyriconAdapter : Screen()
     object LyricSettings : Screen()
     object LyricUpgradeManage : Screen()
@@ -192,7 +199,16 @@ class MainActivity : ComponentActivity() {
     }
     private fun handleCredentialIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_VIEW) {
-            intent.dataString?.let { com.hypermusic.miuix.ui.scan.CredentialImportController.submit(it) }
+            intent.dataString?.let { value ->
+                if (intent.data?.host == "sound") {
+                    runCatching {
+                        com.hypermusic.miuix.data.audio.SoundPresetLink.decode(value).let {
+                            com.hypermusic.miuix.data.audio.AudioSettings.saveNew(it.name, it.effects)
+                        }
+                    }.onSuccess { android.widget.Toast.makeText(this, "音效已导入", android.widget.Toast.LENGTH_SHORT).show() }
+                        .onFailure { android.widget.Toast.makeText(this, "音效二维码无效", android.widget.Toast.LENGTH_LONG).show() }
+                } else com.hypermusic.miuix.ui.scan.CredentialImportController.submit(value)
+            }
             intent.data = null
         }
     }
@@ -211,14 +227,36 @@ class MainActivity : ComponentActivity() {
         com.hypermusic.miuix.data.api.QqMusicApi.init(applicationContext)
         com.hypermusic.miuix.data.api.PlatformManager.init(applicationContext)
         ThemeSettings.init(applicationContext)
+        com.hypermusic.miuix.data.audio.AudioSettings.init(applicationContext)
+        com.hypermusic.miuix.data.lyrics.LyricMatches.init(applicationContext)
+        com.hypermusic.miuix.data.lyrics.BodianLyricsApi.init(applicationContext)
+        com.hypermusic.miuix.data.lyrics.KugouLyricsApi.init(applicationContext)
+        com.hypermusic.miuix.data.lyrics.QishuiLyricsApi.init(applicationContext)
         AppIconSettings.init(applicationContext)
         AppIconSettings.applySaved(applicationContext)
-        LyricUpgradeBlacklist.init(applicationContext)
-        LyricUpgradeRequiredList.init(applicationContext)
         LyricExclusionRules.init(applicationContext)
         KeyboardShortcutSettings.init(applicationContext)
         AgreementSettings.init(applicationContext)
         com.hypermusic.miuix.ui.theme.OnboardingSettings.init(applicationContext)
+        if (com.hypermusic.miuix.ui.theme.OnboardingSettings.completed && AgreementSettings.accepted) {
+            val loggedIn = when (com.hypermusic.miuix.data.api.PlatformManager.current) {
+                com.hypermusic.miuix.data.api.MusicPlatform.QQ -> com.hypermusic.miuix.data.api.QqMusicApi.isLoggedIn()
+                com.hypermusic.miuix.data.api.MusicPlatform.NETEASE -> NeteaseApi.isLoggedIn()
+                com.hypermusic.miuix.data.api.MusicPlatform.BODIAN -> {
+                    val api = com.hypermusic.miuix.data.api.BodianClient(applicationContext)
+                    com.hypermusic.miuix.data.api.BodianAuth(applicationContext, api).currentAccount() != null
+                }
+                com.hypermusic.miuix.data.api.MusicPlatform.KUGOU -> {
+                    val api = com.hypermusic.miuix.data.api.KugouClient(applicationContext)
+                    com.hypermusic.miuix.data.api.KugouAuth(applicationContext, api).account() != null
+                }
+                com.hypermusic.miuix.data.api.MusicPlatform.QISHUI -> runCatching {
+                    val api = com.hypermusic.miuix.data.api.QishuiClient(applicationContext)
+                    com.hypermusic.miuix.data.api.QishuiAuth(applicationContext, api).account() != null
+                }.getOrDefault(false)
+            }
+            com.hypermusic.miuix.ui.theme.OnboardingSettings.recoverMissingAccount(AgreementSettings.accepted, loggedIn)
+        }
         handleCredentialIntent(intent)
         handleDailyShortcut(intent)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -227,7 +265,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             CloudMusicMiuixTheme {
                 Scaffold { _ ->
-                Box(Modifier.fillMaxSize()) {
+                val backProgress by animateFloatAsState(com.hypermusic.miuix.ui.navigation.PredictiveBackVisual.progress, animationSpec = spring(dampingRatio = 0.9f, stiffness = 900f), label = "predictiveBack")
+                Box(Modifier.fillMaxSize().graphicsLayer {
+                    val progress = backProgress
+                    scaleX = 1f - 0.08f * progress
+                    scaleY = 1f - 0.08f * progress
+                    translationX = (if (com.hypermusic.miuix.ui.navigation.PredictiveBackVisual.edge == androidx.activity.BackEventCompat.EDGE_LEFT) 1 else -1) * size.width * 0.025f * progress
+                }) {
                 if (!com.hypermusic.miuix.ui.theme.OnboardingSettings.completed) {
                     com.hypermusic.miuix.ui.pages.OnboardingPage()
                 } else {
@@ -259,12 +303,18 @@ fun MainScreen(
     onOpenOobe: () -> Unit = {},
     viewModel: MusicPlayerViewModel = viewModel()
 ) {
+    val downloadContext = LocalContext.current
+    LaunchedEffect(Unit) { com.hypermusic.miuix.data.download.Downloads.init(downloadContext) }
     LaunchedEffect(dailyShortcutRequest) {
         if (dailyShortcutRequest > 0) {
             viewModel.playDailyRecommendationShortcut()
             onDailyShortcutConsumed()
         }
     }
+    val mainStateHolder = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
+    val additionalLibraryCaches = remember { mutableMapOf<com.hypermusic.miuix.data.api.MusicPlatform, com.hypermusic.miuix.ui.pages.AdditionalLibraryCache>() }
+    var searchSession by remember { mutableStateOf(com.hypermusic.miuix.ui.pages.SearchSession()) }
+    val searchListState = remember(searchSession) { androidx.compose.foundation.lazy.LazyListState() }
     var selectedTab by remember { mutableIntStateOf(0) }
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Main) }
     var screenStack by remember { mutableStateOf<List<Screen>>(emptyList()) }
@@ -278,7 +328,7 @@ fun MainScreen(
             if (platform == com.hypermusic.miuix.data.api.MusicPlatform.NETEASE) {
                 viewModel.invalidateQqHome()
                 viewModel.activateNetease()
-            } else viewModel.loadQqHome()
+            } else if (platform == com.hypermusic.miuix.data.api.MusicPlatform.QQ) viewModel.loadQqHome()
         }
         previousPlatform = platform
         onOobePlatformReconciled()
@@ -286,6 +336,7 @@ fun MainScreen(
     var profileVersion by remember { mutableIntStateOf(0) } // 用于触发UI刷新
     var showPlaylistSheet by remember { mutableStateOf(false) }
     var showPlayerPage by remember { mutableStateOf(false) }
+    var returnToPlayerFromSound by remember { mutableStateOf(false) }
     var isNavigatingBack by remember { mutableStateOf(false) }
     val tabs = listOf("推荐", "收藏", "设置")
     val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Settings)
@@ -296,6 +347,26 @@ fun MainScreen(
     val isTabletWidth = configuration.screenWidthDp > 600
     val useFloatingBar = ThemeSettings.useFloatingBar
     val floatingBarAlignment = ThemeSettings.floatingBarAlignmentIndex
+    fun miniPlayerNext() {
+        when {
+            viewModel.isFMMode -> viewModel.fmPlayNext()
+            viewModel.isIntelligenceMode -> viewModel.intelligencePlayNext()
+            else -> viewModel.playNext()
+        }
+    }
+    fun miniPlayerPrevious() {
+        when {
+            viewModel.isFMMode -> viewModel.fmPlayPrevious()
+            viewModel.isIntelligenceMode -> viewModel.intelligencePlayPrevious()
+            else -> viewModel.playPrevious()
+        }
+    }
+    val floatingBarBias by animateFloatAsState(
+        targetValue = when (floatingBarAlignment) { 0 -> -1f; 2 -> 1f; else -> 0f },
+        animationSpec = tween(durationMillis = 280),
+        label = "floatingBarAlignment"
+    )
+    val autoCollapseFloatingPlayer = ThemeSettings.autoCollapseFloatingPlayer
     val systemNavBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     // 关闭悬浮底栏时，平板使用侧栏；打开悬浮底栏时全部使用悬浮样式
     val useNavigationRail = !useFloatingBar && isTabletWidth
@@ -303,15 +374,15 @@ fun MainScreen(
     // 悬浮底栏上滑吸附状态（仅手机）
     var floatingBarAttached by remember { mutableStateOf(false) }
     val hasPlayingTrack = viewModel.playerState.currentTrack != null
-    LaunchedEffect(useFloatingBar, currentScreen, hasPlayingTrack) {
-        if (!useFloatingBar || currentScreen !is Screen.Main || !hasPlayingTrack) {
+    LaunchedEffect(useFloatingBar, currentScreen, hasPlayingTrack, isTabletWidth, autoCollapseFloatingPlayer) {
+        if (!useFloatingBar || currentScreen !is Screen.Main || !hasPlayingTrack || isTabletWidth || !autoCollapseFloatingPlayer) {
             floatingBarAttached = false
         }
     }
 
     // 滑动页面时自动折叠/展开悬浮底栏（仅手机）
     val pageScrollThreshold = with(LocalDensity.current) { 48.dp.toPx() }
-    val pageScrollConnection = remember(useFloatingBar, isTabletWidth, pageScrollThreshold, hasPlayingTrack) {
+    val pageScrollConnection = remember(useFloatingBar, isTabletWidth, pageScrollThreshold, hasPlayingTrack, autoCollapseFloatingPlayer) {
         object : NestedScrollConnection {
             private var accumulated = 0f
 
@@ -320,7 +391,7 @@ fun MainScreen(
                 available: Offset,
                 source: NestedScrollSource
             ): Offset {
-                if (source != NestedScrollSource.UserInput || !useFloatingBar || isTabletWidth || !hasPlayingTrack) {
+                if (source != NestedScrollSource.UserInput || !useFloatingBar || isTabletWidth || !hasPlayingTrack || !autoCollapseFloatingPlayer) {
                     return Offset.Zero
                 }
                 // 手指上滑 = 页面向下滚动
@@ -391,7 +462,11 @@ fun MainScreen(
         return false
     }
 
-    val openSearch: () -> Unit = { navigateTo(Screen.Search) }
+    val openSearch: () -> Unit = {
+        viewModel.clearSearch()
+        searchSession = com.hypermusic.miuix.ui.pages.SearchSession()
+        navigateTo(Screen.Search)
+    }
 
     // 设置用户信息变化监听器
     LaunchedEffect(Unit) {
@@ -428,8 +503,13 @@ fun MainScreen(
             },
             label = "screen_transition"
         ) { screen ->
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.hypermusic.miuix.ui.components.LocalCoverTransitionScope provides this@SharedTransitionLayout,
+                com.hypermusic.miuix.ui.components.LocalCoverVisibilityScope provides this
+            ) {
             when (screen) {
                 is Screen.Main -> {
+                    mainStateHolder.SaveableStateProvider("main") {
                     if (useNavigationRail) {
                         Row(modifier = Modifier.fillMaxSize()) {
                             NavigationRail(
@@ -451,6 +531,8 @@ fun MainScreen(
                                         onTogglePlayPause = { viewModel.togglePlayPause() },
                                         onPlayerBarClick = { showPlayerPage = true },
                                         onSwipeUp = { showPlayerPage = true },
+                            onSwipeLeft = { miniPlayerNext() },
+                            onSwipeRight = { miniPlayerPrevious() },
                                         onPlaylistClick = { showPlaylistSheet = true },
                                         sharedTransitionScope = this@SharedTransitionLayout,
                                         animatedVisibilityScope = this@AnimatedContent,
@@ -583,13 +665,21 @@ fun MainScreen(
                                     },
                                     label = "tab_transition"
                                 ) { tab ->
-                                    if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ && (tab == 0 || tab == 1)) {
+                                    if (com.hypermusic.miuix.data.api.PlatformManager.current in setOf(com.hypermusic.miuix.data.api.MusicPlatform.BODIAN, com.hypermusic.miuix.data.api.MusicPlatform.KUGOU, com.hypermusic.miuix.data.api.MusicPlatform.QISHUI) && tab in 0..1) {
+                                        com.hypermusic.miuix.ui.pages.AdditionalPlatformPage(com.hypermusic.miuix.data.api.PlatformManager.current, tab,
+                                            recommendations = viewModel.additionalRecommendations,
+                                            onRadio = { id -> viewModel.enterAdditionalRadio(id) { showPlayerPage = true } },
+                                            onLogin = { navigateTo(Screen.QrLogin) }, onSearch = openSearch, showSearchAction = false,
+                                            onPlaylist = { id, cover, title -> viewModel.loadPlaylistDetail(id); navigateTo(Screen.PlaylistDetail(cover, title, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey(id))) },
+                                            onAlbum = { id, cover -> navigateTo(Screen.Album(id, initialCoverUrl = cover, sharedCoverKey = com.hypermusic.miuix.ui.components.albumCoverKey(id, false))) },
+                                            cache = additionalLibraryCaches.getOrPut(com.hypermusic.miuix.data.api.PlatformManager.current) { com.hypermusic.miuix.ui.pages.AdditionalLibraryCache() })
+                                    } else if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ && (tab == 0 || tab == 1)) {
                                         com.hypermusic.miuix.ui.pages.QqMusicPage(tab, viewModel,
-                                            onPlaylistClick = { id, cover, title -> viewModel.loadPlaylistDetail(id); navigateTo(Screen.PlaylistDetail(cover, title)) },
-                                            onLoginClick = { navigateTo(Screen.QrLogin) }, onSearchClick = openSearch, showSearchAction = false,
+                                            onPlaylistClick = { id, cover, title -> viewModel.loadPlaylistDetail(id); navigateTo(Screen.PlaylistDetail(cover, title, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey(id))) },
+                                            onLoginClick = { navigateTo(Screen.QrLogin) }, onAlbumClick = { id, cover -> navigateTo(Screen.Album(id, true, cover, com.hypermusic.miuix.ui.components.albumCoverKey(id, true))) }, onSearchClick = openSearch, showSearchAction = false,
                                             onTopChartClick = { chart ->
                                                 viewModel.loadPlaylistDetail("qqtop:${chart.id}")
-                                                navigateTo(Screen.PlaylistDetail(chart.cover, chart.title, isTopChart = true))
+                                                navigateTo(Screen.PlaylistDetail(chart.cover, chart.title, isTopChart = true, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey("qqtop:${chart.id}")))
                                             },
                                             onFeatureClick = { detail ->
                                                 viewModel.showQqHomeFeature(detail)
@@ -600,7 +690,7 @@ fun MainScreen(
                                         recommendState = viewModel.recommendState,
                                         onPlaylistClick = { playlistId, coverUrl, title ->
                                             viewModel.loadPlaylistDetail(playlistId)
-                                            navigateTo(Screen.PlaylistDetail(coverUrl, title))
+                                            navigateTo(Screen.PlaylistDetail(coverUrl, title, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey(playlistId)))
                                         },
                                         viewModel = viewModel,
                                         isLoggedIn = isLoggedIn,
@@ -620,14 +710,13 @@ fun MainScreen(
                                     recommendState = viewModel.recommendState,
                                     onPlaylistClick = { playlistId, coverUrl, title ->
                                         viewModel.loadPlaylistDetail(playlistId)
-                                        navigateTo(Screen.PlaylistDetail(coverUrl, title))
+                                        navigateTo(Screen.PlaylistDetail(coverUrl, title, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey(playlistId)))
                                     },
                                     onSearchClick = openSearch,
                                     showSearchAction = false,
-                                    onRefresh = { viewModel.loadUserPlaylists() },
+                                    onRefresh = { viewModel.loadUserPlaylists(force = true) },
                                     isLoggedIn = isLoggedIn,
-                                    onLoadCloudDiskCover = { viewModel.loadCloudDiskCover() },
-                                    onNavigateToAlbum = { albumId -> navigateTo(Screen.Album(albumId)) },
+                                    onNavigateToAlbum = { albumId, cover -> navigateTo(Screen.Album(albumId, false, cover, com.hypermusic.miuix.ui.components.albumCoverKey(albumId, false))) },
                                     onIntelligenceMode = { songId, playlistId ->
                                         showPlayerPage = true
                                         viewModel.enterIntelligenceMode(songId, playlistId)
@@ -635,6 +724,7 @@ fun MainScreen(
                                     modifier = Modifier.padding(padding)
                                 )
                                 2 -> SettingsPage(
+                                    onExtraAccountChanged = { viewModel.checkIfCurrentTrackLiked() },
                                     onSearchClick = openSearch,
                                     showSearchAction = false,
                                     isLoggedIn = isLoggedIn,
@@ -643,7 +733,7 @@ fun MainScreen(
                                         navigateTo(Screen.QrLogin)
                                     },
                                     onProfileClick = {
-                                        navigateTo(Screen.Profile)
+                                        navigateTo(Screen.Profile())
                                     },
                                     onThemeSettingsClick = {
                                         navigateTo(Screen.ThemeSettings)
@@ -657,6 +747,8 @@ fun MainScreen(
                                     onSongSettingsClick = {
                                         navigateTo(Screen.SongSettings)
                                     },
+                                    onCacheSettingsClick = { navigateTo(Screen.CacheSettings) },
+                                    onDownloadSettingsClick = { navigateTo(Screen.DownloadSettings) },
                                     onAboutClick = {
                                         navigateTo(Screen.About)
                                     },
@@ -697,18 +789,10 @@ fun MainScreen(
                                             {}
                                         }
                                         val swipeLeftAction: () -> Unit = {
-                                            if (floating && isTabletWidth) {
-                                                floatingBarAttached = true
-                                            } else if (floating && floatingBarAttached) {
-                                                floatingBarAttached = false
-                                            }
+                                            miniPlayerNext()
                                         }
                                         val swipeRightAction: () -> Unit = {
-                                            if (floating && isTabletWidth) {
-                                                floatingBarAttached = false
-                                            } else if (floating && !floatingBarAttached) {
-                                                floatingBarAttached = true
-                                            }
+                                            miniPlayerPrevious()
                                         }
                                         PlayerBar(
                                             playerState = viewModel.playerState,
@@ -748,7 +832,7 @@ fun MainScreen(
                                     val bottomPadding = (defaultBottomPadding - 8.dp)
                                         .coerceAtLeast(navBarBottomPadding)
                                     if (isTabletWidth) {
-                                        // 平板：默认一行显示导航栏 + 完整迷你播放条，可左右滑动收起/展开
+                                        // 平板：播放条横向手势改变对齐方向，导航底栏保留页面切换手势。
                                         BoxWithConstraints(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -778,11 +862,9 @@ fun MainScreen(
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = when (floatingBarAlignment) {
-                                                    0 -> Arrangement.Start
-                                                    2 -> Arrangement.End
-                                                    else -> Arrangement.Center
-                                                }
+                                                horizontalArrangement = Arrangement.spacedBy(
+                                                    0.dp, androidx.compose.ui.BiasAlignment.Horizontal(floatingBarBias)
+                                                )
                                             ) {
                                                 FloatingTabsBar(
                                                     selectedIndex = selectedTab,
@@ -1059,13 +1141,21 @@ fun MainScreen(
                                 },
                                 label = "tab_transition"
                             ) { tab ->
-                                if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ && (tab == 0 || tab == 1)) {
+                                if (com.hypermusic.miuix.data.api.PlatformManager.current in setOf(com.hypermusic.miuix.data.api.MusicPlatform.BODIAN, com.hypermusic.miuix.data.api.MusicPlatform.KUGOU, com.hypermusic.miuix.data.api.MusicPlatform.QISHUI) && tab in 0..1) {
+                                        com.hypermusic.miuix.ui.pages.AdditionalPlatformPage(com.hypermusic.miuix.data.api.PlatformManager.current, tab,
+                                            recommendations = viewModel.additionalRecommendations,
+                                            onRadio = { id -> viewModel.enterAdditionalRadio(id) { showPlayerPage = true } },
+                                            onLogin = { navigateTo(Screen.QrLogin) }, onSearch = openSearch, showSearchAction = true,
+                                            onPlaylist = { id, cover, title -> viewModel.loadPlaylistDetail(id); navigateTo(Screen.PlaylistDetail(cover, title, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey(id))) },
+                                            onAlbum = { id, cover -> navigateTo(Screen.Album(id, initialCoverUrl = cover, sharedCoverKey = com.hypermusic.miuix.ui.components.albumCoverKey(id, false))) },
+                                            cache = additionalLibraryCaches.getOrPut(com.hypermusic.miuix.data.api.PlatformManager.current) { com.hypermusic.miuix.ui.pages.AdditionalLibraryCache() })
+                                    } else if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ && (tab == 0 || tab == 1)) {
                                         com.hypermusic.miuix.ui.pages.QqMusicPage(tab, viewModel,
-                                            onPlaylistClick = { id, cover, title -> viewModel.loadPlaylistDetail(id); navigateTo(Screen.PlaylistDetail(cover, title)) },
-                                            onLoginClick = { navigateTo(Screen.QrLogin) }, onSearchClick = openSearch,
+                                            onPlaylistClick = { id, cover, title -> viewModel.loadPlaylistDetail(id); navigateTo(Screen.PlaylistDetail(cover, title, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey(id))) },
+                                            onLoginClick = { navigateTo(Screen.QrLogin) }, onAlbumClick = { id, cover -> navigateTo(Screen.Album(id, true, cover, com.hypermusic.miuix.ui.components.albumCoverKey(id, true))) }, onSearchClick = openSearch,
                                             onTopChartClick = { chart ->
                                                 viewModel.loadPlaylistDetail("qqtop:${chart.id}")
-                                                navigateTo(Screen.PlaylistDetail(chart.cover, chart.title, isTopChart = true))
+                                                navigateTo(Screen.PlaylistDetail(chart.cover, chart.title, isTopChart = true, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey("qqtop:${chart.id}")))
                                             },
                                             onFeatureClick = { detail ->
                                                 viewModel.showQqHomeFeature(detail)
@@ -1076,7 +1166,7 @@ fun MainScreen(
                                     recommendState = viewModel.recommendState,
                                     onPlaylistClick = { playlistId, coverUrl, title ->
                                         viewModel.loadPlaylistDetail(playlistId)
-                                        navigateTo(Screen.PlaylistDetail(coverUrl, title))
+                                        navigateTo(Screen.PlaylistDetail(coverUrl, title, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey(playlistId)))
                                     },
                                     viewModel = viewModel,
                                     isLoggedIn = isLoggedIn,
@@ -1093,13 +1183,12 @@ fun MainScreen(
                                     recommendState = viewModel.recommendState,
                                     onPlaylistClick = { playlistId, coverUrl, title ->
                                         viewModel.loadPlaylistDetail(playlistId)
-                                        navigateTo(Screen.PlaylistDetail(coverUrl, title))
+                                        navigateTo(Screen.PlaylistDetail(coverUrl, title, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey(playlistId)))
                                     },
                                     onSearchClick = openSearch,
-                                    onRefresh = { viewModel.loadUserPlaylists() },
+                                    onRefresh = { viewModel.loadUserPlaylists(force = true) },
                                     isLoggedIn = isLoggedIn,
-                                    onLoadCloudDiskCover = { viewModel.loadCloudDiskCover() },
-                                    onNavigateToAlbum = { albumId -> navigateTo(Screen.Album(albumId)) },
+                                    onNavigateToAlbum = { albumId, cover -> navigateTo(Screen.Album(albumId, false, cover, com.hypermusic.miuix.ui.components.albumCoverKey(albumId, false))) },
                                     onIntelligenceMode = { songId, playlistId ->
                                         showPlayerPage = true
                                         viewModel.enterIntelligenceMode(songId, playlistId)
@@ -1107,6 +1196,7 @@ fun MainScreen(
                                     modifier = Modifier.padding(padding)
                                 )
                                 2 -> SettingsPage(
+                                    onExtraAccountChanged = { viewModel.checkIfCurrentTrackLiked() },
                                     onSearchClick = openSearch,
                                     isLoggedIn = isLoggedIn,
                                     profileVersion = profileVersion,
@@ -1114,7 +1204,7 @@ fun MainScreen(
                                         navigateTo(Screen.QrLogin)
                                     },
                                     onProfileClick = {
-                                        navigateTo(Screen.Profile)
+                                        navigateTo(Screen.Profile())
                                     },
                                     onThemeSettingsClick = {
                                         navigateTo(Screen.ThemeSettings)
@@ -1128,6 +1218,8 @@ fun MainScreen(
                                     onSongSettingsClick = {
                                         navigateTo(Screen.SongSettings)
                                     },
+                                    onCacheSettingsClick = { navigateTo(Screen.CacheSettings) },
+                                    onDownloadSettingsClick = { navigateTo(Screen.DownloadSettings) },
                                     onAboutClick = {
                                         navigateTo(Screen.About)
                                     },
@@ -1146,23 +1238,22 @@ fun MainScreen(
                             }
                         }
                     }
+                    }
                 }
                 is Screen.Search -> {
                     Scaffold(
                         bottomBar = {
                             Box(
                                 modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = when (floatingBarAlignment) {
-                                    0 -> Alignment.CenterStart
-                                    2 -> Alignment.CenterEnd
-                                    else -> Alignment.Center
-                                }
+                                contentAlignment = androidx.compose.ui.BiasAlignment(floatingBarBias, 0f)
                             ) {
                             PlayerBar(
                                 playerState = viewModel.playerState,
                                 onTogglePlayPause = { viewModel.togglePlayPause() },
                                 onPlayerBarClick = { showPlayerPage = true },
                                 onSwipeUp = { showPlayerPage = true },
+                            onSwipeLeft = { miniPlayerNext() },
+                            onSwipeRight = { miniPlayerPrevious() },
                                 onPlaylistClick = { showPlaylistSheet = true },
                                 sharedTransitionScope = this@SharedTransitionLayout,
                                 animatedVisibilityScope = this@AnimatedContent,
@@ -1280,7 +1371,7 @@ fun MainScreen(
                                 }
                             }
                         }
-                        com.hypermusic.miuix.ui.pages.SearchPage(viewModel, onBack = {
+                        com.hypermusic.miuix.ui.pages.SearchPage(viewModel, session = searchSession, listState = searchListState, onBack = {
                             if (!navigateBack()) currentScreen = Screen.Main
                         }, onPlaylist = { id, cover, title ->
                             viewModel.loadPlaylistDetail(id)
@@ -1296,17 +1387,15 @@ fun MainScreen(
                         bottomBar = {
                             Box(
                                 modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = when (floatingBarAlignment) {
-                                    0 -> Alignment.CenterStart
-                                    2 -> Alignment.CenterEnd
-                                    else -> Alignment.Center
-                                }
+                                contentAlignment = androidx.compose.ui.BiasAlignment(floatingBarBias, 0f)
                             ) {
                             PlayerBar(
                                 playerState = viewModel.playerState,
                                 onTogglePlayPause = { viewModel.togglePlayPause() },
                                 onPlayerBarClick = { showPlayerPage = true },
                                 onSwipeUp = { showPlayerPage = true },
+                            onSwipeLeft = { miniPlayerNext() },
+                            onSwipeRight = { miniPlayerPrevious() },
                                 onPlaylistClick = { showPlaylistSheet = true },
                                 sharedTransitionScope = this@SharedTransitionLayout,
                                 animatedVisibilityScope = this@AnimatedContent,
@@ -1425,15 +1514,26 @@ fun MainScreen(
                             }
                         }
                         val context = LocalContext.current
+                        val favoritePlatform = com.hypermusic.miuix.data.api.PlatformManager.current
+                        val favoriteQqAccount = com.hypermusic.miuix.data.api.QqMusicApi.dataAccountId
+                        val favoriteNeteaseAccount = com.hypermusic.miuix.data.api.NeteaseApi.getCurrentUserId()
+                        LaunchedEffect(favoritePlatform, favoriteQqAccount, favoriteNeteaseAccount, viewModel.playlistDetailState.detail?.info?.id) {
+                            if (favoritePlatform == com.hypermusic.miuix.data.api.MusicPlatform.QQ) viewModel.loadQqFavorites()
+                            else if (favoritePlatform == com.hypermusic.miuix.data.api.MusicPlatform.NETEASE) viewModel.loadUserPlaylists()
+                        }
                         PlaylistDetailPage(
                             playlistDetail = viewModel.playlistDetailState.detail,
                             isLoading = viewModel.playlistDetailState.isLoading,
                             error = viewModel.playlistDetailState.error,
                             currentTrack = viewModel.playerState.currentTrack,
-                            isCurrentTrackLiked = viewModel.isCurrentTrackLiked,
                             initialCoverUrl = screen.coverUrl,
                             initialTitle = screen.title,
+                            sharedCoverKey = screen.sharedCoverKey,
                             isTopChart = screen.isTopChart,
+                            showFavoritePlaylist = viewModel.canFavoritePlaylist(viewModel.playlistDetailState.detail, screen.isTopChart),
+                            favoritePlaylistCollected = viewModel.isPlaylistCollected(viewModel.playlistDetailState.detail),
+                            favoritePlaylistInProgress = viewModel.playlistFavoriteInProgress,
+                            onFavoritePlaylist = { viewModel.favoriteCurrentPlaylist() },
                             onShuffleClick = { tracks ->
                                 viewModel.shufflePlaylist(tracks, qqGuess = viewModel.playlistDetailState.detail?.info?.id == "qqfeature:GUESS")
                             },
@@ -1468,51 +1568,31 @@ fun MainScreen(
                             onShare = { track ->
                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, "${track.title} - ${track.artist}\n${track.sourceUrl}")
+                                    putExtra(Intent.EXTRA_TEXT, track.shareText())
                                 }
                                 context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
                             },
-                            onLikeTrack = { track ->
-                                viewModel.addTrackToFavorites(track) { isLiked ->
-                                    val message = if (isLiked) "已收" else "已取消收"
-                                    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            onSetQqTrackLiked = { track, liked, onResult ->
-                                viewModel.setQqTrackLiked(track, liked) { result ->
-                                    onResult(result)
-                                    android.widget.Toast.makeText(context, if (result) "已收藏" else "已取消收藏", android.widget.Toast.LENGTH_SHORT).show()
-                                }
-                            },
+                            onCheckTrackLiked = { track -> viewModel.trackLiked(track) },
+                            onSetTrackLiked = { track, liked -> viewModel.setTrackLiked(track, liked) },
                             onDownload = { track -> viewModel.downloadCurrentTrack(track) },
-                            onDownloadCover = { track ->
-                                val coverUrl = track.imgUrl
-                                if (!coverUrl.isNullOrEmpty()) {
-                                    try {
-                                        val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
-                                        val fileName = "${track.title}.jpg"
-                                        val request = android.app.DownloadManager.Request(android.net.Uri.parse(coverUrl))
-                                            .setTitle("下载封面图片")
-                                            .setDescription("正在下载封面图片")
-                                            .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                            .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_PICTURES, "CloudMusic/$fileName")
-                                        downloadManager.enqueue(request)
-                                        android.widget.Toast.makeText(context, "已保存到 /Pictures/CloudMusic/ 目录", android.widget.Toast.LENGTH_SHORT).show()
-                                    } catch (e: Exception) {
-                                        android.widget.Toast.makeText(context, "保存失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            },
-                            onDownloadAndShare = { track -> viewModel.downloadAndShareCurrentTrack(track) },
-                            onDownloadCoverAndShare = { track -> viewModel.downloadAndShareCover(track) },
+                            onDownloadCover = { selected -> viewModel.downloadCover(selected) },
+
+
                             onNavigateToArtist = { artistId ->
-                                navigateTo(Screen.Artist(artistId))
+                                val prefix = when (com.hypermusic.miuix.data.api.PlatformManager.current) {
+                                    com.hypermusic.miuix.data.api.MusicPlatform.BODIAN -> "bodianartist_"
+                                    com.hypermusic.miuix.data.api.MusicPlatform.KUGOU -> "kugouartist_"
+                                    com.hypermusic.miuix.data.api.MusicPlatform.QISHUI -> "qishuiartist_"
+                                    else -> ""
+                                }
+                                navigateTo(Screen.Artist(if (prefix.isNotEmpty() && !artistId.startsWith(prefix)) prefix + artistId.removePrefix("neartist_") else artistId))
                             },
                             onNavigateToAlbum = { albumId ->
                                 navigateTo(Screen.Album(albumId, com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ))
                             },
                             onNavigateToComment = { songId, songTitle ->
-                                navigateTo(Screen.Comment(songId, songTitle))
+                                if (com.hypermusic.miuix.data.api.PlatformManager.current in setOf(com.hypermusic.miuix.data.api.MusicPlatform.NETEASE, com.hypermusic.miuix.data.api.MusicPlatform.QQ)) navigateTo(Screen.Comment(songId, songTitle))
+                                else android.widget.Toast.makeText(context, "该平台的评论正在接入", android.widget.Toast.LENGTH_SHORT).show()
                             },
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
@@ -1538,7 +1618,12 @@ fun MainScreen(
                 )
             }
             is Screen.QrLogin -> {
-                if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ) {
+                val loginPlatform = com.hypermusic.miuix.data.api.PlatformManager.current
+                if (loginPlatform in setOf(com.hypermusic.miuix.data.api.MusicPlatform.BODIAN, com.hypermusic.miuix.data.api.MusicPlatform.KUGOU, com.hypermusic.miuix.data.api.MusicPlatform.QISHUI)) {
+                    com.hypermusic.miuix.ui.pages.AdditionalPlatformLoginPage(loginPlatform,
+                        onBack = { if (!navigateBack()) currentScreen = Screen.Main },
+                        onSuccess = { profileVersion++; viewModel.checkIfCurrentTrackLiked(); currentScreen = Screen.Main; screenStack = emptyList() })
+                } else if (loginPlatform == com.hypermusic.miuix.data.api.MusicPlatform.QQ) {
                     com.hypermusic.miuix.ui.pages.QqLoginPage(onBack = { if (!navigateBack()) currentScreen = Screen.Main },
                         onSuccess = { viewModel.checkIfCurrentTrackLiked(); currentScreen = Screen.Main; screenStack = emptyList() })
                 } else QrLoginPage(
@@ -1587,15 +1672,28 @@ fun MainScreen(
                     }
                 )
             }
+            is Screen.DownloadSettings -> {
+                com.hypermusic.miuix.ui.pages.DownloadSettingsPage(onBack = { if (!navigateBack()) currentScreen = Screen.Main })
+            }
+            is Screen.CacheSettings -> {
+                com.hypermusic.miuix.ui.pages.CacheSettingsPage(onBack = { if (!navigateBack()) currentScreen = Screen.Main })
+            }
             is Screen.SongSettings -> {
                 SongSettingsPage(
                     viewModel = viewModel,
+                    onSoundEffectsClick = { returnToPlayerFromSound = false; navigateTo(Screen.SoundEffects) },
                     onBackClick = {
                         if (!navigateBack()) {
                             currentScreen = Screen.Main
                         }
                     }
                 )
+            }
+            is Screen.SoundEffects -> {
+                com.hypermusic.miuix.ui.pages.SoundEffectsPage(onBack = {
+                    if (!navigateBack()) currentScreen = Screen.Main
+                    if (returnToPlayerFromSound) { returnToPlayerFromSound = false; showPlayerPage = true }
+                })
             }
             is Screen.About -> {
                 AboutPage(
@@ -1615,6 +1713,7 @@ fun MainScreen(
             is Screen.DeveloperOptions -> {
                 DeveloperOptionsPage(
                     currentTrack = viewModel.playerState.currentTrack,
+                    lyricState = viewModel.lyricState,
                     onOpenOobe = onOpenOobe,
                     onBackClick = {
                         if (!navigateBack()) {
@@ -1674,11 +1773,6 @@ fun MainScreen(
                         if (viewModel.playerState.currentTrack?.id == removedId) {
                             viewModel.loadLyrics()
                         }
-                    },
-                    onRequiredEntryRemoved = { removedId ->
-                        if (viewModel.playerState.currentTrack?.id == removedId) {
-                            viewModel.loadLyrics()
-                        }
                     }
                 )
             }
@@ -1695,7 +1789,11 @@ fun MainScreen(
                 )
             }
             is Screen.ManageAccounts -> {
-                if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ) {
+                if (com.hypermusic.miuix.data.api.PlatformManager.current in setOf(com.hypermusic.miuix.data.api.MusicPlatform.BODIAN, com.hypermusic.miuix.data.api.MusicPlatform.KUGOU, com.hypermusic.miuix.data.api.MusicPlatform.QISHUI)) {
+                    com.hypermusic.miuix.ui.pages.AdditionalAccountsPage(com.hypermusic.miuix.data.api.PlatformManager.current,
+                        onBack = { if (!navigateBack()) currentScreen = Screen.Main },
+                        onLogin = { navigateTo(Screen.QrLogin) }, onChanged = { viewModel.checkIfCurrentTrackLiked() })
+                } else if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ) {
                     val qq = com.hypermusic.miuix.data.api.QqMusicApi
                     val accounts = qq.accounts
                     ManageAccountsPage(
@@ -1703,10 +1801,7 @@ fun MainScreen(
                             if (it.credential.loginType == 1) "微信登录" else "QQ登录") },
                         onBackClick = { if (!navigateBack()) currentScreen = Screen.Main },
                         onAccountClick = { id ->
-                            if (qq.switchDataAccount(id)) {
-                                viewModel.checkIfCurrentTrackLiked()
-                                navigateTo(Screen.Profile)
-                            }
+                            navigateTo(Screen.Profile(id))
                         },
                         onLoginNewAccount = { navigateTo(Screen.QrLogin) },
                         activeAccountId = qq.dataAccountId,
@@ -1735,14 +1830,7 @@ fun MainScreen(
                         }
                     },
                     onAccountClick = { userId ->
-                        // 切换到选中的账号
-                        if (NeteaseApi.switchToAccount(userId)) {
-                            isLoggedIn = true
-                            viewModel.loadUserInfo()
-                            viewModel.loadUserPlaylists()
-                            // 跳转到资料页
-                            navigateTo(Screen.Profile)
-                        }
+                        navigateTo(Screen.Profile(userId))
                     },
                     onLoginNewAccount = {
                         // 保存当前账号的Cookie
@@ -1764,24 +1852,29 @@ fun MainScreen(
             is Screen.Profile -> {
                 if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ) {
                     com.hypermusic.miuix.ui.pages.QqProfilePage(
+                        selectedAccountId = screen.accountId,
                         onBackClick = { if (!navigateBack()) currentScreen = Screen.Main },
                         onLogout = {
-                            com.hypermusic.miuix.data.api.QqMusicApi.logout()
+                            com.hypermusic.miuix.data.api.QqMusicApi.logout(screen.accountId)
                             viewModel.checkIfCurrentTrackLiked()
                             if (!navigateBack()) currentScreen = Screen.Main
                         }
                     )
                 } else {
                 ProfilePage(
+                    selectedAccountId = screen.accountId,
                     onBackClick = {
                         if (!navigateBack()) {
                             currentScreen = Screen.Main
                         }
                     },
                     onLogout = {
-                        val stillLoggedIn = NeteaseApi.logoutCurrentAccount()
+                        val playbackAccountId = NeteaseApi.getAccounts().getOrNull(viewModel.playbackAccountIndex)?.userId
+                        val stillLoggedIn = NeteaseApi.removeAccount(screen.accountId)
                         isLoggedIn = stillLoggedIn
                         if (stillLoggedIn) {
+                            viewModel.updatePlaybackAccountIndex(NeteaseApi.getAccounts()
+                                .indexOfFirst { it.userId == playbackAccountId }.coerceAtLeast(0))
                             viewModel.refreshAccountState()
                         }
                         currentScreen = Screen.Main
@@ -1796,17 +1889,15 @@ fun MainScreen(
                     bottomBar = {
                         Box(
                             modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = when (floatingBarAlignment) {
-                                0 -> Alignment.CenterStart
-                                2 -> Alignment.CenterEnd
-                                else -> Alignment.Center
-                            }
+                            contentAlignment = androidx.compose.ui.BiasAlignment(floatingBarBias, 0f)
                         ) {
                         PlayerBar(
                             playerState = viewModel.playerState,
                             onTogglePlayPause = { viewModel.togglePlayPause() },
                             onPlayerBarClick = { showPlayerPage = true },
                             onSwipeUp = { showPlayerPage = true },
+                            onSwipeLeft = { miniPlayerNext() },
+                            onSwipeRight = { miniPlayerPrevious() },
                             onPlaylistClick = { showPlaylistSheet = true },
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
@@ -1933,8 +2024,9 @@ fun MainScreen(
                         onTrackClick = { track, tracks ->
                             viewModel.playTrackWithMode(track, tracks)
                         },
-                        onAlbumClick = { albumId ->
-                            navigateTo(Screen.Album(albumId, screen.artistId.startsWith("qqartist_")))
+                        onAlbumClick = { albumId, cover ->
+                            val qq = screen.artistId.startsWith("qqartist_")
+                            navigateTo(Screen.Album(albumId, qq, cover, com.hypermusic.miuix.ui.components.albumCoverKey(albumId, qq)))
                         },
                         currentTrack = viewModel.playerState.currentTrack,
                         currentPlaylist = viewModel.currentPlaylist,
@@ -1942,7 +2034,7 @@ fun MainScreen(
                         onShare = { track ->
                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, "${track.title} - ${track.artist}\n${track.sourceUrl}")
+                                putExtra(Intent.EXTRA_TEXT, track.shareText())
                             }
                             context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
                         },
@@ -1953,34 +2045,19 @@ fun MainScreen(
                             }
                         },
                         onDownload = { track -> viewModel.downloadCurrentTrack(track) },
-                        onDownloadCover = { track ->
-                            val coverUrl = track.imgUrl
-                            if (!coverUrl.isNullOrEmpty()) {
-                                try {
-                                    val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
-                                    val fileName = "${track.title}.jpg"
-                                    val request = android.app.DownloadManager.Request(android.net.Uri.parse(coverUrl))
-                                        .setTitle("下载封面图片")
-                                        .setDescription("正在下载封面图片")
-                                        .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                        .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_PICTURES, "CloudMusic/$fileName")
-                                    downloadManager.enqueue(request)
-                                    android.widget.Toast.makeText(context, "已保存到 /Pictures/CloudMusic/ 目录", android.widget.Toast.LENGTH_SHORT).show()
-                                } catch (e: Exception) {
-                                    android.widget.Toast.makeText(context, "保存失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        },
-                        onDownloadAndShare = { track -> viewModel.downloadAndShareCurrentTrack(track) },
-                        onDownloadCoverAndShare = { track -> viewModel.downloadAndShareCover(track) },
+                        onDownloadCover = { selected -> viewModel.downloadCover(selected) },
+
+
                         onNavigateToArtist = { artistId ->
-                            navigateTo(Screen.Artist(artistId))
+                            val prefix = when { screen.artistId.startsWith("bodianartist_") -> "bodianartist_"; screen.artistId.startsWith("kugouartist_") -> "kugouartist_"; screen.artistId.startsWith("qishuiartist_") -> "qishuiartist_"; else -> "" }
+                            navigateTo(Screen.Artist(if (prefix.isNotEmpty() && !artistId.startsWith(prefix)) prefix + artistId.removePrefix("neartist_") else artistId))
                         },
                         onNavigateToAlbum = { albumId ->
                             navigateTo(Screen.Album(albumId, screen.artistId.startsWith("qqartist_")))
                         },
                         onNavigateToComment = { track ->
-                            navigateTo(Screen.Comment(track.id, track.title, track.qqSongId.takeIf { track.source == "qqmusic" }))
+                            if (track.source in setOf("netease", "qqmusic")) navigateTo(Screen.Comment(track.id, track.title, track.qqSongId.takeIf { track.source == "qqmusic" }))
+                            else android.widget.Toast.makeText(context, "该平台的评论正在接入", android.widget.Toast.LENGTH_SHORT).show()
                         },
                         onPlayTrack = { track ->
                             viewModel.playTrack(track)
@@ -1995,17 +2072,15 @@ fun MainScreen(
                     bottomBar = {
                         Box(
                             modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = when (floatingBarAlignment) {
-                                0 -> Alignment.CenterStart
-                                2 -> Alignment.CenterEnd
-                                else -> Alignment.Center
-                            }
+                            contentAlignment = androidx.compose.ui.BiasAlignment(floatingBarBias, 0f)
                         ) {
                         PlayerBar(
                             playerState = viewModel.playerState,
                             onTogglePlayPause = { viewModel.togglePlayPause() },
                             onPlayerBarClick = { showPlayerPage = true },
                             onSwipeUp = { showPlayerPage = true },
+                            onSwipeLeft = { miniPlayerNext() },
+                            onSwipeRight = { miniPlayerPrevious() },
                             onPlaylistClick = { showPlaylistSheet = true },
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
@@ -2125,17 +2200,27 @@ fun MainScreen(
                     AlbumPage(
                         albumId = screen.albumId,
                         isQq = screen.qq,
+                        initialCoverUrl = screen.initialCoverUrl,
+                        sharedCoverKey = screen.sharedCoverKey,
                         onBackClick = {
                             if (!navigateBack()) {
                                 currentScreen = Screen.Main
                             }
                         },
                         onTrackClick = { track, tracks ->
-                            viewModel.playTrackWithMode(track, tracks)
+                            viewModel.playTrackWithMode(track, tracks, fromAlbum = true)
                         },
                         onPlayAllClick = { tracks ->
                             if (tracks.isNotEmpty()) {
-                                viewModel.playTrackWithMode(tracks.first(), tracks)
+                                viewModel.playTrackWithMode(tracks.first(), tracks, fromAlbum = true)
+                            }
+                        },
+                        onShuffleClick = { tracks -> viewModel.shufflePlaylist(tracks, fromAlbum = true) },
+                        onAlbumFavorited = {
+                            when (com.hypermusic.miuix.data.api.PlatformManager.current) {
+                                com.hypermusic.miuix.data.api.MusicPlatform.QQ -> viewModel.loadQqFavoriteAlbums(force = true)
+                                com.hypermusic.miuix.data.api.MusicPlatform.NETEASE -> viewModel.loadUserAlbums()
+                                else -> Unit
                             }
                         },
                         currentTrack = viewModel.playerState.currentTrack,
@@ -2144,45 +2229,26 @@ fun MainScreen(
                         onShare = { track ->
                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, "${track.title} - ${track.artist}\n${track.sourceUrl}")
+                                putExtra(Intent.EXTRA_TEXT, track.shareText())
                             }
                             context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
                         },
-                        onLikeTrack = { selected ->
-                            val onResult: (Boolean) -> Unit = { isLiked ->
-                                val message = if (isLiked) "已收藏" else "已取消收藏"
-                                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                            if (selected.id == viewModel.playerState.currentTrack?.id && selected.source == viewModel.playerState.currentTrack?.source)
-                                viewModel.likeCurrentTrack(onResult)
-                            else viewModel.addTrackToFavorites(selected, onResult)
-                        },
+                        onCheckTrackLiked = { viewModel.trackLiked(it) },
+                        onSetTrackLiked = { track, liked -> viewModel.setTrackLiked(track, liked) },
                         onDownload = { viewModel.downloadCurrentTrack(it) },
-                        onDownloadCover = { selected ->
-                            val coverUrl = selected.imgUrl
-                            if (!coverUrl.isNullOrEmpty()) {
-                                try {
-                                    val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
-                                    val fileName = "${selected.title}.jpg"
-                                    val request = android.app.DownloadManager.Request(android.net.Uri.parse(coverUrl))
-                                        .setTitle("下载封面图片")
-                                        .setDescription("正在下载封面图片")
-                                        .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                        .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_PICTURES, "CloudMusic/$fileName")
-                                    downloadManager.enqueue(request)
-                                    android.widget.Toast.makeText(context, "已保存到 /Pictures/CloudMusic/ 目录", android.widget.Toast.LENGTH_SHORT).show()
-                                } catch (e: Exception) {
-                                    android.widget.Toast.makeText(context, "保存失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        },
-                        onDownloadAndShare = { viewModel.downloadAndShareCurrentTrack(it) },
-                        onDownloadCoverAndShare = { viewModel.downloadAndShareCover(it) },
+                        onDownloadCover = { selected -> viewModel.downloadCover(selected) },
+
+
                         onNavigateToArtist = { artistId ->
-                            navigateTo(Screen.Artist(artistId))
+                            if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.BODIAN) navigateTo(Screen.Artist("bodianartist_${artistId.removePrefix("neartist_")}"))
+                            else if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.KUGOU) navigateTo(Screen.Artist("kugouartist_${artistId.removePrefix("neartist_")}"))
+                            else if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QISHUI) navigateTo(Screen.Artist("qishuiartist_${artistId.removePrefix("neartist_")}"))
+                            else if (com.hypermusic.miuix.data.api.PlatformManager.current in setOf(com.hypermusic.miuix.data.api.MusicPlatform.NETEASE, com.hypermusic.miuix.data.api.MusicPlatform.QQ)) navigateTo(Screen.Artist(artistId))
+                            else android.widget.Toast.makeText(context, "该平台的歌手页正在接入", android.widget.Toast.LENGTH_SHORT).show()
                         },
                         onNavigateToComment = { track ->
-                            navigateTo(Screen.Comment(track.id, track.title, track.qqSongId.takeIf { track.source == "qqmusic" && it > 0 }))
+                            if (track.source in setOf("netease", "qqmusic")) navigateTo(Screen.Comment(track.id, track.title, track.qqSongId.takeIf { track.source == "qqmusic" && it > 0 }))
+                            else android.widget.Toast.makeText(context, "该平台的评论正在接入", android.widget.Toast.LENGTH_SHORT).show()
                         },
                         onPlayTrack = { track ->
                             viewModel.playTrack(track)
@@ -2197,17 +2263,15 @@ fun MainScreen(
                     bottomBar = {
                         Box(
                             modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = when (floatingBarAlignment) {
-                                0 -> Alignment.CenterStart
-                                2 -> Alignment.CenterEnd
-                                else -> Alignment.Center
-                            }
+                            contentAlignment = androidx.compose.ui.BiasAlignment(floatingBarBias, 0f)
                         ) {
                         PlayerBar(
                             playerState = viewModel.playerState,
                             onTogglePlayPause = { viewModel.togglePlayPause() },
                             onPlayerBarClick = { showPlayerPage = true },
                             onSwipeUp = { showPlayerPage = true },
+                            onSwipeLeft = { miniPlayerNext() },
+                            onSwipeRight = { miniPlayerPrevious() },
                             onPlaylistClick = { showPlaylistSheet = true },
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
@@ -2245,6 +2309,7 @@ fun MainScreen(
                         modifier = Modifier.then(secondaryLayerModifier)
                     )
                 }
+            }
             }
         }
         }
@@ -2285,35 +2350,13 @@ fun MainScreen(
                 },
                 onSeekTo = { position -> viewModel.seekTo(position) },
                 onDownload = { viewModel.downloadCurrentTrack() },
-                onDownloadCover = {
-                    val coverUrl = viewModel.playerState.currentTrack?.imgUrl
-                    if (!coverUrl.isNullOrEmpty()) {
-                        try {
-                            val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
-                            val fileName = "${viewModel.playerState.currentTrack?.title ?: "cover"}.jpg"
-                            val request = android.app.DownloadManager.Request(android.net.Uri.parse(coverUrl))
-                                .setTitle("下载封面图片")
-                                .setDescription("正在下载封面图片")
-                                .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_PICTURES, "CloudMusic/$fileName")
-                            downloadManager.enqueue(request)
-                            android.widget.Toast.makeText(context, "已保存到 /Pictures/CloudMusic/ 目录", android.widget.Toast.LENGTH_SHORT).show()
-                        } catch (e: Exception) {
-                            android.util.Log.e("MainActivity", "Failed to download cover: ${e.message}")
-                        }
-                    }
-                },
-                onDownloadAndShare = { viewModel.downloadAndShareCurrentTrack() },
-                onDownloadCoverAndShare = { viewModel.downloadAndShareCover() },
+                onDownloadCover = { viewModel.downloadCover(viewModel.playerState.currentTrack) },
+
+
                 onShare = {
                     val track = viewModel.playerState.currentTrack
                     if (track != null) {
-                        val songId = track.id.removePrefix("netrack_")
-                        val shareText = if (track.source == "qqmusic") {
-                            "【QQ音乐】分享来自 @${track.artist} 的单曲《${track.title}》: ${track.sourceUrl}"
-                        } else {
-                            "【网易云音乐】分享来自 @${track.artist} 的单曲《${track.title}》: https://music.163.com/#/song?id=$songId"
-                        }
+                        val shareText = track.shareText()
                         val sendIntent = Intent().apply {
                             action = Intent.ACTION_SEND
                             putExtra(Intent.EXTRA_TEXT, shareText)
@@ -2325,6 +2368,11 @@ fun MainScreen(
                 },
                 onPlayTrack = { track -> viewModel.playTrack(track) },
                 onLoadLyrics = { viewModel.loadLyrics() },
+                onNavigateToSoundEffects = {
+                    returnToPlayerFromSound = true
+                    showPlayerPage = false
+                    navigateTo(Screen.SoundEffects)
+                },
                 onOpenSystemUI = {
                     when (com.hypermusic.miuix.ui.util.MediaOutputLauncher.open(context)) {
                         com.hypermusic.miuix.ui.util.MediaOutputLauncher.Result.BLUETOOTH_SETTINGS ->
@@ -2343,7 +2391,10 @@ fun MainScreen(
                 onDrawerStateChanged = { isOpen -> isPlayerDrawerOpen = isOpen },
                 onNavigateToArtist = { artistId ->
                     showPlayerPage = false
-                    val id = if (viewModel.playerState.currentTrack?.source == "qqmusic" && !artistId.startsWith("qqartist_")) "qqartist_$artistId" else artistId
+                    val prefix = when (viewModel.playerState.currentTrack?.source) {
+                        "qqmusic" -> "qqartist_"; "bodian" -> "bodianartist_"; "kugou" -> "kugouartist_"; "qishui" -> "qishuiartist_"; else -> ""
+                    }
+                    val id = if (prefix.isNotEmpty() && !artistId.startsWith(prefix)) prefix + artistId.removePrefix("neartist_") else artistId
                     navigateTo(Screen.Artist(id))
                 },
                 onNavigateToAlbum = { albumId ->
@@ -2358,6 +2409,7 @@ fun MainScreen(
                 onSwitchPlayMode = { viewModel.switchPlayMode() }
             )
         }
+        com.hypermusic.miuix.ui.pages.DownloadSheet()
     }
 }
 }

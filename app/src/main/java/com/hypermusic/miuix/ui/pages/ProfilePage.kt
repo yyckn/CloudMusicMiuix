@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -44,7 +44,7 @@ import androidx.compose.ui.graphics.Color
 import com.hypermusic.miuix.ui.components.BlurredBar
 import com.hypermusic.miuix.ui.components.pageLayerBackdrop
 import com.hypermusic.miuix.ui.components.rememberPageBlurBackdrop
-import coil.compose.AsyncImage
+import com.hypermusic.miuix.ui.components.AsyncImage
 import com.hypermusic.miuix.data.api.NeteaseApi
 import com.hypermusic.miuix.data.model.UserProfile
 import kotlinx.coroutines.delay
@@ -86,10 +86,14 @@ fun ProfilePage(
     onLogout: () -> Unit,
     isLoggedIn: Boolean = true,
     profileVersion: Int = 0,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedAccountId: String? = null
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     val context = LocalContext.current
+    val selectedCookie = selectedAccountId?.let { NeteaseApi.getAccountCookie(it) }
+    fun profileCookie(): String = if (selectedAccountId == null) NeteaseApi.getCookie()
+        else selectedCookie ?: error("账号已退出")
     var userProfile by remember { mutableStateOf<UserProfile?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var isRefreshing by remember { mutableStateOf(false) }
@@ -107,7 +111,7 @@ fun ProfilePage(
     ) { uri ->
         uri?.let {
             try {
-                val cookies = NeteaseApi.getCookie()
+                val cookies = profileCookie()
                 val jsonCredentials = formatCookiesToJson(cookies)
                 context.contentResolver.openOutputStream(it)?.use { outputStream ->
                     outputStream.write(jsonCredentials.toByteArray())
@@ -137,7 +141,7 @@ fun ProfilePage(
     }
 
     // 加载用户信息（当isLoggedIn或profileVersion变化时重新加载）
-    LaunchedEffect(isLoggedIn, profileVersion) {
+    LaunchedEffect(isLoggedIn, profileVersion, selectedAccountId) {
         android.util.Log.d("ProfilePage", "LaunchedEffect triggered: isLoggedIn=$isLoggedIn, profileVersion=$profileVersion")
         if (!isLoggedIn) {
             android.util.Log.d("ProfilePage", "Not logged in, clearing profile")
@@ -146,7 +150,7 @@ fun ProfilePage(
             return@LaunchedEffect
         }
         android.util.Log.d("ProfilePage", "Loading user profile from API...")
-        NeteaseApi.getUserProfile().fold(
+        NeteaseApi.getUserProfile(if (selectedAccountId == null) null else selectedCookie.orEmpty()).fold(
             onSuccess = { profile ->
                 android.util.Log.d("ProfilePage", "Profile loaded from API: nickname=${profile.nickname}, userId=${profile.userId}")
                 userProfile = profile
@@ -157,7 +161,7 @@ fun ProfilePage(
                 android.util.Log.e("ProfilePage", "Failed to load profile: ${e.message}")
                 // 如果API失败，尝试从缓存加载
                 val cachedProfile = NeteaseApi.getUserProfileFromCache()
-                if (cachedProfile != null) {
+                if (cachedProfile != null && (selectedAccountId == null || cachedProfile.userId.toString() == selectedAccountId)) {
                     android.util.Log.d("ProfilePage", "Using cached profile: ${cachedProfile.nickname}")
                     userProfile = cachedProfile
                 }
@@ -171,7 +175,7 @@ fun ProfilePage(
     LaunchedEffect(isRefreshing) {
         if (isRefreshing) {
             android.util.Log.d("ProfilePage", "Refreshing user profile from API...")
-            NeteaseApi.getUserProfile().fold(
+            NeteaseApi.getUserProfile(if (selectedAccountId == null) null else selectedCookie.orEmpty()).fold(
                 onSuccess = { profile ->
                     android.util.Log.d("ProfilePage", "Profile refreshed: ${profile.nickname}")
                     userProfile = profile
@@ -283,7 +287,7 @@ fun ProfilePage(
                                     .size(80.dp)
                                     .clip(RoundedCornerShape(40.dp)),
                                 contentScale = ContentScale.Crop,
-                                error = painterResource(android.R.drawable.ic_menu_gallery)
+                                error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
@@ -432,7 +436,9 @@ fun ProfilePage(
             },
         )
 
-        com.hypermusic.miuix.ui.scan.ShareCredentialQrSheet(showCredentialQr, "wy") { showCredentialQr = false }
+        com.hypermusic.miuix.ui.scan.ShareCredentialQrSheet(showCredentialQr, "wy",
+            accountId = selectedAccountId
+        ) { showCredentialQr = false }
 
         // 导出警告对话框
         OverlayDialog(
@@ -448,7 +454,7 @@ fun ProfilePage(
                             if (exportButtonEnabled) {
                                 showExportWarning = false
                                 if (exportType == "clipboard") {
-                                    val cookies = NeteaseApi.getCookie()
+                                    val cookies = profileCookie()
                                     val jsonCredentials = formatCookiesToJson(cookies)
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     val clip = ClipData.newPlainText("login_credentials", jsonCredentials)

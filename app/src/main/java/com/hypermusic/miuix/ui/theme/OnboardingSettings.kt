@@ -39,4 +39,15 @@ object OnboardingSettings {
             ?.putBoolean("completed", false)?.commit()
         completed = false
     }
+
+    fun requirePlatformLogin() {
+        step = 2
+        prefs?.edit()?.putBoolean("started", true)?.putInt("step", 2)
+            ?.putBoolean("completed", false)?.commit()
+        completed = false
+    }
+
+    fun recoverMissingAccount(agreementAccepted: Boolean, loggedIn: Boolean) {
+        if (completed && agreementAccepted && !loggedIn) requirePlatformLogin()
+    }
 }

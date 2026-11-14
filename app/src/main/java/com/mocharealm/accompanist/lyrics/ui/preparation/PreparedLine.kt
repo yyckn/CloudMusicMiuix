@@ -26,9 +26,11 @@ internal constructor(
         private set
 
     init {
+        val groupEnd = maxOf(source.end, (before + after).maxOfOrNull { it.source.end } ?: source.end)
         for (child in before + after) {
-            child.visibilityStart = minOf(child.source.start, source.start)
-            child.visibilityEnd = maxOf(child.source.end, source.end)
+            // Late backing vocals appear with their owner; early vocals reveal at their own cue.
+            child.visibilityStart = minOf(source.start, child.source.start)
+            child.visibilityEnd = groupEnd
             child.revealFromBottom = child.source.start < source.start
         }
     }

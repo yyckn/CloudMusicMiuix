@@ -24,6 +24,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -32,9 +34,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
 import com.hypermusic.miuix.ui.components.BlurredBar
+import com.hypermusic.miuix.R
+import com.hypermusic.miuix.ui.components.SettingsItemIcon
 import com.hypermusic.miuix.ui.components.pageLayerBackdrop
 import com.hypermusic.miuix.ui.components.rememberPageBlurBackdrop
-import coil.compose.AsyncImage
+import com.hypermusic.miuix.ui.components.AsyncImage
 import com.hypermusic.miuix.data.api.NeteaseApi
 import com.hypermusic.miuix.data.model.UserProfile
 import top.yukonga.miuix.kmp.basic.BasicComponent
@@ -65,6 +69,8 @@ import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.icon.extended.Music
 import top.yukonga.miuix.kmp.icon.extended.Playlist
 import top.yukonga.miuix.kmp.icon.extended.Info
+import top.yukonga.miuix.kmp.icon.extended.Download
+import top.yukonga.miuix.kmp.icon.extended.File
 
 
 @Composable
@@ -76,6 +82,8 @@ fun SettingsPage(
     onAppIconClick: () -> Unit = {},
     onPlayPageSettingsClick: () -> Unit = {},
     onSongSettingsClick: () -> Unit = {},
+    onCacheSettingsClick: () -> Unit = {},
+    onDownloadSettingsClick: () -> Unit = {},
     onAboutClick: () -> Unit,
     onLyriconAdapterClick: () -> Unit = {},
     onLyricSettingsClick: () -> Unit = {},
@@ -83,12 +91,39 @@ fun SettingsPage(
     onSearchClick: () -> Unit = {},
     showSearchAction: Boolean = true,
     profileVersion: Int = 0,
+    onExtraAccountChanged: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val isQq = com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ
+    val platform = com.hypermusic.miuix.data.api.PlatformManager.current
+    val isQq = platform == com.hypermusic.miuix.data.api.MusicPlatform.QQ
+    val isNetease = platform == com.hypermusic.miuix.data.api.MusicPlatform.NETEASE
     val qqName = com.hypermusic.miuix.data.api.QqMusicApi.accountName
     val scrollBehavior = MiuixScrollBehavior()
     val context = LocalContext.current
+    var extraAccountRevision by remember { mutableIntStateOf(0) }
+    var showExtraLogout by remember { mutableStateOf(false) }
+    val additionalRevision = com.hypermusic.miuix.data.api.AdditionalAccounts.revision.intValue
+    val extraStore = remember(platform) { if (platform in setOf(com.hypermusic.miuix.data.api.MusicPlatform.BODIAN, com.hypermusic.miuix.data.api.MusicPlatform.KUGOU, com.hypermusic.miuix.data.api.MusicPlatform.QISHUI)) com.hypermusic.miuix.data.api.AdditionalAccounts(context, platform) else null }
+    val extraMultiEnabled = remember(platform, additionalRevision) { extraStore?.enabled == true }
+    val extraAccount = remember(platform, profileVersion, extraAccountRevision, additionalRevision) {
+        runCatching {
+            when (platform) {
+                com.hypermusic.miuix.data.api.MusicPlatform.BODIAN -> {
+                    val api = com.hypermusic.miuix.data.api.BodianClient(context)
+                    com.hypermusic.miuix.data.api.BodianAuth(context, api).currentAccount()?.let { Triple(it.nickname.ifBlank { it.uid }, it.uid, it.avatar) }
+                }
+                com.hypermusic.miuix.data.api.MusicPlatform.KUGOU -> {
+                    val api = com.hypermusic.miuix.data.api.KugouClient(context)
+                    com.hypermusic.miuix.data.api.KugouAuth(context, api).account()?.let { Triple(it.nickname.ifBlank { "酷狗音乐账号" }, it.userId, it.avatar) }
+                }
+                com.hypermusic.miuix.data.api.MusicPlatform.QISHUI -> {
+                    val api = com.hypermusic.miuix.data.api.QishuiClient(context)
+                    com.hypermusic.miuix.data.api.QishuiAuth(context, api).account()?.let { Triple(it.nickname.ifBlank { it.userId }, it.userId, it.avatar) }
+                }
+                else -> null
+            }
+        }
+    }
     var userProfile by remember { mutableStateOf<UserProfile?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
     var isMultiAccountEnabled by remember { 
@@ -131,9 +166,9 @@ fun SettingsPage(
     }
 
     // 加载用户信息
-    LaunchedEffect(isLoggedIn, isQq, profileVersion) {
-        if (isQq || !isLoggedIn) userProfile = null
-        if (isLoggedIn && !isQq) {
+    LaunchedEffect(isLoggedIn, platform, profileVersion) {
+        if (!isNetease || !isLoggedIn) userProfile = null
+        if (isLoggedIn && isNetease) {
             // 先从缓存加载
             val cachedProfile = NeteaseApi.getUserProfileFromCache()
             if (cachedProfile != null) {
@@ -159,7 +194,7 @@ fun SettingsPage(
                 android.widget.Toast.makeText(context, it.message ?: "刷新QQ账号失败", android.widget.Toast.LENGTH_SHORT).show()
             }
             isRefreshing = false
-        } else if (isRefreshing && isLoggedIn && !isQq) {
+        } else if (isRefreshing && isLoggedIn && isNetease) {
             NeteaseApi.getUserProfile().fold(
                 onSuccess = { profile ->
                     userProfile = profile
@@ -215,7 +250,36 @@ fun SettingsPage(
             ) {
                 item { Spacer(modifier = Modifier.size(12.dp)) }
                 item { SmallTitle("账号") }
-                if (isQq) {
+                if (!isQq && !isNetease) {
+                    item {
+                        Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                            val account = extraAccount.getOrNull()
+                            if (!extraMultiEnabled || account == null) BasicComponent(
+                                title = if (extraAccount.isFailure) "无法读取账号" else account?.first ?: "点击登录",
+                                summary = if (extraAccount.isFailure) extraAccount.exceptionOrNull()?.message ?: "请重试" else if (account == null) "登录后享受完整音乐体验" else "账号：${account.second}",
+                                startAction = {
+                                    if (!account?.third.isNullOrBlank()) {
+                                        AsyncImage(model = account?.third, contentDescription = "头像", modifier = Modifier.size(48.dp).clip(CircleShape))
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                    }
+                                },
+                                onClick = { if (account == null && extraAccount.isSuccess) onLoginClick() else if (account != null) showExtraLogout = true }
+                            )
+                            if (account != null || extraMultiEnabled) {
+                                SwitchPreference(checked = extraMultiEnabled, title = "多账号切换",
+                                    summary = if (extraMultiEnabled) "已开启" else "未开启",
+                                    startAction = { Icon(MiuixIcons.Contacts, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
+                                    onCheckedChange = { enabled ->
+                                        if (!enabled && (extraStore?.accounts()?.size ?: 0) > 1) showAccountLimitDialog = true
+                                        else extraStore?.enabled = enabled
+                                    })
+                                if (extraMultiEnabled) ArrowPreference(title = "管理多账号", summary = "添加、切换和管理账号",
+                                    startAction = { Icon(MiuixIcons.ConvertFile, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
+                                    onClick = onManageAccountsClick)
+                            }
+                        }
+                    }
+                } else if (isQq) {
                     item {
                         Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                             if (qqName == null || !isQqMultiAccountEnabled) {
@@ -230,21 +294,19 @@ fun SettingsPage(
                                                 AsyncImage(model = avatar, contentDescription = "头像",
                                                     modifier = Modifier.size(48.dp).clip(RoundedCornerShape(24.dp)),
                                                     contentScale = ContentScale.Crop,
-                                                    error = painterResource(android.R.drawable.ic_menu_gallery))
+                                                    error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter())
                                                 Spacer(modifier = Modifier.width(16.dp))
                                             }
                                         },
                                         onClick = onProfileClick
                                     ) {
-                                        Text(text = androidx.compose.ui.text.buildAnnotatedString {
-                                            append(qqName)
-                                            account?.let {
-                                                pushStyle(androidx.compose.ui.text.SpanStyle(color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f), fontWeight = androidx.compose.ui.text.font.FontWeight.Normal))
-                                                append(if (it.credential.loginType == 1) "（微信登录）" else "（QQ登录）")
-                                                pop()
-                                            }
-                                        }, fontSize = MiuixTheme.textStyles.headline1.fontSize,
-                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text(qqName, fontSize = MiuixTheme.textStyles.headline1.fontSize,
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                            account?.let { com.hypermusic.miuix.ui.components.AccountLoginTag(
+                                                if (it.credential.loginType == 1) "微信登录" else "QQ登录") }
+                                        }
                                         Text(text = "查看个人资料", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                                             style = MiuixTheme.textStyles.footnote1)
                                     }
@@ -290,7 +352,7 @@ fun SettingsPage(
                                                 .size(48.dp)
                                                 .clip(RoundedCornerShape(24.dp)),
                                             contentScale = ContentScale.Crop,
-                                            error = painterResource(android.R.drawable.ic_menu_gallery)
+                                            error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
                                         )
                                         Spacer(modifier = Modifier.width(16.dp))
                                     }
@@ -336,18 +398,17 @@ fun SettingsPage(
                             .padding(bottom = 12.dp)
                     ) {
                         ArrowPreference(
-                            title = "界面设置", startAction = { Icon(MiuixIcons.Sidebar, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
+                            title = "主题设置", startAction = { Icon(MiuixIcons.Sidebar, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
                             summary = "主题色、底栏等",
                             onClick = onThemeSettingsClick
                         )
                         ArrowPreference(
-                            title = "应用图标和名称", startAction = { Icon(MiuixIcons.Photos, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
-                            summary = "音符、网易云图标",
+                            title = "应用图标和名称", startAction = { SettingsItemIcon(R.drawable.ic_md3_broken_image); Spacer(Modifier.width(12.dp)) },
                             onClick = onAppIconClick
                         )
                         ArrowPreference(
                             title = "播放页设置", startAction = { Icon(MiuixIcons.Tune, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
-                            summary = "歌词样式、封面样式等",
+                            summary = "歌词、快捷键等",
                             onClick = onPlayPageSettingsClick
                         )
                     }
@@ -360,13 +421,13 @@ fun SettingsPage(
                             .padding(bottom = 12.dp)
                     ) {
                         ArrowPreference(
-                            title = "歌曲设置", startAction = { Icon(MiuixIcons.Music, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
-                            summary = "音质、播放速度",
+                            title = "音频设置", startAction = { Icon(MiuixIcons.Music, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
+                            summary = "音质、播放速度等",
                             onClick = onSongSettingsClick
                         )
                         ArrowPreference(
                             title = "歌词设置", startAction = { Icon(MiuixIcons.Playlist, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
-                            summary = "歌词来源等",
+                            summary = "歌词来源、逐字歌词等",
                             onClick = onLyricSettingsClick
                         )
                         ArrowPreference(
@@ -374,6 +435,13 @@ fun SettingsPage(
                             startAction = { Icon(Icons.Filled.Link, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) },
                             onClick = onLyriconAdapterClick
                         )
+                    }
+                }
+                item { SmallTitle("缓存和下载") }
+                item {
+                    Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                        ArrowPreference(title = "下载", startAction = { Icon(MiuixIcons.Download, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) }, onClick = onDownloadSettingsClick)
+                        ArrowPreference(title = "缓存", startAction = { Icon(MiuixIcons.File, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) }, onClick = onCacheSettingsClick)
                     }
                 }
                 item { SmallTitle("其他") }
@@ -397,6 +465,21 @@ fun SettingsPage(
         summary = "当前账号数量大于1，需要删除部分账号才能关闭多账号功能。",
         onDismissRequest = { showAccountLimitDialog = false }) {
         TextButton(text = "确定", onClick = { showAccountLimitDialog = false }, modifier = Modifier.fillMaxWidth())
+    }
+    OverlayDialog(show = showExtraLogout, title = "退出账号", summary = "确定退出当前账号吗？",
+        onDismissRequest = { showExtraLogout = false }) {
+        TextButton(text = "取消", onClick = { showExtraLogout = false }, modifier = Modifier.fillMaxWidth())
+        TextButton(text = "退出账号", onClick = {
+            runCatching {
+                when (platform) {
+                    com.hypermusic.miuix.data.api.MusicPlatform.BODIAN -> { val api = com.hypermusic.miuix.data.api.BodianClient(context); com.hypermusic.miuix.data.api.BodianAuth(context, api).logout() }
+                    com.hypermusic.miuix.data.api.MusicPlatform.KUGOU -> { val api = com.hypermusic.miuix.data.api.KugouClient(context); com.hypermusic.miuix.data.api.KugouAuth(context, api).logout() }
+                    com.hypermusic.miuix.data.api.MusicPlatform.QISHUI -> { val api = com.hypermusic.miuix.data.api.QishuiClient(context); com.hypermusic.miuix.data.api.QishuiAuth(context, api).logout() }
+                    else -> Unit
+                }
+            }.onSuccess { extraAccountRevision++; onExtraAccountChanged() }.onFailure { android.widget.Toast.makeText(context, it.message ?: "退出账号失败", android.widget.Toast.LENGTH_SHORT).show() }
+            showExtraLogout = false
+        }, modifier = Modifier.fillMaxWidth())
     }
 
 }

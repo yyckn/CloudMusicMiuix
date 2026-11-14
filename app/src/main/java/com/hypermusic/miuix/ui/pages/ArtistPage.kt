@@ -1,6 +1,11 @@
 package com.hypermusic.miuix.ui.pages
 
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
+import com.hypermusic.miuix.ui.components.rememberPageContentSearch
+import com.hypermusic.miuix.ui.components.PageContentSearchAction
+import com.hypermusic.miuix.ui.components.PageContentSearchBar
+import com.hypermusic.miuix.ui.components.matchesPageQuery
+import com.hypermusic.miuix.ui.components.TrackMoreActions
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,11 +20,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,7 +53,15 @@ import androidx.compose.ui.graphics.Color
 import com.hypermusic.miuix.ui.components.BlurredBar
 import com.hypermusic.miuix.ui.components.pageLayerBackdrop
 import com.hypermusic.miuix.ui.components.rememberPageBlurBackdrop
-import coil.compose.AsyncImage
+import com.hypermusic.miuix.ui.components.sharedCover
+import com.hypermusic.miuix.ui.components.albumCoverKey
+import com.hypermusic.miuix.ui.components.AsyncImage
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import com.hypermusic.miuix.data.api.NeteaseApi
 import com.hypermusic.miuix.data.model.AlbumInfo
 import com.hypermusic.miuix.data.model.ArtistInfo
@@ -90,7 +109,7 @@ fun ArtistPage(
     artistId: String,
     onBackClick: () -> Unit,
     onTrackClick: (Track, List<Track>) -> Unit,
-    onAlbumClick: (Long) -> Unit,
+    onAlbumClick: (Long, String) -> Unit,
     currentTrack: Track? = null,
     currentPlaylist: List<Track> = emptyList(),
     isCurrentTrackLiked: Boolean = false,
@@ -98,8 +117,8 @@ fun ArtistPage(
     onLikeTrack: (Track) -> Unit = {},
     onDownload: (Track) -> Unit = {},
     onDownloadCover: (Track) -> Unit = {},
-    onDownloadAndShare: (Track) -> Unit = {},
-    onDownloadCoverAndShare: (Track) -> Unit = {},
+
+
     onNavigateToArtist: (String) -> Unit = {},
     onNavigateToAlbum: (Long) -> Unit = {},
     onNavigateToComment: (Track) -> Unit = {},
@@ -108,9 +127,85 @@ fun ArtistPage(
     modifier: Modifier = Modifier
 ) {
     val isQq = artistId.startsWith("qqartist_")
+    val isBodian = artistId.startsWith("bodianartist_")
+    val isKugou = artistId.startsWith("kugouartist_")
+    val isQishui = artistId.startsWith("qishuiartist_")
     val qqMid = artistId.removePrefix("qqartist_")
+    val bodianId = artistId.removePrefix("bodianartist_")
+    val kugouId = artistId.removePrefix("kugouartist_")
+    val qishuiId = artistId.removePrefix("qishuiartist_")
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val bodianCatalog = remember(context, isBodian) {
+        if (isBodian) com.hypermusic.miuix.data.api.BodianCatalog(com.hypermusic.miuix.data.api.BodianClient(context)) else null
+    }
+    val kugouCatalog = remember(context, isKugou) {
+        if (isKugou) com.hypermusic.miuix.data.api.KugouCatalog(com.hypermusic.miuix.data.api.KugouClient(context)) else null
+    }
+    val qishuiCatalog = remember(context, isQishui) {
+        if (isQishui) com.hypermusic.miuix.data.api.QishuiCatalog(com.hypermusic.miuix.data.api.QishuiClient(context)) else null
+    }
+    var qishuiSongsLimited by remember(artistId) { mutableStateOf(false) }
+    var qishuiAlbumsLimited by remember(artistId) { mutableStateOf(false) }
+    suspend fun bodianInfo(): Result<ArtistInfo> = try { Result.success(com.hypermusic.miuix.data.api.BodianCatalog.parseArtist(requireNotNull(bodianCatalog).artistDetail(bodianId))) }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
+    suspend fun bodianSongs(offset: Int): Result<com.hypermusic.miuix.data.api.BodianCatalog.Page<Track>> = try {
+        var cursor = offset
+        var page = requireNotNull(bodianCatalog).artistSongs(bodianId, cursor, 50)
+        var attempts = 0
+        while (page.items.isEmpty() && page.hasMore) {
+            check(page.nextOffset > cursor && attempts++ < 200) { "波点音乐歌曲分页异常" }
+            cursor = page.nextOffset
+            page = bodianCatalog.artistSongs(bodianId, cursor, 50)
+        }
+        Result.success(page)
+    }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
+    suspend fun bodianAlbums(offset: Int): Result<com.hypermusic.miuix.data.api.BodianCatalog.Page<AlbumInfo>> = try {
+        var cursor = offset
+        var page = requireNotNull(bodianCatalog).artistAlbums(bodianId, cursor, 50)
+        var attempts = 0
+        while (page.items.isEmpty() && page.hasMore) {
+            check(page.nextOffset > cursor && attempts++ < 200) { "波点音乐专辑分页异常" }
+            cursor = page.nextOffset
+            page = bodianCatalog.artistAlbums(bodianId, cursor, 50)
+        }
+        Result.success(page)
+    }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
+    suspend fun kugouInfo(): Result<ArtistInfo> = try { Result.success(requireNotNull(kugouCatalog).artist(kugouId)) }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
+    suspend fun kugouSongs(offset: Int): Result<List<Track>> = try { Result.success(requireNotNull(kugouCatalog).artistSongs(kugouId, offset, 50)) }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
+    suspend fun kugouAlbums(offset: Int): Result<List<AlbumInfo>> = try { Result.success(requireNotNull(kugouCatalog).artistAlbums(kugouId, offset, 50)) }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
+    suspend fun qishuiInfo(): Result<ArtistInfo> = try { Result.success(com.hypermusic.miuix.data.api.QishuiCatalog.parseArtist(requireNotNull(qishuiCatalog).artistDetail(qishuiId))) }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) { try { Result.success(com.hypermusic.miuix.data.api.QishuiArtistWorks.artist(qishuiId)) }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (fallback: Exception) { Result.failure(fallback) } }
+    suspend fun qishuiSongs(cursor: String): Result<com.hypermusic.miuix.data.api.QishuiArtistWorks.Page<Track>> = try { Result.success(com.hypermusic.miuix.data.api.QishuiArtistWorks.songs(qishuiId, cursor)) }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) {
+            if (cursor.isNotEmpty()) Result.failure(e) else try {
+                val fallback = requireNotNull(qishuiCatalog).artistSongs(qishuiId, 0, 50)
+                qishuiSongsLimited = true
+                Result.success(com.hypermusic.miuix.data.api.QishuiArtistWorks.Page(fallback.items, null, false))
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (fallback: Exception) { Result.failure(fallback) }
+        }
+    suspend fun qishuiAlbums(cursor: String): Result<com.hypermusic.miuix.data.api.QishuiArtistWorks.Page<AlbumInfo>> = try { Result.success(com.hypermusic.miuix.data.api.QishuiArtistWorks.albums(qishuiId, cursor)) }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) {
+            if (cursor.isNotEmpty()) Result.failure(e) else try {
+                val fallback = com.hypermusic.miuix.data.api.QishuiShareAlbum.artistAlbums(qishuiId)
+                qishuiAlbumsLimited = true
+                Result.success(com.hypermusic.miuix.data.api.QishuiArtistWorks.Page(fallback, null, false))
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (fallback: Exception) { Result.failure(fallback) }
+        }
     val songsPageSize = if (isQq) 30 else 50
     val scrollBehavior = MiuixScrollBehavior()
+    val pageSearch = rememberPageContentSearch("artist:$artistId")
     val pullToRefreshState = rememberPullToRefreshState()
     var isRefreshing by remember { mutableStateOf(false) }
     var artistInfo by remember { mutableStateOf<ArtistInfo?>(null) }
@@ -119,11 +214,19 @@ fun ArtistPage(
     var isLoading by remember { mutableStateOf(true) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var songsOffset by remember { mutableIntStateOf(0) }
+    var qishuiSongsCursor by remember(artistId) { mutableStateOf("") }
+    var qishuiAlbumsCursor by remember(artistId) { mutableStateOf("") }
+    val qishuiSongCursors = remember(artistId) { mutableSetOf("") }
+    val qishuiAlbumCursors = remember(artistId) { mutableSetOf("") }
     var albumsOffset by remember { mutableIntStateOf(0) }
     var hasMoreSongs by remember { mutableStateOf(true) }
     var hasMoreAlbums by remember { mutableStateOf(true) }
     var isLoadingMoreSongs by remember { mutableStateOf(false) }
     var isLoadingMoreAlbums by remember { mutableStateOf(false) }
+    var moreSongsError by remember(artistId) { mutableStateOf(false) }
+    var moreAlbumsError by remember(artistId) { mutableStateOf(false) }
+    var songsLoadError by remember(artistId) { mutableStateOf(false) }
+    var albumsLoadError by remember(artistId) { mutableStateOf(false) }
     var loadMoreSongsJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var loadMoreAlbumsJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -134,43 +237,73 @@ fun ArtistPage(
     var albumArtist by remember { mutableStateOf<String?>(null) }
     var albumArtistId by remember { mutableStateOf<Long?>(null) }
     val listState = rememberLazyListState()
-    val currentTrackIndex = remember(artistSongs, currentTrack) {
-        artistSongs.indexOfFirst { it.id == currentTrack?.id }
+    val searchListState = rememberLazyListState()
+    val displayedListState = if (pageSearch.active) searchListState else listState
+    val visibleSongs = remember(artistSongs, pageSearch.query) {
+        artistSongs.filter { matchesPageQuery(pageSearch.query, it.title, it.artist, it.album) }
     }
+    val visibleAlbums = remember(artistAlbums, pageSearch.query) {
+        artistAlbums.filter { matchesPageQuery(pageSearch.query, it.name, it.artist) }
+    }
+    LaunchedEffect(pageSearch.query, selectedTab) { searchListState.scrollToItem(0) }
+    val currentTrackIndex = remember(visibleSongs, currentTrack) {
+        visibleSongs.indexOfFirst { it.id == currentTrack?.id && it.source == currentTrack.source }
+    }
+    val avatarContext = LocalContext.current
+    val avatarSize = with(LocalDensity.current) { 240.dp.roundToPx() }
+    val artistAvatar = rememberAsyncImagePainter(
+        model = remember(avatarContext, artistInfo?.picUrl, avatarSize) {
+            ImageRequest.Builder(avatarContext).data(artistInfo?.picUrl).size(avatarSize).build()
+        },
+        imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(avatarContext, com.hypermusic.miuix.data.cache.ImageCaches.Kind.ARTIST),
+        error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter(),
+        fallback = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
+    )
 
     // 获取专辑歌手信息
-    LaunchedEffect(selectedTrack?.albumId) {
+    LaunchedEffect(selectedTrack?.source, selectedTrack?.albumId) {
+        albumArtist = null
+        albumArtistId = null
         val albumIdStr = selectedTrack?.albumId?.removePrefix("nealbum_")
         val albumIdNum = albumIdStr?.toLongOrNull()
-        if (!isQq && albumIdNum != null) {
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                com.hypermusic.miuix.data.api.NeteaseApi.getAlbumDetail(albumIdNum.toString()).fold(
-                    onSuccess = { (albumInfo, _) ->
-                        albumArtist = albumInfo.artist.ifEmpty { null }
-                        albumArtistId = if (albumInfo.artistId > 0) albumInfo.artistId else null
-                    },
-                    onFailure = {
-                        albumArtist = null
-                        albumArtistId = null
-                    }
-                )
+        if (selectedTrack?.source == "netease" && albumIdNum != null) {
+            com.hypermusic.miuix.data.api.NeteaseApi.getAlbumDetail(albumIdNum.toString()).onSuccess { (albumInfo, _) ->
+                albumArtist = albumInfo.artist.ifEmpty { null }
+                albumArtistId = albumInfo.artistId.takeIf { it > 0 }
             }
-        } else {
-            albumArtist = null
-            albumArtistId = null
         }
     }
 
     BackHandler(enabled = isBackHandlerEnabled) {
-        onBackClick()
+        if (pageSearch.active) pageSearch.close() else onBackClick()
     }
 
     // 加载更多单曲
     fun loadMoreSongs() {
         if (isLoading || isLoadingMoreSongs || !hasMoreSongs) return
+        moreSongsError = false
         isLoadingMoreSongs = true
         loadMoreSongsJob = coroutineScope.launch {
-            val result = if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistSongs(qqMid, offset = songsOffset)
+            if (isQishui) {
+                qishuiSongs(qishuiSongsCursor).fold(onSuccess = { page ->
+                    qishuiSongCursors.add(qishuiSongsCursor)
+                    artistSongs = (artistSongs + page.items).distinctBy { it.id }
+                    hasMoreSongs = page.more && page.cursor != null && page.cursor !in qishuiSongCursors
+                    qishuiSongsCursor = page.cursor.orEmpty()
+                }, onFailure = { moreSongsError = true })
+                isLoadingMoreSongs = false
+                return@launch
+            }
+            if (isBodian) {
+                bodianSongs(songsOffset).fold(onSuccess = { page ->
+                    artistSongs = artistSongs + page.items
+                    hasMoreSongs = page.hasMore && page.nextOffset > songsOffset
+                    songsOffset = page.nextOffset
+                }, onFailure = { moreSongsError = true })
+                isLoadingMoreSongs = false
+                return@launch
+            }
+            val result = if (isKugou) kugouSongs(songsOffset) else if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistSongs(qqMid, offset = songsOffset)
                 else NeteaseApi.getArtistSongs(artistId, offset = songsOffset)
             result.fold(
                 onSuccess = { songs ->
@@ -182,7 +315,7 @@ fun ArtistPage(
                         if (songs.size < songsPageSize) hasMoreSongs = false
                     }
                 },
-                onFailure = { hasMoreSongs = false }
+                onFailure = { moreSongsError = true }
             )
             isLoadingMoreSongs = false
         }
@@ -191,9 +324,29 @@ fun ArtistPage(
     // 加载更多专辑
     fun loadMoreAlbums() {
         if (isLoading || isLoadingMoreAlbums || !hasMoreAlbums) return
+        moreAlbumsError = false
         isLoadingMoreAlbums = true
         loadMoreAlbumsJob = coroutineScope.launch {
-            val result = if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistAlbums(qqMid, offset = albumsOffset)
+            if (isQishui) {
+                qishuiAlbums(qishuiAlbumsCursor).fold(onSuccess = { page ->
+                    qishuiAlbumCursors.add(qishuiAlbumsCursor)
+                    artistAlbums = (artistAlbums + page.items).distinctBy { it.id }
+                    hasMoreAlbums = page.more && page.cursor != null && page.cursor !in qishuiAlbumCursors
+                    qishuiAlbumsCursor = page.cursor.orEmpty()
+                }, onFailure = { moreAlbumsError = true })
+                isLoadingMoreAlbums = false
+                return@launch
+            }
+            if (isBodian) {
+                bodianAlbums(albumsOffset).fold(onSuccess = { page ->
+                    artistAlbums = artistAlbums + page.items
+                    hasMoreAlbums = page.hasMore && page.nextOffset > albumsOffset
+                    albumsOffset = page.nextOffset
+                }, onFailure = { moreAlbumsError = true })
+                isLoadingMoreAlbums = false
+                return@launch
+            }
+            val result = if (isKugou) kugouAlbums(albumsOffset) else if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistAlbums(qqMid, offset = albumsOffset)
                 else NeteaseApi.getArtistAlbums(artistId, offset = albumsOffset)
             result.fold(
                 onSuccess = { albums ->
@@ -205,7 +358,7 @@ fun ArtistPage(
                         if (albums.size < 50) hasMoreAlbums = false
                     }
                 },
-                onFailure = { hasMoreAlbums = false }
+                onFailure = { moreAlbumsError = true }
             )
             isLoadingMoreAlbums = false
         }
@@ -217,16 +370,26 @@ fun ArtistPage(
         loadMoreAlbumsJob?.cancel()
         isLoadingMoreSongs = false
         isLoadingMoreAlbums = false
+        moreSongsError = false
+        moreAlbumsError = false
+        songsLoadError = false
+        albumsLoadError = false
         isLoading = true
         artistInfo = null
         artistSongs = emptyList()
         artistAlbums = emptyList()
         songsOffset = 0
         albumsOffset = 0
+        qishuiSongsCursor = ""
+        qishuiAlbumsCursor = ""
+        qishuiSongsLimited = false
+        qishuiAlbumsLimited = false
+        qishuiSongCursors.clear(); qishuiSongCursors.add("")
+        qishuiAlbumCursors.clear(); qishuiAlbumCursors.add("")
         hasMoreSongs = true
         hasMoreAlbums = true
         // 获取歌手信息
-        val infoResult = if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistInfo(qqMid) else NeteaseApi.getArtistInfo(artistId)
+        val infoResult = if (isQishui) qishuiInfo() else if (isKugou) kugouInfo() else if (isBodian) bodianInfo() else if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistInfo(qqMid) else NeteaseApi.getArtistInfo(artistId)
         infoResult.fold(
             onSuccess = { info ->
                 artistInfo = info
@@ -234,57 +397,104 @@ fun ArtistPage(
             onFailure = { /* Handle error */ }
         )
         // 获取歌手单曲
-        val songsResult = if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistSongs(qqMid) else NeteaseApi.getArtistSongs(artistId)
+        val songsResult = if (isBodian) bodianSongs(0).map { page ->
+            songsOffset = page.nextOffset
+            hasMoreSongs = page.hasMore && page.nextOffset > 0
+            page.items
+        } else if (isQishui) qishuiSongs("").map { page ->
+            qishuiSongsCursor = page.cursor.orEmpty(); hasMoreSongs = page.more; page.items
+        } else if (isKugou) kugouSongs(0) else if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistSongs(qqMid) else NeteaseApi.getArtistSongs(artistId)
         songsResult.fold(
             onSuccess = { songs ->
                 artistSongs = songs
-                songsOffset = songs.size
-                if (songs.size < songsPageSize) hasMoreSongs = false
+                if (!isBodian && !isQishui) {
+                    songsOffset = songs.size
+                    if (songs.size < songsPageSize) hasMoreSongs = false
+                }
             },
-            onFailure = { hasMoreSongs = false }
+            onFailure = { hasMoreSongs = false; songsLoadError = true }
         )
         // 获取歌手专辑
-        val albumsResult = if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistAlbums(qqMid) else NeteaseApi.getArtistAlbums(artistId)
+        val albumsResult = if (isBodian) bodianAlbums(0).map { page ->
+            albumsOffset = page.nextOffset
+            hasMoreAlbums = page.hasMore && page.nextOffset > 0
+            page.items
+        } else if (isQishui) qishuiAlbums("").map { page ->
+            qishuiAlbumsCursor = page.cursor.orEmpty(); hasMoreAlbums = page.more; page.items
+        } else if (isKugou) kugouAlbums(0) else if (isQq) com.hypermusic.miuix.data.api.QqMusicApi.getArtistAlbums(qqMid) else NeteaseApi.getArtistAlbums(artistId)
         albumsResult.fold(
             onSuccess = { albums ->
                 artistAlbums = albums
-                albumsOffset = albums.size
-                if (albums.size < 50) hasMoreAlbums = false
+                if (!isBodian && !isQishui) {
+                    albumsOffset = albums.size
+                    if (albums.size < 50) hasMoreAlbums = false
+                }
             },
-            onFailure = { hasMoreAlbums = false }
+            onFailure = { hasMoreAlbums = false; albumsLoadError = true }
         )
         isLoading = false
         isRefreshing = false
     }
 
+    LaunchedEffect(pageSearch.active, pageSearch.query, selectedTab, isLoading,
+        artistSongs.size, artistAlbums.size, hasMoreSongs, hasMoreAlbums,
+        isLoadingMoreSongs, isLoadingMoreAlbums, moreSongsError, moreAlbumsError) {
+        if (pageSearch.active && pageSearch.query.isNotBlank() && !isLoading) {
+            if (selectedTab == 0 && hasMoreSongs && !isLoadingMoreSongs && !moreSongsError) loadMoreSongs()
+            if (selectedTab == 1 && hasMoreAlbums && !isLoadingMoreAlbums && !moreAlbumsError) loadMoreAlbums()
+        }
+    }
+    val showCollapsedArtistAvatar = artistInfo != null && scrollBehavior.state.collapsedFraction >= 0.99f
     val blurBackdrop = rememberPageBlurBackdrop()
 
     Scaffold(
         modifier = modifier,
         topBar = {
             BlurredBar(backdrop = blurBackdrop) {
-                TopAppBar(
-                    title = artistInfo?.name ?: "",
-                    largeTitle = "歌手",
-                    color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
-                    scrollBehavior = scrollBehavior,
-                    defaultWindowInsetsPadding = false,
-                    navigationIcon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            modifier = Modifier
-                                .padding(start = 8.dp)
-                                .clickable { onBackClick() }
-                        )
+                Box {
+                    TopAppBar(
+                        title = if (showCollapsedArtistAvatar) "" else artistInfo?.name.orEmpty(),
+                        largeTitle = "歌手",
+                        color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
+                        scrollBehavior = scrollBehavior,
+                        actions = { PageContentSearchAction(pageSearch) },
+                        bottomContent = { PageContentSearchBar(pageSearch, if (selectedTab == 0) "搜索歌手的单曲" else "搜索歌手的专辑") },
+                        defaultWindowInsetsPadding = false,
+                        navigationIcon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回",
+                                modifier = Modifier
+                                    .padding(start = 8.dp)
+                                    .clickable { if (pageSearch.active) pageSearch.close() else onBackClick() }
+                            )
+
+                        }
+                    )
+                    if (showCollapsedArtistAvatar) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                                .padding(horizontal = 68.dp)
+                                .height(top.yukonga.miuix.kmp.basic.TopAppBarDefaults.CollapsedHeight),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Image(painter = artistAvatar, contentDescription = "歌手头像",
+                                modifier = Modifier.size(28.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+                            Spacer(Modifier.width(8.dp))
+                            Text(artistInfo?.name.orEmpty(), modifier = Modifier.weight(1f, fill = false),
+                                fontSize = MiuixTheme.textStyles.title3.fontSize, fontWeight = FontWeight.Medium,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
-                )
+                }
             }
         },
         floatingActionButton = {
-            if (!isLoading && selectedTab == 0 && artistSongs.isNotEmpty() && currentTrackIndex >= 0) {
+            if (!pageSearch.active && !isLoading && selectedTab == 0 && artistSongs.isNotEmpty() && currentTrackIndex >= 0) {
                 FloatingActionButton(
-                    onClick = { coroutineScope.launch { listState.animateScrollToItem(currentTrackIndex + 2) } },
+                    onClick = { coroutineScope.launch { displayedListState.animateScrollToItem(currentTrackIndex + 2) } },
                     modifier = Modifier.padding(bottom = 80.dp)
                 ) {
                     Icon(
@@ -297,15 +507,15 @@ fun ArtistPage(
         }
     ) { paddingValues ->
         PullToRefresh(
-            isRefreshing = isRefreshing,
-            onRefresh = { if (!isLoading) { isRefreshing = true; refreshGeneration++ } },
+            isRefreshing = isRefreshing && !pageSearch.active,
+            onRefresh = { if (!pageSearch.active && !isLoading) { isRefreshing = true; refreshGeneration++ } },
             pullToRefreshState = pullToRefreshState,
             topAppBarScrollBehavior = scrollBehavior,
             refreshTexts = listOf("继续下拉以刷新", "松手后刷新", "正在刷新...", "刷新成功"),
             modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
         ) {
         LazyColumn(
-            state = listState,
+            state = displayedListState,
             modifier = Modifier
                 .fillMaxSize()
                 .overScrollVertical()
@@ -315,8 +525,9 @@ fun ArtistPage(
             overscrollEffect = null
         ) {
             // 歌手信息区域
-            item {
-                ArtistInfoHeader(artistInfo = artistInfo, showMvCount = !isQq)
+            if (pageSearch.active && pageSearch.query.isBlank()) return@LazyColumn
+            if (!pageSearch.active) item {
+                ArtistInfoHeader(artistInfo = artistInfo, avatar = artistAvatar, showMvCount = !isQq)
             }
 
             // TabRow
@@ -328,6 +539,10 @@ fun ArtistPage(
                     onTabSelected = { selectedTab = it },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                 )
+            }
+            if (!pageSearch.active && !isLoading && ((selectedTab == 0 && qishuiSongsLimited) || (selectedTab == 1 && qishuiAlbumsLimited))) {
+                item { Text("完整列表暂时不可用，当前显示部分作品", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)) }
             }
 
             // 内容区域
@@ -348,7 +563,7 @@ fun ArtistPage(
                                 )
                             }
                         }
-                    } else if (artistSongs.isEmpty()) {
+                    } else if (visibleSongs.isEmpty()) {
                         item {
                             Box(
                                 modifier = Modifier
@@ -356,16 +571,17 @@ fun ArtistPage(
                                     .height(200.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = "暂无单曲",
-                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                )
+                                if (songsLoadError) TextButton(text = "单曲加载失败，点击重试", onClick = { refreshGeneration++ })
+                                else if (pageSearch.query.isNotBlank() && moreSongsError) TextButton(text = "搜索加载失败，点击重试", onClick = { loadMoreSongs() })
+                                else Text(text = if (pageSearch.query.isNotBlank()) {
+                                    if (hasMoreSongs) "正在搜索…" else "没有找到匹配的单曲"
+                                } else "暂无单曲", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                             }
                         }
                     } else {
-                        itemsIndexed(artistSongs) { index, track ->
+                        itemsIndexed(visibleSongs) { index, track ->
                             // 当滚动到接近底部时触发加载更多
-                            if (index >= artistSongs.size - 5 && hasMoreSongs && !isLoadingMoreSongs) {
+                            if (index >= visibleSongs.size - 5 && hasMoreSongs && !isLoadingMoreSongs && !moreSongsError) {
                                 LaunchedEffect(Unit) {
                                     loadMoreSongs()
                                 }
@@ -377,21 +593,20 @@ fun ArtistPage(
                                 colors = CardDefaults.defaultColors(
                                     color = MiuixTheme.colorScheme.secondaryContainer
                                 ),
-                                pressFeedbackType = PressFeedbackType.Tilt,
+                                pressFeedbackType = PressFeedbackType.Sink,
                                 showIndication = true,
                                 onClick = { onTrackClick(track, artistSongs) }
                             ) {
                                 BasicComponent(
                                     modifier = Modifier.fillMaxWidth(),
                                     startAction = {
-                                        AsyncImage(
-                                            model = track.imgUrl,
+                                        AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.THUMBNAIL), model = track.imgUrl,
                                             contentDescription = track.title,
                                             modifier = Modifier
                                                 .size(48.dp)
                                                 .clip(RoundedCornerShape(8.dp)),
                                             contentScale = ContentScale.Crop,
-                                            error = painterResource(android.R.drawable.ic_menu_gallery)
+                                            error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
                                     },
@@ -475,6 +690,11 @@ fun ArtistPage(
                                 }
                             }
                         }
+                        if (moreSongsError) item {
+                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                TextButton(text = "加载失败，点击重试", onClick = { loadMoreSongs() })
+                            }
+                        }
                     }
                 }
                 1 -> {
@@ -493,7 +713,7 @@ fun ArtistPage(
                                 )
                             }
                         }
-                    } else if (artistAlbums.isEmpty()) {
+                    } else if (visibleAlbums.isEmpty()) {
                         item {
                             Box(
                                 modifier = Modifier
@@ -501,23 +721,25 @@ fun ArtistPage(
                                     .height(200.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = "暂无专辑",
-                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                )
+                                if (albumsLoadError) TextButton(text = "专辑加载失败，点击重试", onClick = { refreshGeneration++ })
+                                else if (pageSearch.query.isNotBlank() && moreAlbumsError) TextButton(text = "搜索加载失败，点击重试", onClick = { loadMoreAlbums() })
+                                else Text(text = if (pageSearch.query.isNotBlank()) {
+                                    if (hasMoreAlbums) "正在搜索…" else "没有找到匹配的专辑"
+                                } else "暂无专辑", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                             }
                         }
                     } else {
-                        itemsIndexed(artistAlbums) { index, album ->
+                        itemsIndexed(visibleAlbums) { index, album ->
                             // 当滚动到接近底部时触发加载更多
-                            if (index >= artistAlbums.size - 5 && hasMoreAlbums && !isLoadingMoreAlbums) {
+                            if (index >= visibleAlbums.size - 5 && hasMoreAlbums && !isLoadingMoreAlbums && !moreAlbumsError) {
                                 LaunchedEffect(Unit) {
                                     loadMoreAlbums()
                                 }
                             }
                             AlbumItem(
                                 album = album,
-                                onClick = { onAlbumClick(album.id) }
+                                onClick = { onAlbumClick(album.id, album.picUrl) },
+                                isQq = isQq
                             )
                         }
                         // 加载更多的指示器
@@ -534,6 +756,11 @@ fun ArtistPage(
                                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                     )
                                 }
+                            }
+                        }
+                        if (moreAlbumsError) item {
+                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                TextButton(text = "加载失败，点击重试", onClick = { loadMoreAlbums() })
                             }
                         }
                     }
@@ -565,70 +792,19 @@ fun ArtistPage(
             LazyColumn(
                 modifier = Modifier.padding(bottom = 32.dp)
             ) {
-                // 歌曲区域
-                item { SmallTitle("歌曲") }
                 item {
-                    Card(
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
-                        colors = CardDefaults.defaultColors(
-                            color = MiuixTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        ArrowPreference(
-                            title = "分享",
-                            startAction = {
-                                Icon(
-                                    imageVector = MiuixIcons.Share,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            },
-                            onClick = {
-                                showMoreSheet = false
-                                selectedTrack?.let { onShare(it) }
-                            }
-                        )
-                        ArrowPreference(
-                            title = if (selectedTrack?.id == currentTrack?.id && selectedTrack?.source == currentTrack?.source && isCurrentTrackLiked) "取消收藏" else "收藏",
-                            startAction = {
-                                Icon(
-                                    imageVector = if (selectedTrack?.id == currentTrack?.id && selectedTrack?.source == currentTrack?.source && isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = if (selectedTrack?.id == currentTrack?.id && selectedTrack?.source == currentTrack?.source && isCurrentTrackLiked) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface
-                                )
-                            },
-                            onClick = {
-                                showMoreSheet = false
-                                if (selectedTrack?.id == currentTrack?.id && selectedTrack?.source == currentTrack?.source && isCurrentTrackLiked) {
-                                    showUnlikeDialog = true
-                                } else {
-                                    selectedTrack?.let(onLikeTrack)
-                                }
-                            }
-                        )
-                        ArrowPreference(
-                            title = "评论",
-                            startAction = {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Comment,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            },
-                            onClick = {
-                                showMoreSheet = false
-                                selectedTrack?.let { track ->
-                                    onNavigateToComment(track)
-                                }
-                            }
-                        )
-                    }
+                    TrackMoreActions(liked = selectedTrack?.id == currentTrack?.id && selectedTrack?.source == currentTrack?.source && isCurrentTrackLiked,
+                        onShare = { showMoreSheet = false; selectedTrack?.let { onShare(it) } },
+                        onLike = {
+                            showMoreSheet = false
+                            if (selectedTrack?.id == currentTrack?.id && selectedTrack?.source == currentTrack?.source && isCurrentTrackLiked) showUnlikeDialog = true
+                            else selectedTrack?.let(onLikeTrack)
+                        },
+                        onComment = { showMoreSheet = false; selectedTrack?.let(onNavigateToComment) })
                 }
 
                 // 歌手与专辑区域
+                item { AddTrackToPlaylistAction(selectedTrack) }
                 item { SmallTitle("歌手与专辑") }
                 item {
                     Card(
@@ -723,20 +899,6 @@ fun ArtistPage(
                             }
                         )
                         ArrowPreference(
-                            title = "下载此歌曲并分享",
-                            startAction = {
-                                Icon(
-                                    imageVector = MiuixIcons.Share,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            },
-                            onClick = {
-                                showMoreSheet = false
-                                selectedTrack?.let(onDownloadAndShare)
-                            }
-                        )
-                        ArrowPreference(
                             title = "下载封面图片",
                             startAction = {
                                 Icon(
@@ -748,20 +910,6 @@ fun ArtistPage(
                             onClick = {
                                 showMoreSheet = false
                                 selectedTrack?.let(onDownloadCover)
-                            }
-                        )
-                        ArrowPreference(
-                            title = "下载封面图片并分享",
-                            startAction = {
-                                Icon(
-                                    imageVector = MiuixIcons.Share,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            },
-                            onClick = {
-                                showMoreSheet = false
-                                selectedTrack?.let(onDownloadCoverAndShare)
                             }
                         )
                     }
@@ -801,9 +949,37 @@ fun ArtistPage(
 }
 
 @Composable
-private fun ArtistInfoHeader(artistInfo: ArtistInfo?, showMvCount: Boolean = true) {
+private fun ArtistInfoHeader(artistInfo: ArtistInfo?, avatar: Painter, showMvCount: Boolean = true) {
     if (artistInfo == null) return
-    
+
+    val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    if (screenWidth < 600) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Image(
+                painter = avatar, contentDescription = artistInfo.name,
+                modifier = Modifier.size((screenWidth * 0.65f).coerceIn(140f, 240f).dp).clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(text = artistInfo.name, style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold,
+                color = MiuixTheme.colorScheme.onSurface, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(Modifier.height(8.dp))
+            Text(text = "${artistInfo.albumSize} 张专辑，${artistInfo.musicSize} 首单曲" + if (showMvCount) "，${artistInfo.mvSize} 部MV" else "",
+                fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            if (artistInfo.briefDesc.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text(text = artistInfo.briefDesc, fontSize = 14.sp,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    modifier = Modifier.fillMaxWidth(), maxLines = 3, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        return
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -811,14 +987,12 @@ private fun ArtistInfoHeader(artistInfo: ArtistInfo?, showMvCount: Boolean = tru
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 歌手图片
-        AsyncImage(
-            model = artistInfo.picUrl,
+        Image(painter = avatar,
             contentDescription = artistInfo.name,
             modifier = Modifier
                 .size(80.dp)
                 .clip(RoundedCornerShape(40.dp)),
-            contentScale = ContentScale.Crop,
-            error = painterResource(android.R.drawable.ic_menu_gallery)
+            contentScale = ContentScale.Crop
         )
         
         Spacer(modifier = Modifier.width(16.dp))
@@ -859,7 +1033,8 @@ private fun ArtistInfoHeader(artistInfo: ArtistInfo?, showMvCount: Boolean = tru
 @Composable
 private fun AlbumItem(
     album: AlbumInfo,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isQq: Boolean
 ) {
     Card(
         modifier = Modifier
@@ -868,21 +1043,21 @@ private fun AlbumItem(
         colors = CardDefaults.defaultColors(
             color = MiuixTheme.colorScheme.secondaryContainer
         ),
-        pressFeedbackType = PressFeedbackType.Tilt,
+        pressFeedbackType = PressFeedbackType.Sink,
         showIndication = true,
         onClick = onClick
     ) {
         BasicComponent(
             modifier = Modifier.fillMaxWidth(),
             startAction = {
-                AsyncImage(
-                    model = album.picUrl,
+                AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.THUMBNAIL), model = album.picUrl,
                     contentDescription = album.name,
                     modifier = Modifier
                         .size(48.dp)
-                        .clip(RoundedCornerShape(8.dp)),
+                        .clip(RoundedCornerShape(8.dp))
+                        .sharedCover(albumCoverKey(album.id, isQq)),
                     contentScale = ContentScale.Crop,
-                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                    error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
                 )
                 Spacer(modifier = Modifier.width(12.dp))
             }

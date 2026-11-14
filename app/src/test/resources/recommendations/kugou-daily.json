@@ -1,0 +1,29 @@
+{
+  "data": {
+    "song_list": [
+      {
+        "hash": "AB05B8F658851282DCB2CBAD548AEB9B",
+        "mixsongid": "590964610",
+        "songid": 485694156,
+        "songname": "唯一",
+        "ori_audio_name": "唯一",
+        "author_name": "G.E.M.邓紫棋",
+        "singerinfo": [
+          {
+            "name": "G.E.M.邓紫棋",
+            "is_publish": "1",
+            "id": "4490"
+          }
+        ],
+        "authors": null,
+        "time_length": 253,
+        "timelength": null,
+        "album_id": "82564821",
+        "album_name": "T.I.M.E.",
+        "sizable_cover": "http://imge.kugou.com/stdmusic/{size}/20240122/20240122143605898824.jpg",
+        "album_info": null,
+        "pay_type": 3
+      }
+    ]
+  }
+}

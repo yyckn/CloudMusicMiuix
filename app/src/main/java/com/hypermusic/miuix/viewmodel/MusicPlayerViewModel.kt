@@ -47,6 +47,7 @@ data class PlayerState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val currentPosition: Long = 0L,
+    val lyricOffsetMs: Long = 0L,
     val duration: Long = 0L,
     val bitrate: Int = 0,
     val audioQuality: String = ""
@@ -67,8 +68,20 @@ internal data class PlatformPlaybackSnapshot(
     @SerializedName(value = "intelligenceTracks", alternate = ["k"]) val intelligenceTracks: List<Track> = emptyList(),
     @SerializedName(value = "intelligenceIndex", alternate = ["l"]) val intelligenceIndex: Int = 0,
     @SerializedName(value = "seed", alternate = ["m"]) val seed: String = "",
-    @SerializedName(value = "playlistId", alternate = ["n"]) val playlistId: String = ""
-)
+    @SerializedName(value = "playlistId", alternate = ["n"]) val playlistId: String = "",
+    @SerializedName("albumPlayback") val albumPlayback: Boolean = false,
+    @SerializedName("additionalRadioId") val additionalRadioId: String? = null,
+    @SerializedName("fmModeLabel") val fmModeLabel: String? = null
+) {
+    internal fun belongsTo(platform: MusicPlatform): Boolean {
+        val source = platform.trackSource
+        return (additionalRadioId == null || additionalRadioId.startsWith("extra:${platform.storageKey}:")) &&
+            (track == null || track.source == source) &&
+            listOf(playlist, original, fmTracks, intelligenceTracks).all { tracks ->
+                tracks.orEmpty().all { it?.source == source }
+            }
+    }
+}
 
 data class RecommendState(
     val playlists: List<RecommendPlaylist> = emptyList(),
@@ -97,18 +110,26 @@ data class PlaylistDetailState(
 data class SearchState(
     val results: List<Track> = emptyList(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val hasMore: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val loadMoreError: String? = null
 )
 
 data class LyricState(
     val lyrics: SongLyrics? = null,
     val source: String? = null,
+    val rawDebugText: String = "",
+    val matchedTrack: Track? = null,
     val upgraded: Boolean = false,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val loadingStartedAt: Long = 0
 )
 
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val radarPlaylistIds = setOf("3136952023", "8402996200", "5320167908", "5327906368", "5362359247", "5300458264", "5341776086")
 
     var playerState by mutableStateOf(PlayerState())
         private set
@@ -129,6 +150,72 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var qqHomeAccountKey: String? = null
     private var qqHomeJob: Job? = null
     private var qqHomeGeneration = 0
+    private val qqFeatureRevisions = mutableMapOf<QqMusicApi.HomeFeature, Int>()
+    private var neteaseDailyRevision = 0
+
+    var qqFavoritePlaylists by mutableStateOf<List<RecommendPlaylist>>(emptyList())
+        private set
+    var qqFavoriteLoading by mutableStateOf(false)
+        private set
+    var qqFavoriteError by mutableStateOf<String?>(null)
+        private set
+    private var qqFavoriteAccountKey: String? = null
+    private var qqFavoriteJob: Job? = null
+    private var qqFavoriteGeneration = 0
+
+    fun loadQqFavorites(force: Boolean = false) {
+        val accountKey = QqMusicApi.dataAccountId?.takeIf { QqMusicApi.isLoggedIn() } ?: "<guest>"
+        if (!force && qqFavoriteAccountKey == accountKey && qqFavoriteError == null) return
+        val changed = qqFavoriteAccountKey != accountKey
+        qqFavoriteAccountKey = accountKey
+        qqFavoriteJob?.cancel()
+        val generation = ++qqFavoriteGeneration
+        if (changed) {
+            qqFavoritePlaylists = emptyList()
+            qqFavoriteError = null
+        }
+        if (accountKey == "<guest>") {
+            qqFavoriteLoading = false
+            return
+        }
+        qqFavoriteLoading = true
+        qqFavoriteJob = viewModelScope.launch {
+            try {
+                val result = QqMusicApi.getUserPlaylists()
+                if (generation != qqFavoriteGeneration) return@launch
+                result.fold(
+                    onSuccess = { qqFavoritePlaylists = it; qqFavoriteError = null },
+                    onFailure = { qqFavoriteError = it.message ?: "加载收藏失败" }
+                )
+            } finally {
+                if (generation == qqFavoriteGeneration) qqFavoriteLoading = false
+            }
+        }
+    }
+
+    var qqFavoriteAlbums by mutableStateOf<List<com.hypermusic.miuix.data.model.AlbumInfo>>(emptyList())
+        private set
+    private var qqAlbumAccount: String? = null
+    private var qqAlbumJob: Job? = null
+    private var qqAlbumGeneration = 0
+
+    fun loadQqFavoriteAlbums(force: Boolean = false) {
+        val account = QqMusicApi.dataAccountId?.takeIf { QqMusicApi.isLoggedIn() }
+        if (!force && account != null && qqAlbumAccount == account) return
+        qqAlbumJob?.cancel()
+        val generation = ++qqAlbumGeneration
+        if (qqAlbumAccount != account) qqFavoriteAlbums = emptyList()
+        qqAlbumAccount = account
+        if (account == null) return
+        qqAlbumJob = viewModelScope.launch {
+            QqMusicApi.getFavoriteAlbums().fold(onSuccess = { albums ->
+                if (generation == qqAlbumGeneration && QqMusicApi.dataAccountId == account) qqFavoriteAlbums = albums
+            }, onFailure = {
+                if (generation == qqAlbumGeneration) qqAlbumAccount = null
+                Log.e("MusicPlayerViewModel", "QQ收藏专辑加载失败: ${it.message}")
+            })
+        }
+    }
 
     fun invalidateQqHome() {
         qqHomeGeneration++
@@ -164,9 +251,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         result.fold({ qqHomePlaylists = it; qqHomeError = null }, { qqHomeError = it.message })
                     }
                     QqMusicApi.HomeFeature.entries.forEach { feature ->
+                        val featureRevision = qqFeatureRevisions[feature] ?: 0
                         launch {
                             val result = QqMusicApi.getHomeFeature(feature)
-                            if (generation == qqHomeGeneration) qqHomeFeatures = qqHomeFeatures + (feature to result)
+                            if (generation == qqHomeGeneration && featureRevision == (qqFeatureRevisions[feature] ?: 0)) {
+                                qqHomeFeatures = qqHomeFeatures + (feature to result)
+                            }
                         }
                     }
                 }
@@ -228,18 +318,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     var playbackSpeed by mutableFloatStateOf(1.0f)
         private set
 
-    // 两个平台的音质选项和偏好分别保存。
-    var neteaseAudioQualityIndex by mutableIntStateOf(0)
-        private set
-    var qqAudioQualityIndex by mutableIntStateOf(0)
-        private set
-    val audioQualityIndex: Int
-        get() = if (PlatformManager.current == MusicPlatform.QQ) qqAudioQualityIndex else neteaseAudioQualityIndex
-
+    private var platformQualityIndices by mutableStateOf<Map<MusicPlatform, Int>>(emptyMap())
+    private fun resolvedAudioQualityIndex(platform: MusicPlatform) = platformQualityIndices[platform] ?: 0
+    // Each platform stores its own API/menu quality index.
+    val neteaseAudioQualityIndex get() = resolvedAudioQualityIndex(MusicPlatform.NETEASE)
+    val qqAudioQualityIndex get() = resolvedAudioQualityIndex(MusicPlatform.QQ)
+    val bodianAudioQualityIndex get() = resolvedAudioQualityIndex(MusicPlatform.BODIAN)
+    val kugouAudioQualityIndex get() = resolvedAudioQualityIndex(MusicPlatform.KUGOU)
+    val qishuiAudioQualityIndex get() = resolvedAudioQualityIndex(MusicPlatform.QISHUI)
+    fun platformAudioQualityIndex(platform: MusicPlatform): Int = resolvedAudioQualityIndex(platform)
+    val audioQualityIndex get() = platformAudioQualityIndex(PlatformManager.current)
     // 随身听FM模式
     var isFMMode by mutableStateOf(false)
         private set
     private var fmPlaylist: List<Track> = emptyList()
+    internal val additionalRecommendations = com.hypermusic.miuix.data.api.AdditionalRecommendations(application)
+    private var additionalRadioId: String? = null
+    var fmModeLabel by mutableStateOf("私人FM")
+        private set
+    private var additionalRadioJob: Job? = null
     private var fmIndex by mutableIntStateOf(0)
 
     // 心动模式
@@ -277,15 +374,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var qqGuessMode = false
     private var qqGuessLoadJob: Job? = null
     private var playbackGeneration = 0
+    private var playTrackRequestId = 0
     private var pendingPlatformRestore: MusicPlatform? = null
     private val initialPlaybackReady = kotlinx.coroutines.CompletableDeferred<Unit>()
     private var dailyShortcutJob: Job? = null
     private var clearServiceOnConnect = false
     private var pendingTrack: Track? = null
+    private var albumPlayback = false
     private var pendingPosition = 0L
     private var pendingResume = false
     private var lyricsLoadJob: kotlinx.coroutines.Job? = null
     private var lyricsLoadGeneration = 0
+    private var lyricsTrackKey: Pair<String, String>? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -297,6 +397,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 clearServiceOnConnect = false
             }
             mediaPlaybackService?.setPlaybackSpeed(playbackSpeed)
+            mediaPlaybackService?.setAlbumPlayback(albumPlayback)
             
             // 设置回调，处理系统控制器的上一首/下一首
             mediaPlaybackService?.onTrackChangedListener = object : MediaPlaybackService.OnTrackChangedListener {
@@ -311,6 +412,34 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             // 设置回调，同步播放状态（处理音频焦点丢失等情况）
             mediaPlaybackService?.onPlaybackStateChanged = { isPlaying ->
                 playerState = playerState.copy(isPlaying = isPlaying)
+            }
+            mediaPlaybackService?.onAudioFormatChanged = { track, format, cacheFormat ->
+                if (track.source == "bodian" && playerState.currentTrack?.id == track.id && playerState.currentTrack?.source == track.source) {
+                    val bitrate = format.averageBitrate.takeIf { it > 0 } ?: format.peakBitrate.takeIf { it > 0 } ?: 0
+                    val quality = com.hypermusic.miuix.data.model.bodianActualQuality(format.sampleMimeType == "audio/flac", bitrate)
+                    if (quality != "未知音质") {
+                        playerState = playerState.copy(bitrate = bitrate, audioQuality = quality)
+                        viewModelScope.launch(Dispatchers.IO) {
+                            com.hypermusic.miuix.data.cache.AudioCache.updateActual(getApplication(), track, cacheFormat, bitrate, quality)
+                        }
+                    }
+                }
+            }
+            mediaPlaybackService?.onCachedPlaybackError = { track, position, resume, format ->
+                viewModelScope.launch {
+                    val account = try { playbackAccountFor(track) } catch (e: Exception) {
+                        _toastMessage.trySend(e.message ?: "无法读取账号信息")
+                        return@launch
+                    }
+                    com.hypermusic.miuix.data.cache.AudioCache.forget(getApplication(), track, account, requestedQualityFor(track))
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            val cache = com.hypermusic.miuix.data.cache.AudioCache.get(getApplication())
+                            cache.removeResource(com.hypermusic.miuix.data.cache.AudioCache.key(track.source, track.id, format))
+                        }
+                    }
+                    if (playerState.currentTrack == track) prepareTrack(track, position, resume)
+                }
             }
             mediaPlaybackService?.onNotificationClose = { clearPlaybackForPlatformSwitch() }
             mediaPlaybackService?.onNotificationFavorite = { track ->
@@ -341,6 +470,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         override fun onServiceDisconnected(name: ComponentName?) {
             mediaPlaybackService?.onTrackChangedListener = null
             mediaPlaybackService?.onPlaybackStateChanged = null
+            mediaPlaybackService?.onAudioFormatChanged = null
+            mediaPlaybackService?.onCachedPlaybackError = null
             mediaPlaybackService?.onNotificationClose = null
             mediaPlaybackService?.onNotificationFavorite = null
             mediaPlaybackService = null
@@ -355,16 +486,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         // 加载保存的播放模式
         playMode = prefs.getInt("play_mode", 0)
         playbackSpeed = prefs.getFloat("playback_speed", 1.0f).coerceIn(0.1f, 5f)
-        val legacyQuality = prefs.getInt("audio_quality_index", 0)
-        neteaseAudioQualityIndex = prefs.getInt("netease_audio_quality_index", AudioQuality.migrateNeteaseIndex(legacyQuality)).coerceIn(AudioQuality.neteaseOptions.indices)
-        qqAudioQualityIndex = prefs.getInt("qq_audio_quality_index", legacyQuality.coerceIn(AudioQuality.qqOptions.indices)).coerceIn(AudioQuality.qqOptions.indices)
-
+        com.hypermusic.miuix.data.model.PlaybackQualityPreferences.migrate(prefs)
+        platformQualityIndices = MusicPlatform.entries.associateWith {
+            com.hypermusic.miuix.data.model.PlaybackQualityPreferences.resolve(prefs, it)
+        }
         bindMediaService()
         startProgressUpdate()
 
         // 先应用保存的账号，再发起所有依赖登录态的数据/播放请求，
         // 否则启动瞬间仍会使用最后登录账号（NeteaseApi.init 载入的 cookies）。
-        viewModelScope.launch {
+        // Post startup work until construction has initialized the state declared below this init block.
+        viewModelScope.launch(Dispatchers.Main) {
           try {
             val initialGeneration = playbackGeneration
             if (PlatformManager.current == MusicPlatform.NETEASE) applySavedAccounts()
@@ -383,25 +515,36 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private fun snapshotKey(platform: MusicPlatform) = if (platform == MusicPlatform.QQ) "playback_snapshot_qq" else "playback_snapshot_netease"
+    private fun snapshotKey(platform: MusicPlatform) = "playback_snapshot_${platform.storageKey}"
 
-    private fun savePlatformPlayback(platform: MusicPlatform) {
+    private fun savePlatformPlayback(platform: MusicPlatform, positionOverride: Long? = null) {
         val track = playerState.currentTrack
+        // Keep the last usable queue if a newly opened radio is still fetching its first song.
+        if (track == null && playerState.isLoading) return
+        val serviceTrack = mediaPlaybackService?.getCurrentTrack()
+        val servicePosition = if (track != null && serviceTrack?.id == track.id && serviceTrack.source == track.source)
+            mediaPlaybackService?.getCurrentPosition() else null
         val snapshot = PlatformPlaybackSnapshot(track, currentPlaylist.toList(), originalPlaylist.toList(),
-            mediaPlaybackService?.getCurrentPosition() ?: playerState.currentPosition, playMode,
+            positionOverride ?: servicePosition ?: playerState.currentPosition, playMode,
             isFMMode, isIntelligenceMode, qqGuessMode, fmPlaylist.toList(), fmIndex,
-            intelligencePlaylist.toList(), intelligenceIndex, intelligenceSeedSongId, intelligencePlaylistId)
+            intelligencePlaylist.toList(), intelligenceIndex, intelligenceSeedSongId, intelligencePlaylistId, albumPlayback, additionalRadioId, fmModeLabel)
         prefs.edit().putString(snapshotKey(platform), gson.toJson(snapshot)).apply()
     }
 
     private fun restorePlatformPlayback(platform: MusicPlatform): Boolean {
         val raw = prefs.getString(snapshotKey(platform), null) ?: return false
         val snapshot = runCatching { gson.fromJson(raw, PlatformPlaybackSnapshot::class.java) }.getOrNull() ?: return false
+        if (!snapshot.belongsTo(platform)) return false
         val track = snapshot.track
+        albumPlayback = snapshot.albumPlayback
+        mediaPlaybackService?.setAlbumPlayback(albumPlayback)
         currentPlaylist = snapshot.playlist.orEmpty()
         originalPlaylist = snapshot.original.orEmpty()
         playMode = snapshot.mode.coerceIn(0, 2)
         isFMMode = snapshot.fm
+        additionalRadioId = snapshot.additionalRadioId?.takeIf { it.startsWith("extra:${platform.storageKey}:") }
+        fmModeLabel = snapshot.fmModeLabel?.takeIf { it.isNotBlank() }
+            ?: com.hypermusic.miuix.data.model.radioModeLabel(additionalRadioId, additionalRadioId?.let { additionalRecommendations.card(it)?.title })
         isIntelligenceMode = snapshot.intelligence
         qqGuessMode = snapshot.guess
         fmPlaylist = snapshot.fmTracks.orEmpty(); fmIndex = snapshot.fmIndex.coerceAtLeast(0)
@@ -430,7 +573,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun clearPlaybackForPlatformSwitch(clearSaved: Boolean = true) {
+        additionalRadioJob?.cancel()
+        additionalRadioId = null
+        fmModeLabel = "私人FM"
         playbackGeneration++
+        albumPlayback = false
+        mediaPlaybackService?.setAlbumPlayback(false)
         qqGuessMode = false
         qqGuessLoadJob?.cancel()
         pendingTrack = null
@@ -448,8 +596,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         isFMMode = false
         isIntelligenceMode = false
         playerState = PlayerState()
-        if (clearSaved) prefs.edit().remove(snapshotKey(PlatformManager.current)).remove("last_track").remove("last_playlist").remove("play_mode_type")
-            .remove("intelligence_song_id").remove("intelligence_playlist_id").apply()
+        if (clearSaved) {
+            val platform = PlatformManager.current
+            val legacySource = runCatching { gson.fromJson(prefs.getString("last_track", null), Track::class.java)?.source }.getOrNull()
+            prefs.edit().apply {
+                remove(snapshotKey(platform))
+                if (legacySource == platform.trackSource) { remove("last_track"); remove("last_playlist") }
+                if (platform == MusicPlatform.NETEASE) {
+                    remove("play_mode_type"); remove("intelligence_song_id"); remove("intelligence_playlist_id")
+                }
+            }.apply()
+        }
         if (mediaPlaybackService == null) clearServiceOnConnect = true
         else mediaPlaybackService?.clearPlayback()
     }
@@ -490,7 +647,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (playbackAccountIndex < savedAccounts.size) {
             NeteaseApi.getUserProfile(savedAccounts[playbackAccountIndex].cookies).fold(
                 onSuccess = { profile -> playbackVipType = profile.vipType },
-                onFailure = { playbackVipType = 0 }
+                onFailure = { error ->
+                    playbackVipType = 0
+                    if (error is NeteaseApi.CredentialExpiredException) NeteaseApi.notifyCredentialExpired()
+                }
             )
         }
 
@@ -597,7 +757,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                             duration = duration
                         )
                         // 同步进度到Lyricon
-                        service.lyriconManager?.setPosition(position)
+                        service.lyriconManager?.setPosition(position + playerState.lyricOffsetMs)
                     }
                 }
             }
@@ -615,7 +775,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (trackJson != null) {
             try {
                 val track = gson.fromJson(trackJson, Track::class.java)
-                if ((track.source == "qqmusic") != (PlatformManager.current == MusicPlatform.QQ)) return
+                if (!trackBelongsToCurrentPlatform(track)) return
                 playerState = playerState.copy(currentTrack = track, isPlaying = false)
                 // 加载歌词、检查喜欢状态（使用数据账号）
                 loadLyrics()
@@ -633,6 +793,57 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         prefs.edit().putString("last_track", trackJson).apply()
     }
 
+    private fun trackBelongsToCurrentPlatform(track: Track): Boolean = track.source == PlatformManager.current.trackSource
+
+    private fun playbackAccountFor(track: Track): String? = when (track.source) {
+        "qqmusic" -> QqMusicApi.playbackAccountId
+        "netease" -> NeteaseApi.getAccounts().getOrNull(if (track.isCloudDisk) dataAccountIndex else playbackAccountIndex)?.userId
+        "bodian" -> com.hypermusic.miuix.data.api.BodianAuth(getApplication(), com.hypermusic.miuix.data.api.BodianClient(getApplication())).currentAccount(playback = true)?.uid
+        "kugou" -> com.hypermusic.miuix.data.api.KugouAuth(getApplication(), com.hypermusic.miuix.data.api.KugouClient(getApplication())).account(playback = true)?.userId
+        "qishui" -> com.hypermusic.miuix.data.api.QishuiAuth(getApplication(), com.hypermusic.miuix.data.api.QishuiClient(getApplication())).account(playback = true)?.userId
+        else -> null
+    }
+    private fun requestedQualityFor(track: Track): Int = when (track.source) {
+        "qqmusic" -> qqAudioQualityIndex
+        "netease" -> neteaseAudioQualityIndex
+        "bodian" -> bodianAudioQualityIndex
+        "kugou" -> kugouAudioQualityIndex
+        "qishui" -> qishuiAudioQualityIndex
+        else -> 1
+    }
+    private fun rememberCachedFormat(track: Track, account: String?, requested: Int, format: String, bitrate: Int, quality: String) {
+        com.hypermusic.miuix.data.cache.AudioCache.record(getApplication(), track, account, requested, format, bitrate, quality)
+    }
+    private suspend fun completeCachedAudio(track: Track, account: String?, requested: Int) = withContext(Dispatchers.IO) {
+        com.hypermusic.miuix.data.cache.AudioCache.complete(getApplication(), track, account, requested)
+    }
+
+    private data class NewSourceAudio(val url: String, val preview: Boolean, val quality: String, val bitrate: Int, val lyricOffsetMs: Long = 0L)
+    private suspend fun resolveNewSourceAudio(track: Track, requested: Int): NewSourceAudio = when (track.source) {
+        "bodian" -> {
+            val quality = when (requested) { 0 -> com.hypermusic.miuix.data.api.BodianPlayback.Quality.LOSSLESS; 1 -> com.hypermusic.miuix.data.api.BodianPlayback.Quality.HIGH; else -> com.hypermusic.miuix.data.api.BodianPlayback.Quality.STANDARD }
+            val audio = com.hypermusic.miuix.data.api.BodianPlayback(com.hypermusic.miuix.data.api.BodianClient(getApplication(), playback = true)).resolve(track, quality)
+            // Zero-start audition URLs were verified to contain only the preview segment.
+            // Non-zero starts still need verification before applying a lyric offset.
+            check(audio.preview == null || audio.preview.startSeconds == 0L) { "该歌曲的试听片段暂不支持播放" }
+            NewSourceAudio(audio.url, audio.preview != null, "未知音质", 0)
+        }
+        "kugou" -> {
+            val api = com.hypermusic.miuix.data.api.KugouClient(getApplication())
+            val quality = when (requested) { 0 -> com.hypermusic.miuix.data.api.KugouPlayback.Quality.HIRES; 1 -> com.hypermusic.miuix.data.api.KugouPlayback.Quality.LOSSLESS; 2 -> com.hypermusic.miuix.data.api.KugouPlayback.Quality.HIGH; else -> com.hypermusic.miuix.data.api.KugouPlayback.Quality.STANDARD }
+            val audio = com.hypermusic.miuix.data.api.KugouPlayback(api, com.hypermusic.miuix.data.api.KugouAuth(getApplication(), api)).resolve(track, quality)
+            NewSourceAudio(audio.url, audio.preview, audio.qualityLabel(), audio.bitrateBps())
+        }
+        "qishui" -> {
+            val api = com.hypermusic.miuix.data.api.QishuiClient(getApplication(), playback = true)
+            val quality = when (requested) { 0 -> com.hypermusic.miuix.data.api.QishuiPlayback.Quality.HIRES; 1 -> com.hypermusic.miuix.data.api.QishuiPlayback.Quality.LOSSLESS; 2 -> com.hypermusic.miuix.data.api.QishuiPlayback.Quality.HIGH; else -> com.hypermusic.miuix.data.api.QishuiPlayback.Quality.STANDARD }
+            val detail = com.hypermusic.miuix.data.api.QishuiCatalog(api).songDetail(track.id.removePrefix("qishui_"))
+            val audio = com.hypermusic.miuix.data.api.QishuiPlayback(api).resolve(detail, quality)
+            NewSourceAudio(audio.url, audio.preview, audio.qualityLabel(), 0, if (audio.preview) audio.clipStartMs else 0L)
+        }
+        else -> error("不支持该音乐平台")
+    }
+
     private fun prepareTrack(track: Track, position: Long = 0L, resume: Boolean = false) {
         if (!isBound) {
             pendingTrack = track
@@ -642,11 +853,57 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
         val generation = playbackGeneration
         viewModelScope.launch {
+            val cacheAccount = try { playbackAccountFor(track) } catch (e: Exception) {
+                if (generation == playbackGeneration && playerState.currentTrack == track) {
+                    playerState = playerState.copy(isLoading = false, error = e.message)
+                    _toastMessage.trySend(e.message ?: "无法读取账号信息")
+                }
+                return@launch
+            }
+            val cacheRequest = requestedQualityFor(track)
+            val cached = completeCachedAudio(track, cacheAccount, cacheRequest)
+            val currentAccount = try { playbackAccountFor(track) } catch (e: Exception) {
+                if (generation == playbackGeneration && playerState.currentTrack == track) {
+                    playerState = playerState.copy(isLoading = false, error = e.message)
+                    _toastMessage.trySend(e.message ?: "无法读取账号信息")
+                }
+                return@launch
+            }
+            if (generation != playbackGeneration || playerState.currentTrack != track || currentAccount != cacheAccount) return@launch
+            if (cached != null) {
+                mediaPlaybackService?.let { it.setPlaylist(currentPlaylist); it.restoreTrackWithUrl(track, "https://127.0.0.1/cached", position, resume, cached.format) }
+                playerState = playerState.copy(bitrate = cached.bitrate, audioQuality = cached.quality, lyricOffsetMs = 0L)
+                return@launch
+            }
+            if (track.source in setOf("bodian", "kugou", "qishui")) {
+                try {
+                    val audio = resolveNewSourceAudio(track, cacheRequest)
+                    if (generation != playbackGeneration || playerState.currentTrack != track || playbackAccountFor(track) != cacheAccount) return@launch
+                    val format = "${cacheAccount ?: "guest"}:$cacheRequest:${audio.quality}:${audio.bitrate}"
+                    if (!audio.preview) rememberCachedFormat(track, cacheAccount, cacheRequest, format, audio.bitrate, audio.quality)
+                    mediaPlaybackService?.let { it.setPlaylist(currentPlaylist); it.restoreTrackWithUrl(track, audio.url, position, resume, format, audio.preview) }
+                    playerState = playerState.copy(bitrate = audio.bitrate, audioQuality = audio.quality, lyricOffsetMs = audio.lyricOffsetMs)
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: Exception) {
+                    if (generation == playbackGeneration && playerState.currentTrack == track) {
+                        playerState = playerState.copy(isLoading = false, error = e.message)
+                        _toastMessage.trySend(e.message ?: "无法加载歌曲")
+                    }
+                }
+                return@launch
+            }
             if (track.source == "qqmusic") {
-                QqMusicApi.getSongAudio(track.id, track.qqMediaMid, qqAudioQualityIndex).onSuccess { audio ->
-                    if (generation != playbackGeneration || playerState.currentTrack != track) return@onSuccess
-                    mediaPlaybackService?.let { it.setPlaylist(currentPlaylist); it.restoreTrackWithUrl(track, audio.url, position, resume) }
+                QqMusicApi.getSongAudio(track.id, track.qqMediaMid, qqAudioQualityIndex, cacheAccount).onSuccess { audio ->
+                    if (generation != playbackGeneration || playerState.currentTrack != track || playbackAccountFor(track) != cacheAccount) return@onSuccess
+                    val format = "${cacheAccount ?: "guest"}:${audio.quality}:${audio.bitrate}:${audio.extension}"
+                    rememberCachedFormat(track, cacheAccount, cacheRequest, format, audio.bitrate, audio.quality)
+                    mediaPlaybackService?.let { it.setPlaylist(currentPlaylist); it.restoreTrackWithUrl(track, audio.url, position, resume, format) }
                     playerState = playerState.copy(bitrate = audio.bitrate, audioQuality = audio.quality)
+                }.onFailure { error ->
+                    if (generation == playbackGeneration && playerState.currentTrack == track) {
+                        playerState = playerState.copy(isLoading = false, error = error.message)
+                        _toastMessage.trySend(error.message ?: "无法加载歌曲")
+                    }
                 }
                 return@launch
             }
@@ -663,14 +920,21 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     try {
                         mediaPlaybackService?.let { service ->
                             service.setPlaylist(currentPlaylist)
-                            service.restoreTrackWithUrl(track, url, position, resume)
+                            val format = "${cacheAccount ?: "guest"}:$bitrate:$type"
+                            rememberCachedFormat(track, cacheAccount, cacheRequest, format, bitrate, AudioQuality.neteaseActual(bitrate, type))
+                            service.restoreTrackWithUrl(track, url, position, resume, format)
                             playerState = playerState.copy(bitrate = bitrate, audioQuality = AudioQuality.neteaseActual(bitrate, type))
                         }
                     } catch (e: Exception) {
                         // Ignore errors
                     }
                 },
-                onFailure = { }
+                onFailure = { error ->
+                    if (generation == playbackGeneration && playerState.currentTrack == track) {
+                        playerState = playerState.copy(isLoading = false, error = error.message)
+                        _toastMessage.trySend(error.message ?: "无法加载歌曲")
+                    }
+                }
             )
         }
     }
@@ -680,7 +944,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (playlistJson != null) {
             try {
                 val tracks = gson.fromJson(playlistJson, Array<Track>::class.java).toList()
-                currentPlaylist = tracks.filter { (it.source == "qqmusic") == (PlatformManager.current == MusicPlatform.QQ) }
+                currentPlaylist = tracks.filter(::trackBelongsToCurrentPlatform)
             } catch (e: Exception) {
                 // Ignore parse errors
             }
@@ -728,13 +992,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+
     /** 雷达歌单：固定歌单 id 逐个取详情 */
     fun loadRadarPlaylists() {
         viewModelScope.launch {
-            val ids = listOf(
-                "3136952023", "8402996200", "5320167908", "5327906368",
-                "5362359247", "5300458264", "5341776086"
-            )
+            val ids = radarPlaylistIds
             val playlists = coroutineScope {
                 ids.map { id ->
                     async { NeteaseApi.getPlaylistSummary(id).getOrNull() }
@@ -806,9 +1068,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun loadDailyRecommendSongs() {
+        val requestUserId = NeteaseApi.getCurrentUserId()
+        val revision = ++neteaseDailyRevision
         viewModelScope.launch {
             NeteaseApi.getDailyRecommendSongs().fold(
                 onSuccess = { songs ->
+                    if (NeteaseApi.getCurrentUserId() != requestUserId || revision != neteaseDailyRevision) return@fold
                     recommendState = recommendState.copy(dailySongs = songs)
                     // 若热门歌手接口未返回，兜底从每日推荐提炼歌手
                     if (recommendState.recommendArtists.isEmpty()) {
@@ -825,60 +1090,203 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    /** 随机播放一首（试试手气）：从每日推荐 / 我喜欢的音乐里随机挑一首 */
+    /** 点击后从每日推荐和喜欢的音乐中随机选择一首。 */
     fun playRandomOne() {
+        val accountId = NeteaseApi.getCurrentUserId() ?: return
         viewModelScope.launch {
-            val pool = mutableListOf<Track>()
-            pool.addAll(recommendState.dailySongs)
-
+            val dailySongs = recommendState.dailySongs
+            val pool = dailySongs.toMutableList()
             val likedId = resolveLikedPlaylistId()
             if (likedId.isNotEmpty()) {
                 NeteaseApi.getPlaylistDetail(likedId).fold(
-                    onSuccess = { detail -> pool.addAll(detail.tracks) },
-                    onFailure = { e ->
-                        Log.e("MusicPlayerViewModel", "playRandomOne load liked failed: ${e.message}")
-                    }
+                    onSuccess = { pool.addAll(it.tracks) },
+                    onFailure = { Log.e("MusicPlayerViewModel", "playRandomOne load liked failed: ${it.message}") }
                 )
             }
-
-            // 去重后随机
-            val unique = pool.distinctBy { it.id }
-            if (unique.isEmpty()) {
-                android.widget.Toast.makeText(
-                    getApplication(),
-                    "暂无可随机播放的歌曲",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
+            if (NeteaseApi.getCurrentUserId() != accountId || PlatformManager.current != MusicPlatform.NETEASE) return@launch
+            val track = pool.distinctBy { it.id }.randomOrNull()
+            if (track == null) {
+                _toastMessage.trySend("暂无可随机播放的歌曲")
                 return@launch
             }
-            val randomTrack = unique.random()
-            // 队列 = 随机曲 + 每日推荐，保证上一首/下一首可用
-            val queue = mutableListOf(randomTrack)
-            queue.addAll(recommendState.dailySongs.filter { it.id != randomTrack.id })
-            playTrackWithMode(randomTrack, queue)
+            playTrackWithMode(track, listOf(track) + dailySongs.filter { it.id != track.id })
         }
     }
 
-    fun loadUserPlaylists() {
+    private var neteaseFavoriteAccountId: Long? = null
+    private var neteaseFavoritesLoaded = false
+    private var neteaseFavoriteJob: Job? = null
+    private var neteaseFavoriteGeneration = 0
+    private var neteaseFavoriteSucceeded by mutableStateOf(false)
+    private var neteaseFavoriteLoading by mutableStateOf(false)
+    var playlistFavoriteInProgress by mutableStateOf(false)
+        private set
+    private var kugouPlaylistCollected by mutableStateOf<Boolean?>(null)
+    private var kugouPlaylistAccountRevision: Long? = null
+    private var bodianPlaylistCollected by mutableStateOf<Boolean?>(null)
+    private var bodianPlaylistAccountRevision: Long? = null
+
+    private fun bodianPlaylistId(id: String): Pair<Int, String>? {
+        val parts = id.split(':')
+        if (parts.size != 3 || parts[0] != "bodian") return null
+        val source = parts[1].toIntOrNull()?.takeIf { it in 1..5 } ?: return null
+        val raw = parts[2].toLongOrNull()?.takeIf { it in 1..9_007_199_254_740_991L } ?: return null
+        return source to raw.toString()
+    }
+
+    private fun validFavoritePlaylistId(id: String, platform: MusicPlatform): Boolean {
+        val raw = if (platform == MusicPlatform.NETEASE) id.removePrefix("neplaylist_") else id
+        return raw.toLongOrNull()?.let { it > 0 } == true
+    }
+
+    fun isPlaylistCollected(detail: PlaylistDetail?): Boolean {
+        val id = detail?.info?.id ?: return false
+        return when (PlatformManager.current) {
+            MusicPlatform.NETEASE -> recommendState.userPlaylists.any { it.id.removePrefix("neplaylist_") == id.removePrefix("neplaylist_") }
+            MusicPlatform.QQ -> qqFavoritePlaylists.any { it.id == id }
+            MusicPlatform.KUGOU -> kugouPlaylistCollected == true
+            MusicPlatform.BODIAN -> bodianPlaylistCollected == true
+            MusicPlatform.QISHUI -> false
+        }
+    }
+    fun canFavoritePlaylist(detail: PlaylistDetail?, isTopChart: Boolean): Boolean {
+        val id = detail?.info?.id ?: return false
+        if (id.startsWith("extra:")) return false
+        val platform = PlatformManager.current
+        if (isTopChart || (platform !in setOf(MusicPlatform.KUGOU, MusicPlatform.BODIAN) && !validFavoritePlaylistId(id, platform))) return false
+        if (platform == MusicPlatform.NETEASE && id.removePrefix("neplaylist_") in radarPlaylistIds) return false
+        return when (platform) {
+            MusicPlatform.QQ -> {
+                val account = QqMusicApi.dataAccountId?.takeIf { QqMusicApi.isLoggedIn() }
+                if (account == null) true
+                else qqFavoriteAccountKey == account && !qqFavoriteLoading && qqFavoriteError == null &&
+                    qqFavoritePlaylists.none { it.id == id && it.isOwned }
+            }
+            MusicPlatform.NETEASE -> {
+                val account = NeteaseApi.getCurrentUserId()
+                if (account == null) true
+                else neteaseFavoriteAccountId == account && neteaseFavoriteSucceeded && !neteaseFavoriteLoading &&
+                    detail.info.creatorId != account.toString() &&
+                    recommendState.userPlaylists.none { it.id.removePrefix("neplaylist_") == id.removePrefix("neplaylist_") && it.isOwned }
+            }
+            MusicPlatform.KUGOU -> {
+                val info = detail.info
+                val client = com.hypermusic.miuix.data.api.KugouClient(getApplication())
+                val revision = com.hypermusic.miuix.data.api.KugouAuth(getApplication(), client).sessionGeneration()
+                (kugouPlaylistCollected == true || (info.kugouCreatorId.matches(Regex("[0-9]{1,20}")) &&
+                    info.kugouOriginalListId.matches(Regex("[A-Za-z0-9_-]{1,128}")))) &&
+                    info.kugouCreatorId != com.hypermusic.miuix.data.api.KugouAuth(getApplication(), client).account()?.userId &&
+                    kugouPlaylistAccountRevision == revision && kugouPlaylistCollected != null
+            }
+            MusicPlatform.BODIAN -> {
+                val client = com.hypermusic.miuix.data.api.BodianClient(getApplication())
+                val revision = com.hypermusic.miuix.data.api.BodianAuth(getApplication(), client).sessionRevision()
+                bodianPlaylistId(id)?.first?.let { it != 5 } == true && bodianPlaylistAccountRevision == revision && bodianPlaylistCollected != null
+            }
+            MusicPlatform.QISHUI -> false
+        }
+    }
+
+    fun favoriteCurrentPlaylist() {
+        val detail = playlistDetailState.detail ?: return
+        val platform = PlatformManager.current
+        if (playlistFavoriteInProgress || !canFavoritePlaylist(detail, false)) return
+        val favorite = !isPlaylistCollected(detail)
+        val qqAccount = QqMusicApi.dataAccountId
+        val neteaseAccount = NeteaseApi.getCurrentUserId()
+        val kugouAccountRevision = kugouPlaylistAccountRevision
+        val bodianAccountRevision = bodianPlaylistAccountRevision
+        if ((platform == MusicPlatform.QQ && !QqMusicApi.isLoggedIn()) ||
+            (platform == MusicPlatform.NETEASE && neteaseAccount == null) ||
+            (platform == MusicPlatform.BODIAN && com.hypermusic.miuix.data.api.BodianAuth(getApplication(), com.hypermusic.miuix.data.api.BodianClient(getApplication())).currentAccount() == null)) {
+            _toastMessage.trySend("请先登录后收藏歌单")
+            return
+        }
+        playlistFavoriteInProgress = true
         viewModelScope.launch {
-            android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists called")
-            val userId = NeteaseApi.getCurrentUserId()
-            android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists userId: $userId")
-            if (userId != null) {
-                android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists - calling API with userId: $userId")
-                NeteaseApi.getUserPlaylists(userId).fold(
-                    onSuccess = { playlists ->
-                        android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists success: ${playlists.size} playlists")
-                        recommendState = recommendState.copy(userPlaylists = playlists)
-                        loadCloudDiskCover()
-                        loadUserAlbums()
-                    },
-                    onFailure = { e ->
-                        android.util.Log.e("MusicPlayerViewModel", "loadUserPlaylists error: ${e.message}")
+            try {
+                val result = when (platform) {
+                    MusicPlatform.QQ -> QqMusicApi.favoritePlaylist(detail.info.id, favorite)
+                    MusicPlatform.NETEASE -> NeteaseApi.favoritePlaylist(detail.info.id, favorite)
+                    MusicPlatform.KUGOU -> try {
+                        val api = com.hypermusic.miuix.data.api.KugouClient(getApplication())
+                        com.hypermusic.miuix.data.api.KugouLibrary(api, com.hypermusic.miuix.data.api.KugouAuth(getApplication(), api)).collectPlaylist(detail.info, expectedGeneration = kugouAccountRevision, favorite = favorite)
+                        Result.success(Unit)
+                    } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                    catch (e: Exception) { Result.failure(e) }
+                    MusicPlatform.BODIAN -> try {
+                        val (source, id) = requireNotNull(bodianPlaylistId(detail.info.id))
+                        val api = com.hypermusic.miuix.data.api.BodianClient(getApplication())
+                        val auth = com.hypermusic.miuix.data.api.BodianAuth(getApplication(), api)
+                        com.hypermusic.miuix.data.api.BodianLibrary(api, auth, com.hypermusic.miuix.data.api.BodianCatalog(api)).collect(id, source, bodianAccountRevision, favorite = favorite)
+                        Result.success(Unit)
+                    } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                    catch (e: Exception) { Result.failure(e) }
+                    MusicPlatform.QISHUI -> Result.failure(IllegalStateException("当前平台暂不支持收藏歌单"))
+                }
+                result.fold(onSuccess = {
+                    val info = detail.info
+                    val item = RecommendPlaylist(info.id, info.title, info.coverImgUrl, trackCount = info.trackCount,
+                        isPersonalCollection = platform == MusicPlatform.QQ &&
+                            (info.title == "我喜欢" || info.title.endsWith("喜欢的音乐") || info.title.endsWith("收藏的音乐") || info.title.endsWith("的我喜欢")))
+                    when (platform) {
+                        MusicPlatform.QQ -> if (QqMusicApi.dataAccountId == qqAccount && qqFavoriteAccountKey == qqAccount)
+                            qqFavoritePlaylists = qqFavoritePlaylists.filterNot { it.id == info.id } + if (favorite) listOf(item) else emptyList()
+                        MusicPlatform.NETEASE -> if (NeteaseApi.getCurrentUserId() == neteaseAccount && neteaseFavoriteAccountId == neteaseAccount)
+                            recommendState = recommendState.copy(userPlaylists = recommendState.userPlaylists.filterNot { it.id.removePrefix("neplaylist_") == info.id.removePrefix("neplaylist_") } + if (favorite) listOf(item) else emptyList())
+                        MusicPlatform.KUGOU -> {
+                            com.hypermusic.miuix.data.api.AdditionalLibraryChanges.changed(platform)
+                            if (playlistDetailState.detail?.info?.id == info.id && PlatformManager.current == platform && kugouPlaylistAccountRevision == kugouAccountRevision) kugouPlaylistCollected = favorite
+                        }
+                        MusicPlatform.BODIAN -> {
+                            com.hypermusic.miuix.data.api.AdditionalLibraryChanges.changed(platform)
+                            if (playlistDetailState.detail?.info?.id == info.id && PlatformManager.current == platform && bodianPlaylistAccountRevision == bodianAccountRevision) bodianPlaylistCollected = favorite
+                        }
+                        MusicPlatform.QISHUI -> Unit
                     }
-                )
-            } else {
-                android.util.Log.d("MusicPlayerViewModel", "loadUserPlaylists: userId is null - user not logged in")
+                    _toastMessage.trySend(if (favorite) "已添加到个人收藏" else "已取消收藏")
+                }, onFailure = { _toastMessage.trySend(it.message ?: "收藏歌单失败") })
+            } finally {
+                playlistFavoriteInProgress = false
+            }
+        }
+    }
+
+    fun loadUserPlaylists(force: Boolean = false) {
+        val userId = NeteaseApi.getCurrentUserId()
+        val accountChanged = neteaseFavoriteAccountId != userId
+        if (!force && !accountChanged && neteaseFavoritesLoaded) return
+        if (accountChanged) {
+            neteaseFavoriteSucceeded = false
+            recommendState = recommendState.copy(userPlaylists = emptyList(), userAlbums = emptyList(), cloudDiskCoverUrl = "")
+            if (neteaseFavoriteAccountId != null) {
+                recommendState = recommendState.copy(dailySongs = emptyList())
+                if (userId != null) loadDailyRecommendSongs()
+            }
+        }
+        neteaseFavoriteAccountId = userId
+        neteaseFavoritesLoaded = true
+        neteaseFavoriteJob?.cancel()
+        val generation = ++neteaseFavoriteGeneration
+        neteaseFavoriteLoading = userId != null
+        if (userId == null) return
+        neteaseFavoriteJob = viewModelScope.launch {
+            try {
+            NeteaseApi.getUserPlaylists(userId).fold(
+                onSuccess = { playlists ->
+                    if (generation != neteaseFavoriteGeneration || NeteaseApi.getCurrentUserId() != userId) return@fold
+                    recommendState = recommendState.copy(userPlaylists = playlists)
+                    neteaseFavoriteSucceeded = true
+                    loadCloudDiskCover(force = force)
+                    loadUserAlbums()
+                },
+                onFailure = { e ->
+                    if (generation == neteaseFavoriteGeneration) neteaseFavoritesLoaded = false
+                    Log.e("MusicPlayerViewModel", "loadUserPlaylists error: ${e.message}")
+                }
+            )
+            } finally {
+                if (generation == neteaseFavoriteGeneration) neteaseFavoriteLoading = false
             }
         }
     }
@@ -886,11 +1294,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     /** 拉取云盘第一首歌封面，供歌单页云盘卡片展示 */
     fun loadCloudDiskCover(force: Boolean = false) {
         if (!force && recommendState.cloudDiskCoverUrl.isNotEmpty()) return
+        val requestUserId = NeteaseApi.getCurrentUserId() ?: return
         viewModelScope.launch {
             NeteaseApi.getCloudDiskSongs(offset = 0, limit = 1).fold(
                 onSuccess = { result ->
                     val cover = result.tracks.firstOrNull()?.imgUrl ?: ""
-                    if (cover.isNotEmpty()) {
+                    if (NeteaseApi.getCurrentUserId() == requestUserId && cover.isNotEmpty()) {
                         recommendState = recommendState.copy(cloudDiskCoverUrl = cover)
                     }
                 },
@@ -903,10 +1312,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     /** 拉取收藏的专辑 */
     fun loadUserAlbums() {
+        val requestUserId = NeteaseApi.getCurrentUserId() ?: return
         viewModelScope.launch {
             NeteaseApi.getUserAlbums().fold(
                 onSuccess = { albums ->
-                    recommendState = recommendState.copy(userAlbums = albums)
+                    if (NeteaseApi.getCurrentUserId() == requestUserId) recommendState = recommendState.copy(userAlbums = albums)
                 },
                 onFailure = { e ->
                     android.util.Log.e("MusicPlayerViewModel", "loadUserAlbums error: ${e.message}")
@@ -952,7 +1362,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             viewModelScope.launch {
                 NeteaseApi.getUserProfile(accounts[index].cookies).fold(
                     onSuccess = { profile -> playbackVipType = profile.vipType },
-                    onFailure = { playbackVipType = 0 }
+                    onFailure = { error ->
+                        playbackVipType = 0
+                        if (error is NeteaseApi.CredentialExpiredException) NeteaseApi.notifyCredentialExpired()
+                    }
                 )
             }
         }
@@ -1079,22 +1492,29 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun shufflePlaylist(playlist: List<Track>, qqGuess: Boolean = false) {
+    fun shufflePlaylist(playlist: List<Track>, qqGuess: Boolean = false, fromAlbum: Boolean = false) {
         if (playlist.isEmpty()) return
         if (playMode != 1) {
             playMode = 1
             prefs.edit().putInt("play_mode", playMode).apply()
         }
         val first = playlist.random()
-        if (qqGuess) playQqGuessTrack(first, playlist) else playTrackWithMode(first, playlist)
+        if (qqGuess) playQqGuessTrack(first, playlist) else playTrackWithMode(first, playlist, fromAlbum)
     }
 
     fun playQqGuessTrack(track: Track, playlist: List<Track>) {
         playTrackWithMode(track, playlist)
         qqGuessMode = true
+        // playTrackWithMode saves the queue before this mode flag is set.
+        // Persist it as well so a process death does not restore a normal queue.
+        if (trackBelongsToCurrentPlatform(track)) savePlatformPlayback(PlatformManager.current, positionOverride = 0)
     }
 
-    fun playTrackWithMode(track: Track, playlist: List<Track>) {
+    fun playTrackWithMode(track: Track, playlist: List<Track>, fromAlbum: Boolean = false) {
+        additionalRadioJob?.cancel()
+        additionalRadioId = null
+        albumPlayback = fromAlbum
+        mediaPlaybackService?.setAlbumPlayback(fromAlbum)
         dailyShortcutJob?.cancel()
         dailyShortcutJob = null
         qqGuessMode = false
@@ -1135,6 +1555,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (isIntelligenceMode) {
             exitIntelligenceMode()
         }
+        albumPlayback = false
+        mediaPlaybackService?.setAlbumPlayback(false)
         isFMMode = true
         fmIndex = 0
         // 保存FM模式状态
@@ -1158,6 +1580,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun exitFMMode() {
+        additionalRadioJob?.cancel()
+        additionalRadioId = null
+        fmModeLabel = "私人FM"
         isFMMode = false
         fmPlaylist = emptyList()
         fmIndex = 0
@@ -1166,6 +1591,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun fmPlayNext() {
+        if (additionalRadioId != null) { playAdditionalRadioNext(); return }
         fmIndex++
         // 如果播放到最后一首，加载更多
         if (fmIndex >= fmPlaylist.size) {
@@ -1191,6 +1617,77 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (fmIndex > 0) {
             fmIndex--
             playTrack(fmPlaylist[fmIndex])
+        }
+    }
+
+    /** Recommendation streams share FM's controls but retain their provider / scene on restore. */
+    fun enterAdditionalRadio(id: String, onStarted: () -> Unit) {
+        val platform = PlatformManager.current
+        if (!id.startsWith("extra:${platform.storageKey}:")) return
+        additionalRadioJob?.cancel()
+        val modeLabel = com.hypermusic.miuix.data.model.radioModeLabel(id, additionalRecommendations.card(id)?.title)
+        val openImmediately = platform == MusicPlatform.QISHUI
+        if (openImmediately) {
+            clearPlaybackForPlatformSwitch(clearSaved = false)
+            additionalRadioId = id
+            fmModeLabel = modeLabel
+            isFMMode = true
+            playerState = PlayerState(isLoading = true)
+            lyricState = LyricState(isLoading = true, loadingStartedAt = android.os.SystemClock.elapsedRealtime())
+            onStarted()
+        }
+        val generation = playbackGeneration
+        val stamp = additionalRecommendations.accountStamp(platform)
+        additionalRadioJob = viewModelScope.launch {
+            try {
+                val tracks = additionalRecommendations.radio(id, first = true)
+                if (generation != playbackGeneration || platform != PlatformManager.current || stamp != additionalRecommendations.accountStamp(platform)) return@launch
+                if (isIntelligenceMode) exitIntelligenceMode()
+                // Do not call exitFMMode here: it would cancel this start request.
+                qqGuessMode = false; qqGuessLoadJob?.cancel()
+                albumPlayback = false; mediaPlaybackService?.setAlbumPlayback(false)
+                additionalRadioId = id; isFMMode = true
+                fmModeLabel = modeLabel
+                fmPlaylist = tracks; fmIndex = 0; currentPlaylist = tracks
+                playTrack(tracks.first())
+                if (!openImmediately) onStarted()
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) {
+                if (generation == playbackGeneration && platform == PlatformManager.current) {
+                    if (openImmediately) {
+                        playerState = playerState.copy(isLoading = false, error = e.message)
+                        lyricState = lyricState.copy(isLoading = false)
+                    }
+                    _toastMessage.trySend(e.message ?: "电台加载失败")
+                }
+            }
+        }
+    }
+
+    private fun playAdditionalRadioNext() {
+        if (additionalRadioJob?.isActive == true) return
+        val id = additionalRadioId ?: return
+        if (fmIndex + 1 < fmPlaylist.size) {
+            fmIndex++; playTrack(fmPlaylist[fmIndex]); return
+        }
+        val generation = playbackGeneration
+        val platform = PlatformManager.current
+        val stamp = additionalRecommendations.accountStamp(platform)
+        additionalRadioJob = viewModelScope.launch {
+            try {
+                var next = additionalRecommendations.radio(id, first = false)
+                val recent = fmPlaylist.takeLast(20).map { it.id }.toSet()
+                val fresh = next.filterNot { it.id in recent }
+                if (fresh.isNotEmpty()) next = fresh
+                if (generation != playbackGeneration || platform != PlatformManager.current || id != additionalRadioId ||
+                    stamp != additionalRecommendations.accountStamp(platform)) return@launch
+                // Bound retained radio history while keeping previous-track navigation.
+                fmPlaylist = fmPlaylist.takeLast(50) + next
+                fmIndex = fmPlaylist.size - next.size
+                currentPlaylist = fmPlaylist
+                playTrack(fmPlaylist[fmIndex])
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { _toastMessage.trySend(e.message ?: "电台续播失败，请重试") }
         }
     }
 
@@ -1226,6 +1723,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
         // 先进入心动模式状态并立刻回调（打开播放页），接口在后台加载
+        albumPlayback = false
+        mediaPlaybackService?.setAlbumPlayback(false)
         isIntelligenceMode = true
         if (isFMMode) exitFMMode()
         // 加载过程复用「等待歌曲」态：播放按钮转圈，进度条/上下首等禁用
@@ -1405,19 +1904,156 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun loadPlaylistDetail(playlistId: String, refresh: Boolean = false): Job {
         currentPlaylistDetailId = playlistId
+        val requestedPlatform = PlatformManager.current
+        val qqAccount = QqMusicApi.dataAccountId
+        val neteaseAccount = NeteaseApi.getCurrentUserId()
+        val feature = if (requestedPlatform == MusicPlatform.QQ && playlistId.startsWith("qqfeature:"))
+            QqMusicApi.HomeFeature.entries.firstOrNull { it.name == playlistId.removePrefix("qqfeature:") } else null
+        val featureRevision = if (refresh && feature != null) {
+            ((qqFeatureRevisions[feature] ?: 0) + 1).also { qqFeatureRevisions[feature] = it }
+        } else null
+        val dailyRevision = if (refresh && requestedPlatform == MusicPlatform.NETEASE && playlistId == "daily_recommend") ++neteaseDailyRevision else null
         return viewModelScope.launch {
             playlistDetailState = PlaylistDetailState(isLoading = true)
-            
+            if (playlistId.startsWith("extra:")) {
+                val stamp = additionalRecommendations.accountStamp(requestedPlatform)
+                try {
+                    require(playlistId.startsWith("extra:${requestedPlatform.storageKey}:")) { "推荐平台不匹配" }
+                    val card = additionalRecommendations.collection(playlistId, refresh)
+                    if (PlatformManager.current != requestedPlatform || currentPlaylistDetailId != playlistId ||
+                        stamp != additionalRecommendations.accountStamp(requestedPlatform)) return@launch
+                    playlistDetailState = PlaylistDetailState(detail = PlaylistDetail(
+                        Playlist(card.id, card.title, card.cover, "", card.tracks.size, card.subtitle), card.tracks))
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: Exception) {
+                    if (PlatformManager.current == requestedPlatform && currentPlaylistDetailId == playlistId)
+                        playlistDetailState = PlaylistDetailState(error = e.message ?: "推荐加载失败")
+                }
+                return@launch
+            }
+            if (requestedPlatform == MusicPlatform.BODIAN || requestedPlatform == MusicPlatform.QISHUI) {
+                try {
+                    bodianPlaylistCollected = null
+                    bodianPlaylistAccountRevision = null
+                    val tracks = mutableListOf<Track>()
+                    var offset = 0
+                    var more = true
+                    var title = ""; var cover = ""; var description = ""; var total = 0
+                    if (requestedPlatform == MusicPlatform.BODIAN) {
+                        val parts = playlistId.split(':')
+                        require(parts.size == 3 && parts[0] == "bodian") { "波点音乐歌单标识无效" }
+                        val source = parts[1].toIntOrNull() ?: error("波点音乐歌单来源无效")
+                        val api = com.hypermusic.miuix.data.api.BodianCatalog(com.hypermusic.miuix.data.api.BodianClient(getApplication()))
+                        val info = api.playlistDetail(parts[2], source)
+                        fun field(key: String) = info.get(key)?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
+                        title = field("name"); cover = field("pic"); description = field("info").ifBlank { field("description") }
+                        while (more && offset < 20_000) {
+                            val page = api.playlistSongs(parts[2], source, offset, 100)
+                            if (PlatformManager.current != requestedPlatform || currentPlaylistDetailId != playlistId) return@launch
+                            tracks += page.items; total = page.total ?: tracks.size; more = page.hasMore
+                            check(!more || page.nextOffset > offset) { "波点音乐歌单分页未前进" }; offset = page.nextOffset
+                        }
+                    } else {
+                        val parts = playlistId.split(':')
+                        require(parts.size == 3 && parts[0] == "qishui") { "汽水音乐歌单标识无效" }
+                        val api = com.hypermusic.miuix.data.api.QishuiCatalog(com.hypermusic.miuix.data.api.QishuiClient(getApplication()))
+                        val page = api.playlistSongs(parts[1], parts[2], limit = 20_000)
+                        if (PlatformManager.current != requestedPlatform || currentPlaylistDetailId != playlistId) return@launch
+                        page.playlist?.let { info ->
+                            val base = info.getAsJsonObject("base_info")
+                            val entity = com.hypermusic.miuix.data.api.QishuiCatalog.playlistEntity(info)
+                            title = entity?.title.orEmpty()
+                            description = base?.get("desc")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
+                            total = entity?.songCount?.coerceAtMost(Int.MAX_VALUE.toLong())?.toInt() ?: total
+                            cover = entity?.imageUrl.orEmpty()
+                        }
+                        tracks += page.songs.items; more = page.songs.hasMore
+                    }
+                    check(!more) { "歌单过长，未能完整加载" }
+                    cover = cover.replace(Regex("^http://(?=[a-zA-Z0-9.-]+\\.kuwo\\.cn/)"), "https://")
+                    playlistDetailState = PlaylistDetailState(detail = PlaylistDetail(Playlist(playlistId, title, cover, "", maxOf(total, tracks.size), description), tracks))
+                    if (requestedPlatform == MusicPlatform.BODIAN) {
+                        val api = com.hypermusic.miuix.data.api.BodianClient(getApplication())
+                        val auth = com.hypermusic.miuix.data.api.BodianAuth(getApplication(), api)
+                        val revision = auth.sessionRevision()
+                        val parsed = bodianPlaylistId(playlistId)
+                        val collected = if (auth.currentAccount() == null) false else if (parsed == null) null else try {
+                            com.hypermusic.miuix.data.api.BodianLibrary(api, auth, com.hypermusic.miuix.data.api.BodianCatalog(api)).isCollected(parsed.second, album = false)
+                        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                        catch (_: Exception) { null }
+                        if (PlatformManager.current == requestedPlatform && currentPlaylistDetailId == playlistId && auth.sessionRevision() == revision) {
+                            bodianPlaylistAccountRevision = revision
+                            bodianPlaylistCollected = collected
+                        }
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: Exception) {
+                    if (PlatformManager.current == requestedPlatform && currentPlaylistDetailId == playlistId)
+                        playlistDetailState = PlaylistDetailState(error = e.message ?: "歌单加载失败")
+                }
+                return@launch
+            }
+            if (requestedPlatform == MusicPlatform.KUGOU) {
+                try {
+                    kugouPlaylistCollected = null
+                    kugouPlaylistAccountRevision = null
+                    val catalog = com.hypermusic.miuix.data.api.KugouCatalog(com.hypermusic.miuix.data.api.KugouClient(getApplication()))
+                    var offset = 0
+                    val tracks = mutableListOf<Track>()
+                    var first: com.hypermusic.miuix.data.api.KugouCatalog.PlaylistPage? = null
+                    var more = true
+                    while (more && offset < 20_000) {
+                        val page = catalog.playlist(playlistId, offset, 100)
+                        if (PlatformManager.current != requestedPlatform || currentPlaylistDetailId != playlistId) return@launch
+                        if (first == null) first = page
+                        tracks.addAll(page.songs.items)
+                        more = page.songs.hasMore
+                        check(!more || page.songs.nextOffset > offset) { "酷狗音乐歌单分页未前进" }
+                        offset = page.songs.nextOffset
+                    }
+                    check(!more) { "酷狗音乐歌单过长，未能完整加载" }
+                    val page = requireNotNull(first)
+                    playlistDetailState = PlaylistDetailState(detail = PlaylistDetail(
+                        com.hypermusic.miuix.data.api.KugouCatalog.playlistInfo(playlistId, page), tracks))
+                    val client = com.hypermusic.miuix.data.api.KugouClient(getApplication())
+                    val auth = com.hypermusic.miuix.data.api.KugouAuth(getApplication(), client)
+                    val revision = auth.sessionGeneration()
+                    val collected = if (auth.account() == null) false else try {
+                        com.hypermusic.miuix.data.api.KugouLibrary(client, auth).isPlaylistCollected(playlistId)
+                    } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                    catch (_: Exception) { null }
+                    if (PlatformManager.current == requestedPlatform && currentPlaylistDetailId == playlistId && auth.sessionGeneration() == revision) {
+                        kugouPlaylistAccountRevision = revision
+                        kugouPlaylistCollected = collected
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: Exception) {
+                    if (PlatformManager.current == requestedPlatform && currentPlaylistDetailId == playlistId)
+                        playlistDetailState = PlaylistDetailState(error = e.message ?: "酷狗音乐歌单加载失败")
+                }
+                return@launch
+            }
+            if (requestedPlatform != MusicPlatform.NETEASE && requestedPlatform != MusicPlatform.QQ) {
+                playlistDetailState = PlaylistDetailState(error = "该平台的歌单页正在接入")
+                return@launch
+            }
             if (PlatformManager.current == MusicPlatform.QQ) {
                 val result = if (playlistId.startsWith("qqfeature:")) {
-                    val feature = QqMusicApi.HomeFeature.entries.firstOrNull { it.name == playlistId.removePrefix("qqfeature:") }
                     if (feature != null) QqMusicApi.getHomeFeature(feature) else Result.failure(IllegalArgumentException("推荐标识无效"))
                 } else if (playlistId.startsWith("qqtop:")) {
                     val id = playlistId.removePrefix("qqtop:").toIntOrNull()
                     if (id != null) QqMusicApi.getTopChartDetail(id) else Result.failure(IllegalArgumentException("榜单标识无效"))
                 } else QqMusicApi.getPlaylistDetail(playlistId)
+                if (PlatformManager.current != requestedPlatform || QqMusicApi.dataAccountId != qqAccount || currentPlaylistDetailId != playlistId) return@launch
+                if (featureRevision != null && featureRevision != qqFeatureRevisions[feature]) return@launch
                 result.fold(
-                    onSuccess = { playlistDetailState = PlaylistDetailState(detail = it) },
+                    onSuccess = { detail ->
+                        playlistDetailState = PlaylistDetailState(detail = detail)
+                        if (refresh && feature != null && featureRevision != null && featureRevision == qqFeatureRevisions[feature]) {
+                            qqFeatureRevisions[feature] = featureRevision + 1
+                            qqHomeFeatures = qqHomeFeatures + (feature to Result.success(detail))
+                        }
+                    },
                     onFailure = { playlistDetailState = PlaylistDetailState(error = it.message) }
                 )
                 return@launch
@@ -1425,6 +2061,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             // 每日推荐歌单特殊处理
             if (playlistId == "daily_recommend") {
                 val dailyResult = if (refresh) NeteaseApi.getDailyRecommendSongs() else Result.success(recommendState.dailySongs)
+                if (PlatformManager.current != requestedPlatform || NeteaseApi.getCurrentUserId() != neteaseAccount ||
+                    currentPlaylistDetailId != playlistId || (dailyRevision != null && dailyRevision != neteaseDailyRevision)) return@launch
                 if (dailyResult.isFailure) {
                     playlistDetailState = PlaylistDetailState(error = dailyResult.exceptionOrNull()?.message ?: "每日推荐加载失败")
                     return@launch
@@ -1620,19 +2258,41 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private var searchJob: Job? = null
+    private var searchNextOffset = 0
+    private var searchKeyword = ""
+    private var searchPlatform: MusicPlatform? = null
+    private data class SearchPageData(val tracks: List<Track>, val next: Int, val more: Boolean)
+
+    private suspend fun searchNewPlatform(platform: MusicPlatform, keyword: String, offset: Int): SearchPageData = when (platform) {
+        MusicPlatform.BODIAN -> com.hypermusic.miuix.data.api.BodianCatalog(com.hypermusic.miuix.data.api.BodianClient(getApplication())).searchSongs(keyword, offset).let { SearchPageData(it.items, it.nextOffset, it.hasMore) }
+        MusicPlatform.KUGOU -> com.hypermusic.miuix.data.api.KugouCatalog(com.hypermusic.miuix.data.api.KugouClient(getApplication())).searchSongs(keyword, offset).let { SearchPageData(it.items, it.nextOffset, it.hasMore) }
+        MusicPlatform.QISHUI -> com.hypermusic.miuix.data.api.QishuiCatalog(com.hypermusic.miuix.data.api.QishuiClient(getApplication())).searchSongs(keyword, offset).let { SearchPageData(it.items, it.nextOffset, it.hasMore) }
+        else -> error("该平台暂不支持分页搜索")
+    }
 
     fun searchSongs(keyword: String) {
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             searchState = searchState.copy(isLoading = true, error = null)
             val platform = PlatformManager.current
-            val result = if (platform == MusicPlatform.QQ) QqMusicApi.searchSongs(keyword) else NeteaseApi.searchSongs(keyword)
+            searchKeyword = keyword
+            searchPlatform = platform
+            val result: Result<SearchPageData> = try {
+                when (platform) {
+                    MusicPlatform.QQ -> QqMusicApi.searchSongs(keyword).map { SearchPageData(it, 0, false) }
+                    MusicPlatform.NETEASE -> NeteaseApi.searchSongs(keyword).map { SearchPageData(it, 0, false) }
+                    else -> Result.success(searchNewPlatform(platform, keyword, 0))
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { Result.failure(e) }
             if (platform != PlatformManager.current) return@launch
             result.fold(
-                onSuccess = { tracks ->
+                onSuccess = { page ->
+                    searchNextOffset = page.next
                     searchState = searchState.copy(
-                        results = tracks,
-                        isLoading = false
+                        results = page.tracks,
+                        isLoading = false,
+                        hasMore = page.more && page.next > 0
                     )
                 },
                 onFailure = { e ->
@@ -1645,30 +2305,103 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun loadMoreSearchSongs() {
+        val platform = searchPlatform ?: return
+        if (!searchState.hasMore || searchState.isLoading || searchState.isLoadingMore || platform != PlatformManager.current) return
+        val offset = searchNextOffset
+        val keyword = searchKeyword
+        searchState = searchState.copy(isLoadingMore = true, loadMoreError = null)
+        searchJob = viewModelScope.launch {
+            try {
+                val page = searchNewPlatform(platform, keyword, offset)
+                if (platform != PlatformManager.current || keyword != searchKeyword || offset != searchNextOffset) return@launch
+                searchNextOffset = page.next
+                searchState = searchState.copy(results = (searchState.results + page.tracks).distinctBy { it.source to it.id },
+                    isLoadingMore = false, hasMore = page.more && page.next > offset)
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { searchState = searchState.copy(isLoadingMore = false, loadMoreError = e.message ?: "加载失败") }
+        }
+    }
+
     fun clearSearch() {
         searchJob?.cancel()
         searchJob = null
+        searchNextOffset = 0
+        searchKeyword = ""
+        searchPlatform = null
         searchState = SearchState()
     }
 
     fun playTrack(track: Track) {
-        if ((track.source == "qqmusic") != (PlatformManager.current == MusicPlatform.QQ)) return
+        if (!trackBelongsToCurrentPlatform(track)) return
+        val requestId = ++playTrackRequestId
         val generation = playbackGeneration
+        if (track.source in setOf("bodian", "kugou", "qishui")) {
+            viewModelScope.launch {
+                if (generation != playbackGeneration || requestId != playTrackRequestId) return@launch
+                playerState = playerState.copy(isLoading = true, error = null, currentTrack = track, currentPosition = 0, bitrate = 0, audioQuality = "", lyricOffsetMs = 0)
+                saveLastPlayedTrack(track); saveLastPlaylist()
+                savePlatformPlayback(PlatformManager.current, positionOverride = 0)
+                isCurrentTrackLiked = false
+                loadLyrics(); checkIfCurrentTrackLiked()
+                try {
+                    val account = playbackAccountFor(track)
+                    val requested = requestedQualityFor(track)
+                    val cached = completeCachedAudio(track, account, requested)
+                    val audio = if (cached == null) resolveNewSourceAudio(track, requested) else null
+                    if (generation != playbackGeneration || requestId != playTrackRequestId || playerState.currentTrack != track || playbackAccountFor(track) != account) return@launch
+                    val service = mediaPlaybackService ?: error("播放器尚未就绪")
+                    service.setPlaylist(currentPlaylist)
+                    if (cached != null) {
+                        service.playTrackWithUrl(track, "https://127.0.0.1/cached", cached.format)
+                        playerState = playerState.copy(isPlaying = true, isLoading = false, bitrate = cached.bitrate, audioQuality = cached.quality)
+                    } else {
+                        val resolved = requireNotNull(audio)
+                        val format = "${account ?: "guest"}:$requested:${resolved.quality}:${resolved.bitrate}"
+                        if (!resolved.preview) rememberCachedFormat(track, account, requested, format, resolved.bitrate, resolved.quality)
+                        service.playTrackWithUrl(track, resolved.url, format, resolved.preview)
+                        playerState = playerState.copy(isPlaying = true, isLoading = false, bitrate = resolved.bitrate, audioQuality = resolved.quality, lyricOffsetMs = resolved.lyricOffsetMs)
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: Exception) {
+                    if (generation == playbackGeneration && requestId == playTrackRequestId && playerState.currentTrack == track) {
+                        playerState = playerState.copy(isLoading = false, error = e.message)
+                        _toastMessage.trySend(e.message ?: "播放失败")
+                    }
+                }
+            }
+            return
+        }
         if (track.source == "qqmusic") {
             viewModelScope.launch {
                 if (generation != playbackGeneration) return@launch
-                playerState = playerState.copy(isLoading = true, error = null, currentTrack = track, bitrate = 0, audioQuality = "")
+                playerState = playerState.copy(isLoading = true, error = null, currentTrack = track, currentPosition = 0, bitrate = 0, audioQuality = "", lyricOffsetMs = 0)
                 saveLastPlayedTrack(track)
                 saveLastPlaylist()
+                savePlatformPlayback(PlatformManager.current, positionOverride = 0)
                 isCurrentTrackLiked = false
                 checkIfCurrentTrackLiked()
                 loadLyrics()
-                QqMusicApi.getSongAudio(track.id, track.qqMediaMid, qqAudioQualityIndex).fold(
+                val cacheAccount = playbackAccountFor(track)
+                val cacheRequest = requestedQualityFor(track)
+                val cached = completeCachedAudio(track, cacheAccount, cacheRequest)
+                if (generation != playbackGeneration || playerState.currentTrack != track) return@launch
+                if (cached != null) {
+                    mediaPlaybackService?.let { service ->
+                        service.setPlaylist(currentPlaylist)
+                        service.playTrackWithUrl(track, "https://127.0.0.1/cached", cached.format)
+                        playerState = playerState.copy(isPlaying = true, isLoading = false, bitrate = cached.bitrate, audioQuality = cached.quality)
+                    }
+                    return@launch
+                }
+                QqMusicApi.getSongAudio(track.id, track.qqMediaMid, cacheRequest).fold(
                     onSuccess = { audio ->
                         if (playerState.currentTrack != track) return@fold
                         mediaPlaybackService?.let { service ->
                             service.setPlaylist(currentPlaylist)
-                            service.playTrackWithUrl(track, audio.url)
+                            val format = "${cacheAccount ?: "guest"}:${audio.quality}:${audio.bitrate}:${audio.extension}"
+                            rememberCachedFormat(track, cacheAccount, cacheRequest, format, audio.bitrate, audio.quality)
+                            service.playTrackWithUrl(track, audio.url, format)
                             playerState = playerState.copy(isPlaying = true, isLoading = false, bitrate = audio.bitrate, audioQuality = audio.quality)
                         } ?: run { playerState = playerState.copy(isLoading = false, error = "播放器尚未就绪") }
                     },
@@ -1681,23 +2414,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
             return
         }
-        // VIP歌曲限制：纯本地判断，不发网络请求，不替换当前播放歌曲
-        if (track.isVip) {
-            if (!NeteaseApi.isLoggedIn()) {
-                _toastMessage.trySend("非VIP用户无法播放VIP歌曲")
-                return
-            }
-            if (playbackVipType == 0) {
-                _toastMessage.trySend("非VIP用户无法播放VIP歌曲")
-                return
-            }
-        }
-        
         viewModelScope.launch {
-            if (generation != playbackGeneration) return@launch
-            playerState = playerState.copy(isLoading = true, error = null, currentTrack = track, bitrate = 0, audioQuality = "")
+            val cacheAccount = playbackAccountFor(track)
+            val cacheRequest = requestedQualityFor(track)
+            val cached = completeCachedAudio(track, cacheAccount, cacheRequest)
+            if (generation != playbackGeneration || requestId != playTrackRequestId) return@launch
+            if (track.isVip && cached == null && (!NeteaseApi.isLoggedIn() || playbackVipType == 0)) {
+                _toastMessage.trySend("非VIP用户无法播放VIP歌曲")
+                return@launch
+            }
+            playerState = playerState.copy(isLoading = true, error = null, currentTrack = track, currentPosition = 0, bitrate = 0, audioQuality = "", lyricOffsetMs = 0)
             saveLastPlayedTrack(track)
             saveLastPlaylist()
+            savePlatformPlayback(PlatformManager.current, positionOverride = 0)
 
             // 第一阶段：立即用元数据（无歌词）更新 Lyricon
             loadLyrics()
@@ -1710,7 +2439,16 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             val accountUserId = accounts.getOrNull(accountIndex)?.userId
             val accountCookie = accountUserId?.let { NeteaseApi.getAccountCookie(it) }
 
-            val selectedBitrate = AudioQuality.neteaseBitrate(neteaseAudioQualityIndex)
+            if (generation != playbackGeneration || playerState.currentTrack != track) return@launch
+            if (cached != null) {
+                mediaPlaybackService?.let { service ->
+                    service.setPlaylist(currentPlaylist)
+                    service.playTrackWithUrl(track, "https://127.0.0.1/cached", cached.format)
+                    playerState = playerState.copy(isPlaying = true, isLoading = false, bitrate = cached.bitrate, audioQuality = cached.quality)
+                }
+                return@launch
+            }
+            val selectedBitrate = AudioQuality.neteaseBitrate(cacheRequest)
 
             NeteaseApi.getSongUrl(track.id, selectedBitrate, accountCookie = accountCookie).fold(
                 onSuccess = { (url, bitrate, type) ->
@@ -1718,7 +2456,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     try {
                         mediaPlaybackService?.let { service ->
                             service.setPlaylist(currentPlaylist)
-                            service.playTrackWithUrl(track, url)
+                            val format = "${cacheAccount ?: "guest"}:$bitrate:$type"
+                            rememberCachedFormat(track, cacheAccount, cacheRequest, format, bitrate, AudioQuality.neteaseActual(bitrate, type))
+                            service.playTrackWithUrl(track, url, format)
                             playerState = playerState.copy(
                                 isPlaying = true,
                                 isLoading = false,
@@ -1758,17 +2498,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         mediaPlaybackService?.setPlaybackSpeed(normalized)
     }
 
-    /** 设置音质选择索引。 */
-    fun updateAudioQualityIndex(index: Int) {
-        if (PlatformManager.current == MusicPlatform.QQ) {
-            qqAudioQualityIndex = index.coerceIn(AudioQuality.qqOptions.indices)
-            prefs.edit().putInt("qq_audio_quality_index", qqAudioQualityIndex).apply()
-        } else {
-            neteaseAudioQualityIndex = index.coerceIn(AudioQuality.neteaseOptions.indices)
-            prefs.edit().putInt("netease_audio_quality_index", neteaseAudioQualityIndex).apply()
-        }
+    fun updatePlatformAudioQualityIndex(platform: MusicPlatform, index: Int) {
+        val selected = index.coerceIn(AudioQuality.options(platform).indices)
+        platformQualityIndices = platformQualityIndices + (platform to selected)
+        prefs.edit().putInt(com.hypermusic.miuix.data.model.PlaybackQualityPreferences.key(platform), selected).apply()
     }
-
+    fun updateAudioQualityIndex(index: Int) = updatePlatformAudioQualityIndex(PlatformManager.current, index)
     fun togglePlayPause() {
         mediaPlaybackService?.let { service ->
             service.togglePlayPause()
@@ -1793,10 +2528,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     /** 供歌词引擎逐帧读取的实时播放位置（毫秒）。 */
     fun getPlaybackPositionMs(): Long {
-        return mediaPlaybackService?.getCurrentPosition() ?: playerState.currentPosition
+        return (mediaPlaybackService?.getCurrentPosition() ?: playerState.currentPosition) + playerState.lyricOffsetMs
     }
 
     fun playNext() {
+        if (isFMMode) { fmPlayNext(); return }
         val current = playerState.currentTrack ?: return
         val index = currentPlaylist.indexOfFirst { it.id == current.id }
         if (index >= 0 && index < currentPlaylist.size - 1) {
@@ -1825,6 +2561,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playPrevious() {
+        if (isFMMode) { fmPlayPrevious(); return }
         val current = playerState.currentTrack ?: return
         val index = currentPlaylist.indexOfFirst { it.id == current.id }
         if (index > 0) {
@@ -1834,213 +2571,194 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun downloadCurrentTrack(track: Track? = playerState.currentTrack) {
         track ?: return
-        if (track.source == "qqmusic") {
-            viewModelScope.launch {
-                QqMusicApi.getSongAudio(track.id, track.qqMediaMid, qqAudioQualityIndex)
-                    .onSuccess { audio -> downloadSong(audio.url, track.title, track.artist, audio.extension, audio.quality) }
-                    .onFailure { _toastMessage.trySend(it.message ?: "获取链接失败") }
-            }
-            return
+        val accountId = if (track.source == "qqmusic") QqMusicApi.playbackAccountId else {
+            val index = if (track.isCloudDisk) dataAccountIndex else playbackAccountIndex
+            NeteaseApi.getAccounts().getOrNull(index)?.userId
         }
+        try { com.hypermusic.miuix.data.download.Downloads.enqueue(getApplication(), track, accountId) }
+        catch (e: Exception) { _toastMessage.trySend(e.message ?: "无法创建下载任务") }
+    }
+
+    fun downloadCover(track: Track?) {
+        if (track == null || track.imgUrl.isBlank()) return
         viewModelScope.launch {
-            NeteaseApi.getSongUrl(track.id, AudioQuality.neteaseBitrate(neteaseAudioQualityIndex), accountCookie = neteasePlaybackCookie(track)).fold(
-                onSuccess = { (url, bitrate, type) ->
-                    if (url.isNotEmpty()) {
-                        // 触发下载
-                        downloadSong(url, track.title, track.artist, type, AudioQuality.neteaseActual(bitrate, type))
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val context = getApplication<Application>()
+                    val request = okhttp3.Request.Builder().url(track.imgUrl).build()
+                    okhttp3.OkHttpClient().newCall(request).execute().use { response ->
+                        check(response.isSuccessful) { "下载封面失败 (HTTP ${response.code})" }
+                        val body = response.body ?: error("封面为空")
+                        val values = android.content.ContentValues().apply {
+                            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "${track.title.replace(Regex("[\\\\/:*?\"<>|]"), "_")}.jpg")
+                            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                            put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/HyperMusic")
+                            put(android.provider.MediaStore.Images.Media.IS_PENDING, 1)
+                        }
+                        val resolver = context.contentResolver
+                        val uri = resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: error("无法创建图片")
+                        try {
+                            resolver.openOutputStream(uri)?.use { output -> body.byteStream().use { it.copyTo(output) } } ?: error("无法保存图片")
+                            values.clear(); values.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0); resolver.update(uri, values, null, null)
+                        } catch (e: Exception) { resolver.delete(uri, null, null); throw e }
                     }
-                },
-                onFailure = { e ->
-                    android.util.Log.e("MusicPlayerViewModel", "Failed to get download URL: ${e.message}")
-                    _toastMessage.trySend(e.message ?: "获取下载链接失败")
                 }
-            )
+            }
+            result.fold({ _toastMessage.trySend("封面已保存到相册") }, { _toastMessage.trySend(it.message ?: "保存封面失败") })
         }
     }
 
     fun loadLyrics() {
         val track = playerState.currentTrack ?: return
-        lyricsLoadJob?.cancel() // 取消之前的歌词加载任务
+        lyricsLoadJob?.cancel()
         val generation = ++lyricsLoadGeneration
-        lyricState = lyricState.copy(isLoading = true, error = null)
+        val key = track.source to track.id
+        val loadingStartedAt = android.os.SystemClock.elapsedRealtime()
+        if (lyricsTrackKey != key) {
+            lyricsTrackKey = key
+            lyricState = LyricState(isLoading = true, loadingStartedAt = loadingStartedAt)
+            mediaPlaybackService?.updateLyrics(null)
+        } else {
+            lyricState = lyricState.copy(isLoading = true, error = null, loadingStartedAt = loadingStartedAt)
+        }
+        fun isCurrent() = generation == lyricsLoadGeneration &&
+            playerState.currentTrack?.let { it.source to it.id } == key
+        fun publish(result: LyricsRepository.LyricsLoadResult) {
+            if (!isCurrent()) return
+            lyricState = lyricState.copy(
+                lyrics = result.lyrics, source = result.source, rawDebugText = result.rawDebugText,
+                matchedTrack = result.matchedTrack, upgraded = result.upgraded,
+                isLoading = false, error = null
+            )
+            mediaPlaybackService?.updateLyrics(result.lyrics)
+        }
         lyricsLoadJob = viewModelScope.launch {
-            LyricsRepository.load(track).fold(
-                onSuccess = { result ->
-                    // 检查歌曲是否已切换，以及是否有更新的加载请求
-                    if (generation == lyricsLoadGeneration && playerState.currentTrack?.id == track.id) {
-                        lyricState = lyricState.copy(
-                            lyrics = result.lyrics,
-                            source = result.source,
-                            upgraded = result.upgraded,
-                            isLoading = false
-                        )
-                        // 同步歌词到Lyricon
-                        mediaPlaybackService?.updateLyrics(result.lyrics)
-                        Log.d("MusicPlayerViewModel", "Lyrics loaded and synced: ${result.lyrics.lines.size} lines, source=${result.source}")
-                    } else {
-                        Log.d("MusicPlayerViewModel", "Lyrics loaded but stale or track changed, skipping sync")
-                    }
-                },
-                onFailure = { e ->
-                    if (generation == lyricsLoadGeneration) {
-                        lyricState = lyricState.copy(isLoading = false, error = e.message)
-                    }
-                    Log.e("MusicPlayerViewModel", "Failed to load lyrics: ${e.message}")
-                }
-            )
-        }
-    }
-
-    private fun downloadSong(url: String, title: String, artist: String, type: String = "mp3", quality: String = "") {
-        try {
-            val context = getApplication<Application>()
-            val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
-            val fileName = "$title - $artist.$type"
-            val request = android.app.DownloadManager.Request(android.net.Uri.parse(url))
-                .setTitle("$title - $artist")
-                .setDescription(if (quality.isBlank()) "正在下载歌曲" else "正在下载 · $quality")
-                .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_MUSIC, fileName)
-            if (android.net.Uri.parse(url).host?.endsWith("qq.com") == true) {
-                request.addRequestHeader("Referer", "https://y.qq.com/")
-            }
-            downloadManager.enqueue(request)
-            android.util.Log.d("MusicPlayerViewModel", "Download started: $fileName")
-        } catch (e: Exception) {
-            android.util.Log.e("MusicPlayerViewModel", "Download failed: ${e.message}")
-        }
-    }
-
-    private fun neteasePlaybackCookie(track: Track): String? {
-        val accountIndex = if (track.isCloudDisk) dataAccountIndex else playbackAccountIndex
-        return NeteaseApi.getAccounts().getOrNull(accountIndex)?.userId?.let { NeteaseApi.getAccountCookie(it) }
-    }
-
-    fun downloadAndShareCurrentTrack(track: Track? = playerState.currentTrack) {
-        track ?: return
-        if (track.source == "qqmusic") {
-            viewModelScope.launch {
-                QqMusicApi.getSongAudio(track.id, track.qqMediaMid, qqAudioQualityIndex).fold(
-                    onSuccess = { audio ->
-                        downloadAndShareFile(audio.url, "${track.title} - ${track.artist}.${audio.extension}", "audio/${audio.extension}")
-                    },
-                    onFailure = { _toastMessage.trySend(it.message ?: "获取链接失败") }
-                )
-            }
-            return
-        }
-        val context = getApplication<Application>()
-        android.widget.Toast.makeText(context, "正在下载，请稍等……", android.widget.Toast.LENGTH_SHORT).show()
-        viewModelScope.launch {
-            NeteaseApi.getSongUrl(track.id, AudioQuality.neteaseBitrate(neteaseAudioQualityIndex), accountCookie = neteasePlaybackCookie(track)).fold(
-                onSuccess = { (url, _, type) ->
-                    if (url.isNotEmpty()) {
-                        downloadAndShareFile(url, "${track.title} - ${track.artist}.$type", "audio/$type")
-                    } else {
-                        android.widget.Toast.makeText(context, "获取下载链接失败，请检查账号权限", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                },
-                onFailure = { e ->
-                    Log.e("MusicPlayerViewModel", "Failed to get download URL: ${e.message}")
-                    android.widget.Toast.makeText(context, "获取下载链接失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                }
-            )
-        }
-    }
-
-    fun downloadAndShareCover(track: Track? = playerState.currentTrack) {
-        track ?: return
-        val coverUrl = track.imgUrl
-        if (coverUrl.isNotEmpty()) {
-            val context = getApplication<Application>()
-            android.widget.Toast.makeText(context, "正在下载，请稍等……", android.widget.Toast.LENGTH_SHORT).show()
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    val fileName = "${track.title} - ${track.artist}_cover.jpg"
-                    
-                    // 下载封面到缓存目录
-                    val url = java.net.URL(coverUrl)
-                    val connection = url.openConnection()
-                    connection.connect()
-                    val inputStream = connection.getInputStream()
-                    val file = java.io.File(context.cacheDir, fileName)
-                    file.outputStream().use { output ->
-                        inputStream.copyTo(output)
-                    }
-                    inputStream.close()
-                    
-                    // 分享文件（需要在主线程执行）
-                    withContext(Dispatchers.Main) {
-                        val uri = androidx.core.content.FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            file
-                        )
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "image/jpeg"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            LyricsRepository.load(track) { provisional ->
+                withContext(Dispatchers.Main.immediate) { publish(provisional) }
+            }.fold(
+                onSuccess = { publish(it) },
+                onFailure = { error ->
+                    if (isCurrent()) {
+                        // A failed explicit match must not hide this song's native fallback.
+                        lyricState = lyricState.copy(isLoading = false, error = error.message)
+                        if (com.hypermusic.miuix.data.lyrics.LyricMatches.find(track) != null) {
+                            _toastMessage.trySend(error.message ?: "已匹配的歌词暂时不可用，请重试或重新匹配")
                         }
-                        context.startActivity(Intent.createChooser(shareIntent, "分享封面").apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        })
                     }
-                } catch (e: Exception) {
-                    Log.e("MusicPlayerViewModel", "Download and share cover failed: ${e.message}")
-                    withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(context, "下载封面并分享失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                    }
+                    Log.e("MusicPlayerViewModel", "Failed to load lyrics: ${error.message}")
                 }
+            )
+        }
+    }
+    private suspend fun newSourceLiked(track: Track): Boolean = when (track.source) {
+        "bodian" -> {
+            val api = com.hypermusic.miuix.data.api.BodianClient(getApplication())
+            val auth = com.hypermusic.miuix.data.api.BodianAuth(getApplication(), api)
+            val library = com.hypermusic.miuix.data.api.BodianLibrary(api, auth, com.hypermusic.miuix.data.api.BodianCatalog(api))
+            val accountRevision = auth.sessionRevision()
+            var offset = 0; var found = false; var more = true
+            while (more && offset < 20_000) {
+                check(auth.sessionRevision() == accountRevision) { "波点音乐账号已切换，请重试" }
+                val page = library.likedSongs(offset, 100)
+                check(auth.sessionRevision() == accountRevision) { "波点音乐账号已切换，请重试" }
+                if (page.items.any { it.id == track.id }) { found = true; break }
+                more = page.hasMore
+                check(!more || page.nextOffset > offset) { "波点音乐收藏分页异常" }
+                offset = page.nextOffset
             }
+            check(!more || found) { "波点音乐收藏列表过长" }
+            found
+        }
+        "qishui" -> {
+            val api = com.hypermusic.miuix.data.api.QishuiClient(getApplication())
+            val auth = com.hypermusic.miuix.data.api.QishuiAuth(getApplication(), api)
+            com.hypermusic.miuix.data.api.QishuiLibrary(api, auth).isSongLiked(track.id.removePrefix("qishui_"))
+        }
+        "kugou" -> {
+            val api = com.hypermusic.miuix.data.api.KugouClient(getApplication())
+            com.hypermusic.miuix.data.api.KugouLibrary(api, com.hypermusic.miuix.data.api.KugouAuth(getApplication(), api)).isLiked(track)
+        }
+        else -> error("该平台的歌曲收藏正在接入")
+    }
+
+    private suspend fun setNewSourceLiked(track: Track, liked: Boolean, expectedUserId: String) {
+        when (track.source) {
+            "bodian" -> {
+                val api = com.hypermusic.miuix.data.api.BodianClient(getApplication())
+                com.hypermusic.miuix.data.api.BodianLibrary(api, com.hypermusic.miuix.data.api.BodianAuth(getApplication(), api), com.hypermusic.miuix.data.api.BodianCatalog(api))
+                    .setSongLiked(track.id, liked, expectedUserId)
+            }
+            "qishui" -> {
+                val api = com.hypermusic.miuix.data.api.QishuiClient(getApplication())
+                com.hypermusic.miuix.data.api.QishuiLibrary(api, com.hypermusic.miuix.data.api.QishuiAuth(getApplication(), api))
+                    .setSongLiked(track.id.removePrefix("qishui_"), liked, expectedUserId)
+            }
+            "kugou" -> {
+                val api = com.hypermusic.miuix.data.api.KugouClient(getApplication())
+                com.hypermusic.miuix.data.api.KugouLibrary(api, com.hypermusic.miuix.data.api.KugouAuth(getApplication(), api)).setLiked(track, liked, expectedUserId)
+            }
+            else -> error("该平台的歌曲收藏正在接入")
+        }
+        com.hypermusic.miuix.data.api.MusicPlatform.fromTrackSource(track.source)?.let {
+            com.hypermusic.miuix.data.api.AdditionalLibraryChanges.changed(it)
         }
     }
 
-    private fun downloadAndShareFile(url: String, fileName: String, mimeType: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val context = getApplication<Application>()
-            try {
-                
-                // 下载文件到缓存目录
-                val urlObj = java.net.URL(url)
-                val connection = urlObj.openConnection()
-                if (urlObj.host.endsWith("qq.com")) connection.setRequestProperty("Referer", "https://y.qq.com/")
-                connection.connect()
-                val inputStream = connection.getInputStream()
-                val file = java.io.File(context.cacheDir, fileName)
-                file.outputStream().use { output ->
-                    inputStream.copyTo(output)
-                }
-                inputStream.close()
-                
-                // 分享文件（需要在主线程执行）
-                withContext(Dispatchers.Main) {
-                    val uri = androidx.core.content.FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = mimeType
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    suspend fun trackLiked(track: Track): Result<Boolean> = try {
+        when (track.source) {
+            "netease" -> NeteaseApi.checkSongLiked(track.id)
+            "qqmusic" -> QqMusicApi.isLiked(track)
+            else -> Result.success(newSourceLiked(track))
+        }
+    } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+    catch (e: Exception) { Result.failure(e) }
+
+    fun setTrackLiked(track: Track, liked: Boolean) {
+        when (track.source) {
+            "netease" -> setNeteaseTrackLiked(track, liked)
+            "qqmusic" -> setQqTrackLiked(track, liked) { _toastMessage.trySend(if (it) "已收藏" else "已取消收藏") }
+            else -> viewModelScope.launch {
+                try {
+                    val account = playbackAccountFor(track) ?: error("请先登录后收藏歌曲")
+                    setNewSourceLiked(track, liked, account)
+                    check(playbackAccountFor(track) == account) { "账号已切换，请刷新收藏状态" }
+                    if (playerState.currentTrack == track) {
+                        ++likeStateGeneration
+                        isCurrentTrackLiked = liked
+                        mediaPlaybackService?.setFavoriteState(track, liked)
                     }
-                    context.startActivity(Intent.createChooser(shareIntent, "分享歌曲").apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    })
-                }
-            } catch (e: Exception) {
-                Log.e("MusicPlayerViewModel", "Download and share failed: ${e.message}")
-                withContext(Dispatchers.Main) {
-                    android.widget.Toast.makeText(context, "下载并分享失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                }
+                    _toastMessage.trySend(if (liked) "已收藏" else "已取消收藏")
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: Exception) { _toastMessage.trySend(e.message ?: "收藏操作失败") }
             }
         }
     }
 
     fun likeCurrentTrack(onResult: ((Boolean) -> Unit)? = null) {
         val track = playerState.currentTrack ?: return
+        if (track.source !in setOf("qqmusic", "netease")) {
+            if (likeMutationInProgress) return
+            likeMutationInProgress = true
+            val generation = ++likeStateGeneration
+            viewModelScope.launch {
+                try {
+                    val account = playbackAccountFor(track) ?: error("请先登录后收藏歌曲")
+                    val current = newSourceLiked(track)
+                    if (generation != likeStateGeneration || playerState.currentTrack != track) return@launch
+                    check(playbackAccountFor(track) == account) { "账号已切换，请重试" }
+                    setNewSourceLiked(track, !current, account)
+                    check(playbackAccountFor(track) == account) { "账号已切换，请刷新收藏状态" }
+                    if (generation == likeStateGeneration && playerState.currentTrack == track) {
+                        isCurrentTrackLiked = !current
+                        mediaPlaybackService?.setFavoriteState(track, !current)
+                        onResult?.invoke(!current)
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: Exception) { _toastMessage.trySend(e.message ?: "收藏操作失败") }
+                finally { likeMutationInProgress = false }
+            }
+            return
+        }
         if (track.source == "qqmusic") {
             if (likeMutationInProgress) return
             if (!QqMusicApi.isLoggedIn()) {
@@ -2130,8 +2848,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
         viewModelScope.launch {
-            val result = if (track.source == "qqmusic") QqMusicApi.setLiked(track, true)
-                else NeteaseApi.likeSong(track.id, true)
+            val result = when (track.source) {
+                "qqmusic" -> QqMusicApi.setLiked(track, true)
+                "netease" -> NeteaseApi.likeSong(track.id, true)
+                else -> try {
+                    val account = playbackAccountFor(track) ?: error("请先登录后收藏歌曲")
+                    setNewSourceLiked(track, true, account)
+                    check(playbackAccountFor(track) == account) { "账号已切换，请刷新收藏状态" }
+                    Result.success(true)
+                }
+                    catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                    catch (e: Exception) { Result.failure(e) }
+            }
             result.fold({ success -> if (success) onResult?.invoke(true) },
                 { _toastMessage.trySend(it.message ?: "收藏失败") })
         }
@@ -2140,6 +2868,21 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun checkIfCurrentTrackLiked() {
         val track = playerState.currentTrack ?: return
         val generation = ++likeStateGeneration
+        if (track.source !in setOf("qqmusic", "netease")) {
+            isCurrentTrackLiked = false
+            mediaPlaybackService?.setFavoriteState(track, false)
+            viewModelScope.launch {
+                try {
+                    val liked = newSourceLiked(track)
+                    if (generation == likeStateGeneration && playerState.currentTrack == track) {
+                        isCurrentTrackLiked = liked
+                        mediaPlaybackService?.setFavoriteState(track, liked)
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (_: Exception) { /* 保持未知状态，点击时重新读取。 */ }
+            }
+            return
+        }
         if (track.source == "qqmusic") {
             isCurrentTrackLiked = false
             viewModelScope.launch {
@@ -2174,6 +2917,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (isBound) {
             mediaPlaybackService?.onTrackChangedListener = null
             mediaPlaybackService?.onPlaybackStateChanged = null
+            mediaPlaybackService?.onAudioFormatChanged = null
+            mediaPlaybackService?.onCachedPlaybackError = null
             mediaPlaybackService?.onNotificationClose = null
             mediaPlaybackService?.onNotificationFavorite = null
             getApplication<Application>().unbindService(serviceConnection)

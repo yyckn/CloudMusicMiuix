@@ -18,12 +18,13 @@ internal fun LyricsReveal(
     visible: Boolean,
     animateInitial: Boolean = false,
     origin: TransformOrigin = TransformOrigin.Center,
+    backingVocal: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
     val blur =
-        remember(density) {
-            Array<RenderEffect?>(65) {
+        remember(density, backingVocal) {
+            Array<RenderEffect?>(if (backingVocal) 1 else 65) {
                 if (it == 0) null
                 else
                     BlurEffect(
@@ -37,7 +38,9 @@ internal fun LyricsReveal(
     visibility.targetState = visible
     val transition = rememberTransition(visibility, label = "lyricsVisibility")
     val progress =
-        transition.animateFloat(transitionSpec = { LyricsRevealSpring }, label = "lyricsReveal") {
+        transition.animateFloat(transitionSpec = {
+            if (backingVocal) tween(200, easing = Easing { it * it * (3f - 2f * it) }) else LyricsRevealSpring
+        }, label = "lyricsReveal") {
             if (it) 1f else 0f
         }
     // Retain the fixed-size content until this same progress has completely settled.
@@ -74,10 +77,10 @@ internal fun LyricsReveal(
                 .lyricsVisualLayer {
                     val value = progress.value
                     transformOrigin = origin
-                    scaleX = revealScale(value)
+                    scaleX = if (backingVocal) value.coerceIn(0f, 1f) else revealScale(value)
                     scaleY = scaleX
-                    alpha = revealAlpha(value)
-                    renderEffect = blur[revealBlurIndex(value)]
+                    alpha = if (backingVocal) value.coerceIn(0f, 1f) else revealAlpha(value)
+                    renderEffect = if (backingVocal) null else blur[revealBlurIndex(value)]
                 }
         ) {
             content()

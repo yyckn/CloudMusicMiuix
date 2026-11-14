@@ -1,0 +1,48 @@
+{
+  "data": {
+    "song_list": [
+      {
+        "hash": "a834e8a1a784b53b3e14af2aefe44d4d",
+        "mixsongid": 580876352,
+        "songid": null,
+        "songname": null,
+        "ori_audio_name": "พี่ชอบหนูที่สุดเลย",
+        "author_name": "Ponchet、VARINZ",
+        "singerinfo": null,
+        "authors": [
+          {
+            "sizable_avatar": "http://singerimg.kugou.com/uploadpic/softhead/{size}/20260128/20260128154245582964.jpg",
+            "is_publish": "1",
+            "author_name": "Ponchet",
+            "author_id": "8448663"
+          },
+          {
+            "sizable_avatar": "http://singerimg.kugou.com/uploadpic/softhead/{size}/20240130/20240130165658251.jpg",
+            "is_publish": "1",
+            "author_name": "VARINZ",
+            "author_id": "998017"
+          }
+        ],
+        "time_length": null,
+        "timelength": null,
+        "album_id": null,
+        "album_name": null,
+        "sizable_cover": null,
+        "album_info": {
+          "album_name": "พี่ชอบหนูที่สุดเลย",
+          "publish_date": "2023-11-02",
+          "album_id": "81505465",
+          "sizable_cover": "http://imge.kugou.com/stdmusic/{size}/20250221/20250221142514805416.jpg",
+          "category": "1",
+          "is_publish": "1"
+        },
+        "pay_type": null,
+        "audio_info": {
+          "hash": "A834E8A1A784B53B3E14AF2AEFE44D4D",
+          "timelength": "186514",
+          "pay_type": 3
+        }
+      }
+    ]
+  }
+}

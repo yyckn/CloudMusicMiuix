@@ -58,12 +58,14 @@ fun UpdateLogSheet(viewModel: MusicPlayerViewModel) {
                 style = MiuixTheme.textStyles.title2,
                 color = MiuixTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "发布于 ${updateInfo.date}",
-                style = MiuixTheme.textStyles.footnote1,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
+            if (updateInfo.date.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "发布于 ${updateInfo.date}",
+                    style = MiuixTheme.textStyles.footnote1,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
             Card(
                 modifier = Modifier.fillMaxWidth()

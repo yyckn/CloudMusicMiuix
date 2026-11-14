@@ -11,8 +11,12 @@ android {
         applicationId = "com.hypermusic.miuix"
         minSdk = 33
         targetSdk = 36
-        versionCode = 61
-        versionName = "2.0.0-beta5"
+        versionCode = 68
+        versionName = "2.1.0-dev2"
+
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -42,6 +46,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
     buildFeatures {
+        buildConfig = true
         compose = true
     }
     testOptions {
@@ -65,6 +70,9 @@ dependencies {
     implementation(libs.androidx.navigationevent)
     implementation(libs.okhttp)
     implementation(libs.gson)
+    implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
+    implementation("net.jthink:jaudiotagger:3.0.1")
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation("androidx.compose.material:material-icons-extended")

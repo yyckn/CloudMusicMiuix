@@ -2,6 +2,7 @@ package com.hypermusic.miuix.ui.components
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -47,6 +48,7 @@ fun AppleMusicLyricsView(
     isPlaying: Boolean = false,
     modifier: Modifier = Modifier,
     positionProvider: (() -> Long)? = null,
+    waitingForLyrics: Boolean = false,
 ) {
     val dark = rememberPlayerDark()
     val wordByWord = ThemeSettings.wordByWordLyrics
@@ -59,8 +61,10 @@ fun AppleMusicLyricsView(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "暂无歌词",
+            if (waitingForLyrics && lyrics?.isPureMusic != true) {
+                top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator(Modifier.size(32.dp))
+            } else Text(
+                text = if (lyrics?.isPureMusic == true) "纯音乐，请欣赏" else "暂无歌词",
                 fontSize = 16.sp,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )

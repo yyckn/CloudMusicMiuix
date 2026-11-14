@@ -3,7 +3,7 @@ package com.hypermusic.miuix.ui.pages
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,7 +24,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,14 +33,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.hypermusic.miuix.data.api.NeteaseApi
-import com.hypermusic.miuix.data.lyrics.QqMusicLyricsApi
+import com.hypermusic.miuix.viewmodel.LyricState
 import com.hypermusic.miuix.data.model.Track
 import com.hypermusic.miuix.ui.FeedBottomPads
 import com.hypermusic.miuix.ui.components.BlurredBar
 import com.hypermusic.miuix.ui.components.pageLayerBackdrop
 import com.hypermusic.miuix.ui.components.rememberPageBlurBackdrop
-import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
@@ -60,51 +57,44 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 @Composable
 fun DeveloperOptionsPage(
     currentTrack: Track?,
+    lyricState: LyricState,
     onBackClick: () -> Unit,
     onOpenOobe: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val scrollBehavior = MiuixScrollBehavior()
     val blurBackdrop = rememberPageBlurBackdrop()
 
     var showRawLyrics by remember { mutableStateOf(false) }
+    var showProcessedLyrics by remember { mutableStateOf(false) }
     var showHardwareInfo by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-    var rawText by remember { mutableStateOf("") }
-    var errorText by remember { mutableStateOf<String?>(null) }
-    var lyricsJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-
-    fun loadRawLyrics() {
-        val track = currentTrack
-        if (track == null) {
-            Toast.makeText(context, "当前没有播放歌曲", Toast.LENGTH_SHORT).show()
-            return
-        }
-        rawText = ""
-        errorText = null
-        isLoading = true
-        showRawLyrics = true
-        lyricsJob?.cancel()
-        lyricsJob = scope.launch {
-            val result = when (track.source) {
-                "netease" -> NeteaseApi.getRawLyric(track.id).map(::buildRawLyricsText)
-                "qqmusic" -> QqMusicLyricsApi.fetchRaw(track).map(::buildQqRawLyricsText)
-                else -> Result.failure(IllegalArgumentException("暂不支持此音源的原始歌词调试"))
+    val rawText = buildString {
+        if (lyricState.rawDebugText.isNotBlank()) {
+            append("【实际歌词来源】\n").append(lyricState.source ?: "未知")
+            lyricState.matchedTrack?.let { matched ->
+                append("\n【歌词歌曲】\n").append(matched.title).append(" - ").append(matched.artist)
+                append("\n歌曲 ID：").append(matched.id)
             }
-            result.fold(
-                onSuccess = { raw -> rawText = raw },
-                onFailure = { e -> errorText = e.message ?: "加载失败" }
-            )
-            isLoading = false
+            append("\n\n").append(lyricState.rawDebugText)
+        }
+    }
+
+    val processedText = remember(lyricState.lyrics) { com.hypermusic.miuix.data.lyrics.formatProcessedWordLyrics(lyricState.lyrics) }
+    val displayedText = if (showProcessedLyrics) processedText else rawText
+    fun loadRawLyrics(processed: Boolean = false) {
+        if (currentTrack == null) {
+            Toast.makeText(context, "当前没有播放歌曲", Toast.LENGTH_SHORT).show()
+        } else {
+            showProcessedLyrics = processed
+            showRawLyrics = true
         }
     }
 
     fun copyRawLyrics() {
-        if (rawText.isBlank()) return
+        if (displayedText.isBlank()) return
         val clipboard = context.getSystemService(ClipboardManager::class.java)
-        clipboard?.setPrimaryClip(ClipData.newPlainText("raw_lyrics", rawText))
+        clipboard?.setPrimaryClip(ClipData.newPlainText(if (showProcessedLyrics) "processed_word_lyrics" else "raw_lyrics", displayedText))
         Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
     }
 
@@ -162,13 +152,18 @@ fun DeveloperOptionsPage(
                         .padding(bottom = 12.dp)
                 ) {
                     ArrowPreference(
-                        title = "查看当前播放歌曲的原歌词",
+                         title = "查看当前歌曲的歌词原数据",
                         summary = if (currentTrack == null) {
                             "当前没有播放歌曲"
                         } else {
                             "${currentTrack.title} - ${currentTrack.artist}"
                         },
                         onClick = { loadRawLyrics() }
+                    )
+                    ArrowPreference(
+                        title = "查看当前歌曲的最终处理歌词",
+                        summary = if (currentTrack == null) "当前没有播放歌曲" else "${currentTrack.title} - ${currentTrack.artist}",
+                        onClick = { loadRawLyrics(processed = true) }
                     )
                 }
             }
@@ -177,7 +172,7 @@ fun DeveloperOptionsPage(
         HardwareInfoSheet(showHardwareInfo) { showHardwareInfo = false }
         OverlayBottomSheet(
             show = showRawLyrics,
-            title = "原始歌词",
+            title = if (showProcessedLyrics) "最终处理歌词" else "歌词原数据",
             startAction = {
                 IconButton(onClick = { copyRawLyrics() }) {
                     Icon(
@@ -188,7 +183,7 @@ fun DeveloperOptionsPage(
                 }
             },
             endAction = {
-                IconButton(onClick = { showRawLyrics = false; lyricsJob?.cancel(); isLoading = false }) {
+                IconButton(onClick = { showRawLyrics = false }) {
                     Icon(
                         imageVector = Icons.Outlined.Close,
                         contentDescription = "关闭",
@@ -196,7 +191,7 @@ fun DeveloperOptionsPage(
                     )
                 }
             },
-            onDismissRequest = { showRawLyrics = false; lyricsJob?.cancel(); isLoading = false }
+            onDismissRequest = { showRawLyrics = false }
         ) {
             Card(
                 modifier = Modifier
@@ -208,7 +203,7 @@ fun DeveloperOptionsPage(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     when {
-                        isLoading -> {
+                        lyricState.isLoading -> {
                             InfiniteProgressIndicator(
                                 modifier = Modifier
                                     .align(Alignment.Center)
@@ -216,9 +211,9 @@ fun DeveloperOptionsPage(
                             )
                         }
 
-                        errorText != null -> {
+                        lyricState.error != null -> {
                             Text(
-                                text = errorText ?: "加载失败",
+                                text = lyricState.error,
                                 modifier = Modifier.padding(16.dp),
                                 style = MiuixTheme.textStyles.body2,
                                 color = MiuixTheme.colorScheme.error
@@ -233,7 +228,7 @@ fun DeveloperOptionsPage(
                                     .padding(16.dp)
                             ) {
                                 Text(
-                                    text = rawText,
+                                    text = displayedText.ifBlank { if (showProcessedLyrics) "当前歌曲没有可显示的逐字歌词" else "当前歌词没有可显示的原始数据" },
                                     style = MiuixTheme.textStyles.footnote1,
                                     softWrap = true,
                                     color = MiuixTheme.colorScheme.onSurface
@@ -245,18 +240,6 @@ fun DeveloperOptionsPage(
             }
         }
     }
-}
-
-private fun buildQqRawLyricsText(raw: QqMusicLyricsApi.RawLyrics): String {
-    val sections = listOf(
-        "QQ 原歌词 / QRC（解密后；解密失败时显示原始编码）" to raw.qrcOrLrc,
-        "翻译" to raw.translation,
-        "罗马音" to raw.romanization,
-        "LRC 接口原歌词" to raw.lrc,
-        "LRC 接口翻译" to raw.lrcTranslation
-    ).filter { it.second.isNotBlank() }
-    return sections.joinToString("\n\n") { (title, content) -> "【$title】\n$content" }
-        .ifBlank { "未获取到歌词" }
 }
 
 @Composable
@@ -296,23 +279,4 @@ private fun HardwareInfoSheet(show: Boolean, onDismiss: () -> Unit) {
             }
         }
     }
-}
-
-private fun buildRawLyricsText(raw: NeteaseApi.RawLyrics): String {
-    val builder = StringBuilder()
-
-    fun appendSection(title: String, content: String) {
-        if (content.isBlank()) return
-        if (builder.isNotEmpty()) builder.append("\n\n")
-        builder.append("【").append(title).append("】\n").append(content)
-    }
-
-    appendSection("YRC 逐字", raw.yrc)
-    appendSection("LRC", raw.lrc)
-    appendSection("翻译 YTLRC", raw.ytlrc)
-    appendSection("翻译 TLYRIC", raw.tlyric)
-    appendSection("罗马音 YROMALRC", raw.yromalrc)
-    appendSection("罗马音 ROMALRC", raw.romalrc)
-
-    return if (builder.isEmpty()) "未获取到歌词" else builder.toString()
 }

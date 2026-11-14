@@ -1,6 +1,14 @@
 package com.hypermusic.miuix.ui.pages
 
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -64,11 +72,13 @@ fun LyricExclusionRulesPage(
     var editingRuleId by remember { mutableStateOf<String?>(null) }
     var ruleInput by remember { mutableStateOf("") }
     var durationInput by remember { mutableStateOf("") }
+    var matchType by remember { mutableStateOf(LyricExclusionRules.MatchType.ANYWHERE) }
 
     fun openAddDialog() {
         editingRuleId = null
         ruleInput = ""
         durationInput = ""
+        matchType = LyricExclusionRules.MatchType.ANYWHERE
         showDialog = true
     }
 
@@ -76,6 +86,7 @@ fun LyricExclusionRulesPage(
         editingRuleId = rule.id
         ruleInput = rule.pattern
         durationInput = LyricExclusionRules.durationInputText(rule)
+        matchType = rule.effectiveMatchType
         showDialog = true
     }
 
@@ -124,8 +135,6 @@ fun LyricExclusionRulesPage(
                         .padding(bottom = 6.dp)
                 ) {
                     BasicComponent(
-                        title = rule.pattern,
-                        summary = LyricExclusionRules.describe(rule).ifBlank { null },
                         endActions = {
                             Switch(
                                 checked = LyricExclusionRules.isDefaultRuleEnabled(rule.id),
@@ -135,29 +144,14 @@ fun LyricExclusionRulesPage(
                                 }
                             )
                         }
-                    )
+                    ) {
+                        RuleLabel(rule)
+                    }
                 }
             }
 
             // ---------------- 用户规则 ----------------
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    SmallTitle("用户规则", modifier = Modifier.weight(1f))
-                    IconButton(
-                        onClick = { openAddDialog() },
-                        modifier = Modifier.padding(end = 12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Add,
-                            contentDescription = "添加规则",
-                            tint = MiuixTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
+            item { SmallTitle("用户规则") }
 
             item {
                 Card(
@@ -181,8 +175,6 @@ fun LyricExclusionRulesPage(
                         .padding(bottom = 6.dp)
                 ) {
                     BasicComponent(
-                        title = rule.pattern.ifBlank { "(仅时长)" },
-                        summary = LyricExclusionRules.describe(rule).ifBlank { null },
                         onClick = { openEditDialog(rule) },
                         endActions = {
                             IconButton(
@@ -207,7 +199,9 @@ fun LyricExclusionRulesPage(
                                 )
                             }
                         }
-                    )
+                    ) {
+                        RuleLabel(rule)
+                    }
                 }
             }
 
@@ -241,6 +235,15 @@ fun LyricExclusionRulesPage(
             onDismissRequest = { showDialog = false },
             content = {
                 Column {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        OverlayDropdownPreference(
+                            title = "匹配类型",
+                            items = LyricExclusionRules.MatchType.entries.map { it.label },
+                            selectedIndex = matchType.ordinal,
+                            onSelectedIndexChange = { matchType = LyricExclusionRules.MatchType.entries[it] }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
                     TextField(
                         value = ruleInput,
                         onValueChange = { ruleInput = it },
@@ -282,7 +285,8 @@ fun LyricExclusionRulesPage(
                                             LyricExclusionRules.Rule(
                                                 pattern = pattern,
                                                 durationMs = durationMax,
-                                                durationMinMs = durationMin
+                                                durationMinMs = durationMin,
+                                                matchType = matchType
                                             )
                                         )
                                     } else {
@@ -291,7 +295,8 @@ fun LyricExclusionRulesPage(
                                                 id = currentId,
                                                 pattern = pattern,
                                                 durationMs = durationMax,
-                                                durationMinMs = durationMin
+                                                durationMinMs = durationMin,
+                                                matchType = matchType
                                             )
                                         )
                                     }
@@ -317,3 +322,51 @@ private val USER_RULE_HELP = """
 3. 正则：例如 ^(作词|作曲)\s*[:：]；以 ^ 或 $ 开头结尾、或包含 .*、|、[]、\d 等会被识别为正则。
 4. 仅时长：规则留空，只填写歌词时长（毫秒，支持 1000-2000 这类区间），将排除时长落在该范围内的行。
 """.trimIndent()
+
+@Composable
+private fun RuleLabel(rule: LyricExclusionRules.Rule) {
+    val color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+    val primary = MiuixTheme.colorScheme.primary
+    val pattern = rule.pattern.ifBlank { "(仅时长)" }
+    val styledPattern = remember(rule.id, rule.pattern, primary) {
+        buildAnnotatedString {
+            append(pattern)
+            if (rule.pattern.isNotBlank()) {
+                var index = 0
+                while (index < pattern.length) {
+                    val char = pattern[index]
+                    if (char == '\\') {
+                        // Keep escape sequences such as \s or \d together.
+                        val end = (index + 2).coerceAtMost(pattern.length)
+                        addStyle(SpanStyle(color = primary), index, end)
+                        index = end
+                    } else {
+                        if (char in "^$.|?*+()[]{}") {
+                            addStyle(SpanStyle(color = primary), index, index + 1)
+                        }
+                        index++
+                    }
+                }
+            }
+        }
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = styledPattern,
+            fontSize = MiuixTheme.textStyles.headline1.fontSize,
+            fontWeight = FontWeight.Medium,
+            color = MiuixTheme.colorScheme.onSurface,
+            modifier = Modifier.align(Alignment.CenterVertically)
+        )
+        LyricExclusionRules.tags(rule).forEach { tag ->
+            Text(
+                text = tag,
+                fontSize = 10.sp,
+                color = color,
+                modifier = Modifier.align(Alignment.CenterVertically)
+                    .border(1.dp, color, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+            )
+        }
+    }
+}

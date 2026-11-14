@@ -1,6 +1,6 @@
 package com.hypermusic.miuix.ui.pages
 
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.fadeIn
@@ -184,7 +184,15 @@ fun OnboardingPage() {
         }
         2 -> OnboardingScaffold(onBack = ::back,
             buttonLabel = "继续", onContinue = {
-                val loggedIn = if (PlatformManager.current == MusicPlatform.QQ) QqMusicApi.isLoggedIn() else NeteaseApi.isLoggedIn()
+                val loggedIn = when (PlatformManager.current) {
+                    MusicPlatform.NETEASE -> NeteaseApi.isLoggedIn()
+                    MusicPlatform.QQ -> QqMusicApi.isLoggedIn()
+                    MusicPlatform.BODIAN -> com.hypermusic.miuix.data.api.BodianAuth(context, com.hypermusic.miuix.data.api.BodianClient(context)).currentAccount() != null
+                    MusicPlatform.KUGOU -> com.hypermusic.miuix.data.api.KugouAuth(context, com.hypermusic.miuix.data.api.KugouClient(context)).account() != null
+                    MusicPlatform.QISHUI -> runCatching {
+                        com.hypermusic.miuix.data.api.QishuiAuth(context, com.hypermusic.miuix.data.api.QishuiClient(context)).account() != null
+                    }.getOrDefault(false)
+                }
                 OnboardingSettings.goTo(if (loggedIn) 4 else 3)
             }) { padding ->
             Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp),
@@ -198,6 +206,12 @@ fun OnboardingPage() {
                             onClick = { PlatformManager.select(MusicPlatform.NETEASE) })
                         RadioButtonPreference(title = "QQ音乐", selected = PlatformManager.current == MusicPlatform.QQ,
                             onClick = { PlatformManager.select(MusicPlatform.QQ) })
+                        RadioButtonPreference(title = "波点音乐", selected = PlatformManager.current == MusicPlatform.BODIAN,
+                            onClick = { PlatformManager.select(MusicPlatform.BODIAN) })
+                        RadioButtonPreference(title = "酷狗音乐", selected = PlatformManager.current == MusicPlatform.KUGOU,
+                            onClick = { PlatformManager.select(MusicPlatform.KUGOU) })
+                        RadioButtonPreference(title = "汽水音乐", selected = PlatformManager.current == MusicPlatform.QISHUI,
+                            onClick = { PlatformManager.select(MusicPlatform.QISHUI) })
                     }
                     Text("*稍后也可在APP内切换平台。", modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                         style = MiuixTheme.textStyles.footnote1,
@@ -205,13 +219,14 @@ fun OnboardingPage() {
                 }
             }
         }
-        3 -> if (PlatformManager.current == MusicPlatform.QQ) {
-            QqLoginPage(onBack = ::back, onSuccess = { OnboardingSettings.goTo(4) })
-        } else {
-            QrLoginPage(onBackClick = ::back, onLoginSuccess = {
-                NeteaseApi.saveCurrentAccount()
-                OnboardingSettings.goTo(4)
-            }, context = context)
+        3 -> when (val platform = PlatformManager.current) {
+            MusicPlatform.QQ -> QqLoginPage(onBack = ::back, onSuccess = { OnboardingSettings.goTo(4) })
+            MusicPlatform.NETEASE -> QrLoginPage(onBackClick = ::back, onLoginSuccess = {
+                    NeteaseApi.saveCurrentAccount()
+                    OnboardingSettings.goTo(4)
+                }, context = context)
+            MusicPlatform.BODIAN, MusicPlatform.KUGOU, MusicPlatform.QISHUI ->
+                AdditionalPlatformLoginPage(platform, onBack = ::back, onSuccess = { OnboardingSettings.goTo(4) })
         }
         else -> OnboardingWelcome(completed = true, onClick = { OnboardingSettings.finish() }, onBack = ::back)
     }

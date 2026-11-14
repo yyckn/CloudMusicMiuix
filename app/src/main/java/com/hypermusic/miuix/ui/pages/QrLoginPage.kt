@@ -4,11 +4,13 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
@@ -214,6 +217,7 @@ internal fun LoginPageFrame(onBackClick: () -> Unit, onRefreshClick: () -> Unit,
 internal fun QrLoginLayout(
     isLandscape: Boolean,
     qrBitmap: Bitmap?,
+    qqBackground: Boolean = false,
     statusText: String,
     statusCode: Int,
     context: Context,
@@ -240,7 +244,7 @@ internal fun QrLoginLayout(
             horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).padding(end = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                QrCodeWithCountdown(qrBitmap, secondsRemaining, statusCode)
+                QrCodeWithCountdown(qrBitmap, secondsRemaining, statusCode, qqBackground)
             }
             Column(Modifier.weight(1f).padding(start = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -250,7 +254,7 @@ internal fun QrLoginLayout(
     } else {
         Column(Modifier.fillMaxSize().padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            QrCodeWithCountdown(qrBitmap, secondsRemaining, statusCode)
+            QrCodeWithCountdown(qrBitmap, secondsRemaining, statusCode, qqBackground)
             Spacer(Modifier.height(24.dp))
             StatusSection(statusText, statusCode, qrBitmap, context, onImportClick)
         }
@@ -258,9 +262,9 @@ internal fun QrLoginLayout(
 }
 
 @Composable
-private fun QrCodeWithCountdown(qrBitmap: Bitmap?, secondsRemaining: Int, statusCode: Int) {
+private fun QrCodeWithCountdown(qrBitmap: Bitmap?, secondsRemaining: Int, statusCode: Int, qqBackground: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        QrCodeBox(qrBitmap)
+        QrCodeBox(qrBitmap, qqBackground)
         if (qrBitmap != null) {
             Spacer(Modifier.height(8.dp))
             Text(
@@ -273,18 +277,19 @@ private fun QrCodeWithCountdown(qrBitmap: Bitmap?, secondsRemaining: Int, status
 }
 
 @Composable
-private fun QrCodeBox(qrBitmap: Bitmap?) {
+internal fun QrCodeBox(qrBitmap: Bitmap?, qqBackground: Boolean = false) {
     Box(
         modifier = Modifier
-            .size(240.dp)
-            .padding(8.dp),
+            .size(if (qqBackground) 248.dp else 240.dp)
+            .then(if (qqBackground && qrBitmap != null) Modifier.clip(RoundedCornerShape(20.dp)).background(ComposeColor.White) else Modifier)
+            .padding(if (qqBackground) 12.dp else 8.dp),
         contentAlignment = Alignment.Center
     ) {
         qrBitmap?.let { bitmap ->
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = "登录二维码",
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
             )
         } ?: run {
             Text(
@@ -315,7 +320,27 @@ private fun StatusSection(
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    // 保存二维码图片到相册
+    SaveLoginQrButton(qrBitmap, context)
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    Button(onClick = onImportClick, modifier = Modifier.fillMaxWidth()) {
+        Text("导入登录信息")
+    }
+    val scanner = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            result.data?.getStringExtra(com.hypermusic.miuix.ui.scan.QrScannerActivity.EXTRA_RESULT)?.let {
+                com.hypermusic.miuix.ui.scan.CredentialImportController.submit(it)
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    Button(onClick = { scanner.launch(android.content.Intent(context, com.hypermusic.miuix.ui.scan.QrScannerActivity::class.java)) },
+        modifier = Modifier.fillMaxWidth()) { Text("扫描用户数据二维码") }
+}
+
+@Composable
+internal fun SaveLoginQrButton(qrBitmap: Bitmap?, context: Context) {
     Button(
         onClick = {
             qrBitmap?.let { bitmap ->
@@ -352,22 +377,6 @@ private fun StatusSection(
     ) {
         Text(text = "保存二维码图片到相册")
     }
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Button(onClick = onImportClick, modifier = Modifier.fillMaxWidth()) {
-        Text("导入登录信息")
-    }
-    val scanner = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            result.data?.getStringExtra(com.hypermusic.miuix.ui.scan.QrScannerActivity.EXTRA_RESULT)?.let {
-                com.hypermusic.miuix.ui.scan.CredentialImportController.submit(it)
-            }
-        }
-    }
-    Spacer(modifier = Modifier.height(8.dp))
-    Button(onClick = { scanner.launch(android.content.Intent(context, com.hypermusic.miuix.ui.scan.QrScannerActivity::class.java)) },
-        modifier = Modifier.fillMaxWidth()) { Text("扫码用户数据二维码") }
 }
 
 private suspend fun validateAndImportCredentials(jsonString: String): Result<String> {
@@ -409,17 +418,21 @@ private suspend fun validateAndImportCredentials(jsonString: String): Result<Str
                     }
                 },
                 onFailure = { e ->
-                    Result.failure(e)
+                    Result.failure(if (e is NeteaseApi.CredentialExpiredException) Exception("凭据已过期", e) else e)
                 }
             )
         }
         validation
+    } catch (e: com.google.gson.JsonParseException) {
+        Result.failure(Exception("凭据不是有效的 JSON，请检查内容或文件格式", e))
+    } catch (e: IllegalStateException) {
+        Result.failure(Exception("凭据格式不正确，请提供 JSON 对象且字段值为文本", e))
     } catch (e: Exception) {
-        Result.failure(e)
+        Result.failure(Exception("无法解析登录凭据：${e.message ?: "未知错误"}", e))
     }
 }
 
-private fun generateQrCode(content: String): Bitmap? {
+internal fun generateQrCode(content: String): Bitmap? {
     return try {
         val hints = HashMap<EncodeHintType, Any>()
         hints[EncodeHintType.CHARACTER_SET] = "UTF-8"

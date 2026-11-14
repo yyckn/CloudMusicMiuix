@@ -4,11 +4,21 @@ import com.hypermusic.miuix.data.api.MusicPlatform
 
 /** Maximum requested quality. The server may return a lower available format. */
 object AudioQuality {
+    const val summary = "设置播放的最高音质，实际音质取决于歌曲本身和账号VIP权限，切歌后生效"
     val neteaseOptions = listOf("Hi-Res 无损", "高品质（320kbps）", "中等品质（192kbps）", "标准品质（128kbps）")
     val qqOptions = listOf("Hi-Res 无损", "无损", "高品质（320kbps）", "标准品质（128kbps）", "低品质（AAC）")
+    val bodianOptions = listOf("无损", "高品质（320kbps）", "标准品质（128kbps）")
+    val kugouOptions = listOf("Hi-Res 无损", "无损", "高品质（320kbps）", "标准品质（128kbps）")
+    val qishuiOptions = listOf("Hi-Res 无损", "无损", "高品质", "标准品质")
     private val neteaseBitrates = listOf(999000, 320000, 192000, 128000)
 
-    fun options(platform: MusicPlatform): List<String> = if (platform == MusicPlatform.QQ) qqOptions else neteaseOptions
+    fun options(platform: MusicPlatform): List<String> = when (platform) {
+        MusicPlatform.NETEASE -> neteaseOptions
+        MusicPlatform.QQ -> qqOptions
+        MusicPlatform.BODIAN -> bodianOptions
+        MusicPlatform.KUGOU -> kugouOptions
+        MusicPlatform.QISHUI -> qishuiOptions
+    }
     fun neteaseBitrate(index: Int): Int = neteaseBitrates[index.coerceIn(neteaseBitrates.indices)]
     fun migrateNeteaseIndex(old: Int): Int = when (old) { 0, 1 -> 0; 2, 3 -> 1; else -> 3 }
 

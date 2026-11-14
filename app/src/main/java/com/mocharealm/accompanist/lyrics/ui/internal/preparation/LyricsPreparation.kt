@@ -49,7 +49,7 @@ internal fun prepareLyricsInternal(
                 }
             if (line is KaraokeLine && line.alignment == KaraokeAlignment.End) !rtl else rtl
         }
-    val layoutWidth = if (sides.any { it } && sides.any { !it }) width * 0.8f else width
+    val layoutWidth = if (sides.any { it } && sides.any { !it }) width * 0.9f else width
     return PreparedLyrics(
         lyrics.lines.map { line ->
             when (line) {
@@ -154,7 +154,10 @@ private fun prepareLine(
         (if (accompaniment) accompanimentStyle else normalStyle).copy(
             textMotion = TextMotion.Animated
         )
-    val animatedPhoneticStyle = phoneticStyle.copy(textMotion = TextMotion.Animated)
+    val animatedPhoneticStyle = phoneticStyle.copy(
+        textMotion = TextMotion.Animated,
+        fontSize = if (accompaniment) normalStyle.fontSize * 0.5f else phoneticStyle.fontSize,
+    )
     val sweepFadeWidth =
         sweepWidths.getOrPut(style) {
             val fontSize = style.fontSize

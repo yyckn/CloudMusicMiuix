@@ -14,7 +14,7 @@ data class LyricsCandidate<T>(
 /**
  * 跨平台歌词候选匹配，参考 SPlayer 的 pickBestCandidate：
  * 歌名必须相同或互相包含（且较短者占比 >= 34%），歌手必须匹配，
- * 时长相差超过 20s 的候选直接排除，再按相似度打分取最高。
+ * 时长相差超过 6s 的候选直接排除，再按相似度打分取最高。
  */
 object LyricsMatch {
 
@@ -61,8 +61,8 @@ object LyricsMatch {
     private fun durationClose(left: Long, right: Long): Boolean =
         left > 0 && right > 0 && kotlin.math.abs(left - right) <= 5_000L
 
-    private fun durationFar(left: Long, right: Long): Boolean =
-        left > 0 && right > 0 && kotlin.math.abs(left - right) > 20_000L
+    fun durationMatches(left: Long, right: Long): Boolean =
+        left <= 0 || right <= 0 || kotlin.math.abs(left - right) <= 6_000L
 
     fun pickBestCandidate(candidates: List<LyricsCandidate<*>>, track: Track): LyricsCandidate<*>? {
         val trackName = normalize(track.title)
@@ -82,7 +82,7 @@ object LyricsMatch {
                 if (longer == 0 || shorter.toFloat() / longer < 0.34f) continue
             }
 
-            if (durationFar(candidate.duration, track.duration)) continue
+            if (!durationMatches(candidate.duration, track.duration)) continue
 
             val (artistExact, artistContains) = artistMatches(candidate.artist, artists)
             if (artists.isNotEmpty() && !artistExact && !artistContains) continue

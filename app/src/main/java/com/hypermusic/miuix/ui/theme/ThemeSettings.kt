@@ -14,16 +14,21 @@ import androidx.compose.ui.text.font.FontWeight
 import com.hypermusic.miuix.R
 
 object ThemeSettings {
+    // Existing color IDs 0..15 stay unchanged; the new option is inserted only in the menu.
+    const val SOURCE_ACCENT_INDEX = 16
     private const val PREFS_NAME = "theme_settings"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_USE_FLOATING_BAR = "use_floating_bar"
+    private const val KEY_GAUSSIAN_BLUR = "gaussian_blur_enabled"
     private const val KEY_FLOATING_BAR_ALIGNMENT = "floating_bar_alignment"
+    private const val KEY_AUTO_COLLAPSE_FLOATING_PLAYER = "auto_collapse_floating_player"
     private const val KEY_LIQUID_GLASS_EFFECT = "liquid_glass_effect"
     private const val KEY_FOLLOW_MONET = "follow_monet"
     private const val KEY_LYRIC_FONT_SIZE = "lyric_font_size"
     private const val KEY_LYRIC_TRANSLATION_RATIO = "lyric_translation_ratio"
     private const val KEY_USE_ROUND_COVER = "use_round_cover"
     private const val KEY_COVER_ROTATION = "cover_rotation"
+    private const val KEY_VINYL_SWIPE_ACTION = "vinyl_swipe_action"
     private const val KEY_SMALL_SCREEN_COVER_STYLE = "small_screen_cover_style"
     private const val KEY_LARGE_SCREEN_COVER_STYLE = "large_screen_cover_style"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
@@ -40,11 +45,18 @@ object ThemeSettings {
     var themeModeIndex by mutableIntStateOf(2)
         private set
 
-    var useFloatingBar by mutableStateOf(true)
+    var useFloatingBar by mutableStateOf(false)
+        private set
+
+    var gaussianBlurEnabled by mutableStateOf(true)
         private set
 
     // 悬浮底栏对齐方向: 0=居左, 1=居中, 2=居右
     var floatingBarAlignmentIndex by mutableIntStateOf(1)
+        private set
+    var floatingBarAlignmentRevision by mutableIntStateOf(0)
+        private set
+    var autoCollapseFloatingPlayer by mutableStateOf(true)
         private set
 
     // 液态玻璃效果: 0=通透(0.4), 1=中等(0.6), 2=厚重(0.8)
@@ -58,8 +70,19 @@ object ThemeSettings {
             else -> 0.4f
         }
 
+    var accentIndex by mutableIntStateOf(0)
+        private set
+    var paletteStyleIndex by mutableIntStateOf(4)
+        private set
+    var colorSpecIndex by mutableIntStateOf(1)
+        private set
+    var predictiveBackEnabled by mutableStateOf(true)
+        private set
+    var pageScale by mutableStateOf(1f)
+        private set
+
     // 跟随系统莫奈取色
-    var followMonet by mutableStateOf(true)
+    var followMonet by mutableStateOf(false)
         private set
 
     var lyricFontSize by mutableIntStateOf(32)
@@ -92,6 +115,10 @@ object ThemeSettings {
 
     // 封面旋转模式: 0=静止, 1=播放时旋转, 2=始终旋转
     var coverRotationIndex by mutableIntStateOf(0)
+        private set
+
+    // 0=切换歌曲，1=切换封面和歌词
+    var vinylSwipeAction by mutableIntStateOf(1)
         private set
 
     // 封面样式（小屏布局）: 0=卡片, 1=全屏渐变
@@ -127,14 +154,22 @@ object ThemeSettings {
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         themeModeIndex = prefs?.getInt(KEY_THEME_MODE, 2) ?: 2
-        useFloatingBar = prefs?.getBoolean(KEY_USE_FLOATING_BAR, true) ?: true
+        useFloatingBar = prefs?.getBoolean(KEY_USE_FLOATING_BAR, false) ?: false
+        gaussianBlurEnabled = prefs?.getBoolean(KEY_GAUSSIAN_BLUR, true) ?: true
         floatingBarAlignmentIndex = prefs?.getInt(KEY_FLOATING_BAR_ALIGNMENT, 1) ?: 1
+        autoCollapseFloatingPlayer = prefs?.getBoolean(KEY_AUTO_COLLAPSE_FLOATING_PLAYER, true) ?: true
         liquidGlassEffectIndex = prefs?.getInt(KEY_LIQUID_GLASS_EFFECT, 1) ?: 1
-        followMonet = prefs?.getBoolean(KEY_FOLLOW_MONET, true) ?: true
+        followMonet = prefs?.getBoolean(KEY_FOLLOW_MONET, false) ?: false
+        accentIndex = (prefs?.getInt("accent_index", 0) ?: 0).coerceIn(0, SOURCE_ACCENT_INDEX)
+        paletteStyleIndex = (prefs?.getInt("palette_style_index", 4) ?: 4).coerceIn(0, 8)
+        colorSpecIndex = (prefs?.getInt("color_spec_index", 1) ?: 1).coerceIn(0, 1)
+        predictiveBackEnabled = prefs?.getBoolean("predictive_back", true) ?: true
+        pageScale = (prefs?.getFloat("page_scale", 1f) ?: 1f).coerceIn(0.8f, 1.1f)
         lyricFontSize = prefs?.getInt(KEY_LYRIC_FONT_SIZE, 32) ?: 32
         lyricTranslationRatio = prefs?.getInt(KEY_LYRIC_TRANSLATION_RATIO, 60) ?: 60
         useRoundCover = prefs?.getBoolean(KEY_USE_ROUND_COVER, false) ?: false
         coverRotationIndex = prefs?.getInt(KEY_COVER_ROTATION, 0) ?: 0
+        vinylSwipeAction = (prefs?.getInt(KEY_VINYL_SWIPE_ACTION, 1) ?: 1).coerceIn(0, 1)
         smallScreenCoverStyle = prefs?.getInt(KEY_SMALL_SCREEN_COVER_STYLE, 0) ?: 0
         largeScreenCoverStyle = prefs?.getInt(KEY_LARGE_SCREEN_COVER_STYLE, 1) ?: 1
         keepScreenOn = prefs?.getBoolean(KEY_KEEP_SCREEN_ON, true) ?: true
@@ -148,6 +183,12 @@ object ThemeSettings {
         fadeEnabled = prefs?.getBoolean(KEY_FADE_ENABLED, false) ?: false
     }
 
+    fun updateAccentIndex(value: Int) { accentIndex = value.coerceIn(0, SOURCE_ACCENT_INDEX); prefs?.edit()?.putInt("accent_index", accentIndex)?.apply() }
+    fun updatePaletteStyleIndex(value: Int) { paletteStyleIndex = value.coerceIn(0, 8); prefs?.edit()?.putInt("palette_style_index", paletteStyleIndex)?.apply() }
+    fun updateColorSpecIndex(value: Int) { colorSpecIndex = value.coerceIn(0, 1); prefs?.edit()?.putInt("color_spec_index", colorSpecIndex)?.apply() }
+    fun updatePredictiveBack(value: Boolean) { predictiveBackEnabled = value; prefs?.edit()?.putBoolean("predictive_back", value)?.apply() }
+    fun updatePageScale(value: Float) { pageScale = value.coerceIn(0.8f, 1.1f); prefs?.edit()?.putFloat("page_scale", pageScale)?.apply() }
+
     fun updateThemeModeIndex(index: Int) {
         themeModeIndex = index
         prefs?.edit()?.putInt(KEY_THEME_MODE, index)?.apply()
@@ -158,9 +199,20 @@ object ThemeSettings {
         prefs?.edit()?.putBoolean(KEY_USE_FLOATING_BAR, value)?.apply()
     }
 
+    fun updateGaussianBlur(value: Boolean) {
+        gaussianBlurEnabled = value
+        prefs?.edit()?.putBoolean(KEY_GAUSSIAN_BLUR, value)?.apply()
+    }
+
     fun updateFloatingBarAlignment(index: Int) {
         floatingBarAlignmentIndex = index
+        floatingBarAlignmentRevision++
         prefs?.edit()?.putInt(KEY_FLOATING_BAR_ALIGNMENT, index)?.apply()
+    }
+
+    fun updateAutoCollapseFloatingPlayer(value: Boolean) {
+        autoCollapseFloatingPlayer = value
+        prefs?.edit()?.putBoolean(KEY_AUTO_COLLAPSE_FLOATING_PLAYER, value)?.apply()
     }
 
     fun updateLiquidGlassEffectIndex(index: Int) {
@@ -191,6 +243,11 @@ object ThemeSettings {
     fun updateCoverRotationIndex(index: Int) {
         coverRotationIndex = index
         prefs?.edit()?.putInt(KEY_COVER_ROTATION, index)?.apply()
+    }
+
+    fun updateVinylSwipeAction(index: Int) {
+        vinylSwipeAction = index.coerceIn(0, 1)
+        prefs?.edit()?.putInt(KEY_VINYL_SWIPE_ACTION, vinylSwipeAction)?.apply()
     }
 
     fun updateSmallScreenCoverStyle(index: Int) {

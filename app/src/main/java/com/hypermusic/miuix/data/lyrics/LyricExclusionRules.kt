@@ -26,9 +26,18 @@ object LyricExclusionRules {
     private const val KEY_DISABLED_DEFAULT_IDS = "disabled_default_ids"
     private const val KEY_USER_RULES = "user_rules"
     private const val SLASH_RULE_ID = "default-special-slashes"
+    private const val NEIGHBOR_RULE_ID = "default-special-excluded-neighbors"
 
     /** 规则类型。 */
     enum class RuleKind { KEYWORD, REGEX, SONG_INFO, DURATION }
+
+    @Keep
+    enum class MatchType(val label: String, val tag: String) {
+        ANYWHERE("任意位置包含此关键词", ""),
+        START("开头包含此关键词", "开头"),
+        END("末尾包含此关键词", "末尾"),
+        EXACT("完全匹配此关键词", "完全匹配")
+    }
 
     /** 一条排除规则。[durationMs] 为时长上限，[durationMinMs] 为时长下限（0 表示不限）。 */
     @Keep
@@ -36,8 +45,12 @@ object LyricExclusionRules {
         val id: String = "",
         val pattern: String = "",
         val durationMs: Long = 0L,
-        val durationMinMs: Long = 0L
-    )
+        val durationMinMs: Long = 0L,
+        // Null also covers rules persisted before matching types were introduced.
+        val matchType: MatchType? = null
+    ) {
+        val effectiveMatchType: MatchType get() = matchType ?: MatchType.ANYWHERE
+    }
 
     private val gson = Gson()
     private var prefs: SharedPreferences? = null
@@ -150,6 +163,7 @@ object LyricExclusionRules {
         album: String
     ): Boolean {
         if (!durationMatches(rule, durationMs)) return false
+        if (rule.id == NEIGHBOR_RULE_ID) return false // Requires the original neighboring lines.
         if (rule.id == SLASH_RULE_ID) {
             return text.count { it == '/' || it == '\\' } >= 3
         }
@@ -162,11 +176,30 @@ object LyricExclusionRules {
             RuleKind.SONG_INFO -> matchesSongInfo(pattern, text, title, artists, album)
             RuleKind.REGEX -> {
                 val regex = regexOf(pattern)
-                if (regex != null) regex.containsMatchIn(text) else text.contains(pattern)
+                if (regex == null) matchesKeyword(pattern, text, rule.effectiveMatchType)
+                else when (rule.effectiveMatchType) {
+                    MatchType.ANYWHERE -> regex.containsMatchIn(text)
+                    MatchType.START -> regex.find(text)?.range?.first == 0
+                    MatchType.END -> regex.findAll(text).any { it.range.last + 1 == text.length }
+                    MatchType.EXACT -> regex.matches(text)
+                }
             }
-            RuleKind.KEYWORD -> text.contains(pattern)
+            RuleKind.KEYWORD -> matchesKeyword(pattern, text, rule.effectiveMatchType)
             RuleKind.DURATION -> rule.durationMs > 0 || rule.durationMinMs > 0
         }
+    }
+
+    private fun matchesKeyword(pattern: String, text: String, matchType: MatchType): Boolean = when (matchType) {
+        MatchType.ANYWHERE -> text.contains(pattern)
+        MatchType.START -> text.startsWith(pattern)
+        MatchType.END -> text.endsWith(pattern)
+        MatchType.EXACT -> text == pattern
+    }
+
+    fun tags(rule: Rule): List<String> = buildList {
+        if (rule.id == SLASH_RULE_ID || rule.id == NEIGHBOR_RULE_ID) add("特殊规则")
+        else if (rule.pattern.isNotBlank()) rule.effectiveMatchType.tag.takeIf { it.isNotEmpty() }?.let { add(it) }
+        describe(rule).takeIf { it.isNotEmpty() && it != "特殊规则" }?.let { add(it) }
     }
 
     private fun durationMatches(rule: Rule, duration: Long): Boolean {
@@ -214,7 +247,7 @@ object LyricExclusionRules {
 
     /** 供 UI 展示规则时长，如「时长 ≤ 1999ms」「时长 1000-2000ms」；未设置时长时返回空串。 */
     fun describe(rule: Rule): String {
-        if (rule.id == SLASH_RULE_ID) return "特殊规则"
+        if (rule.id == SLASH_RULE_ID || rule.id == NEIGHBOR_RULE_ID) return "特殊规则"
         val min = rule.durationMinMs
         val max = rule.durationMs
         return when {
@@ -267,6 +300,20 @@ object LyricExclusionRules {
     ): Boolean {
         val normalizedLine = normalizeLine(text)
         if (normalizedLine.isEmpty()) return false
+        // One metadata item beside a separator can have arbitrary text on the other side.
+        // Match actual values literally, never interpret song names as regex syntax.
+        val normalizedPattern = normalizeLine(pattern)
+        val separatorToken = SONG_INFO_TOKENS.firstOrNull { normalizedPattern == "$it-" || normalizedPattern == "-$it" }
+        if (separatorToken != null) {
+            val values = when (separatorToken) {
+                "{title}" -> listOf(title)
+                "{album}" -> listOf(album)
+                else -> artists + artists.flatMap { it.split("/", "、", "&", "＆", ",", "，", "；", ";") }
+            }.map(::normalizeLine).filter { it.isNotEmpty() }
+            return values.any { value ->
+                normalizedLine.contains(if (normalizedPattern.startsWith(separatorToken)) "$value-" else "-$value")
+            }
+        }
         val (regex, tokens) = buildSongInfoRegex(normalizeLine(pattern)) ?: return false
         val match = regex.matchEntire(normalizedLine) ?: return false
         for (index in tokens.indices) {
@@ -354,12 +401,28 @@ object LyricExclusionRules {
         }
     }
 
-    /** 冒号关键词：用正则表示冒号，如 编曲\s*[:：]。 */
+    private const val COLON_PATTERN = "[:：﹕]"
+    private val flexibleCreditKeywords = setOf(
+        "作词", "作曲", "编曲", "改编", "混音", "手风琴", "巴拉莱卡", "弦乐", "小提琴", "器乐监制",
+        "总监", "顾问", "设计", "策划", "词", "曲", "吉他", "统筹", "公司", "鸣谢", "发行", "师", "录音", "编辑"
+    )
+    private val mergedCreditKeywords = setOf("Engineer", "Studio", "by", "念白")
+    private val anywhereCreditKeywords = flexibleCreditKeywords + mergedCreditKeywords
+    private val flexibleStartCreditKeywords = setOf("录音棚", "键盘", "监制", "合唱", "和声编写", "文案", "贝斯", "鼓")
+
+    private fun coveredByFlexibleCredit(keyword: String): Boolean =
+        flexibleCreditKeywords.any { it != keyword && keyword.contains(it) } ||
+            mergedCreditKeywords.any { it != keyword && keyword.trimEnd().endsWith(it) }
+
+    /** 保留原有规则 ID，合并并扩展制作信息的匹配范围。 */
     val defaultColonRules: List<Rule> by lazy {
-        colonKeywords.mapIndexed { index, keyword ->
+        colonKeywords.mapIndexedNotNull { index, keyword ->
+            // Keep explicitly requested start rules; merge other covered credits into the broader rule.
+            if (keyword != "音乐设计" && coveredByFlexibleCredit(keyword)) return@mapIndexedNotNull null
             Rule(
                 id = "default-colon-$index",
-                pattern = regexLiteral(keyword) + "\\s*[:：]"
+                pattern = regexLiteral(keyword) + (if (keyword in flexibleCreditKeywords || keyword in flexibleStartCreditKeywords) ".*" else "") + "\\s*" + COLON_PATTERN,
+                matchType = if (keyword in anywhereCreditKeywords) MatchType.ANYWHERE else MatchType.START
             )
         }
     }
@@ -373,28 +436,28 @@ object LyricExclusionRules {
 
     /** 额外冒号规则（中文/英文混排的制作信息）。 */
     val defaultExtraRules: List<Rule> by lazy {
-        val fromKeywords = extraColonKeywords.mapIndexed { index, keyword ->
+        val fromKeywords = extraColonKeywords.mapIndexedNotNull { index, keyword ->
+            if (coveredByFlexibleCredit(keyword) ||
+                flexibleStartCreditKeywords.any { keyword.startsWith(it) }) return@mapIndexedNotNull null
             Rule(
                 id = "default-extra-$index",
-                pattern = regexLiteral(keyword) + "\\s*[:：]"
+                pattern = regexLiteral(keyword) + "\\s*" + COLON_PATTERN,
+                matchType = MatchType.START
             )
         }
-        val fromRaw = extraRawPatterns.mapIndexed { index, pattern ->
-            Rule(id = "default-extra-raw-$index", pattern = pattern)
-        }
-        fromKeywords + fromRaw
+        fromKeywords
     }
 
-    /** 歌曲信息（标题行）：{title}/{auther}/{album} 任意两项、任意顺序，共 6 种。 */
+    /** 歌名、歌手、专辑任一项与分隔符相邻；另一侧不要求匹配已知歌曲信息。 */
     val defaultTitleRules: List<Rule> = listOf(
-        "{title} - {auther}",
-        "{auther} - {title}",
-        "{title} - {album}",
-        "{album} - {title}",
-        "{auther} - {album}",
-        "{album} - {auther}"
-    ).mapIndexed { index, template ->
-        Rule(id = "default-title-$index", pattern = template)
+        "default-title-6" to "{title} - ",
+        "default-info-title-suffix" to " - {title}",
+        "default-info-artist-prefix" to "{auther} - ",
+        "default-info-artist-suffix" to " - {auther}",
+        "default-info-album-prefix" to "{album} - ",
+        "default-info-album-suffix" to " - {album}"
+    ).map { (id, template) ->
+        Rule(id = id, pattern = template)
     }
 
     /** 短时关键词：仅当行时长不超过 1999ms 时排除。 */
@@ -411,7 +474,22 @@ object LyricExclusionRules {
     /** 全部默认规则。 */
     val defaultRules: List<Rule> by lazy {
         listOf(Rule(id = SLASH_RULE_ID, pattern = "包含超过4个斜杠或反斜杠")) +
-            defaultColonRules + defaultExtraRules + defaultPlainRules + defaultTitleRules + defaultShortDurationRules
+            defaultColonRules + defaultExtraRules + defaultPlainRules + defaultTitleRules + defaultShortDurationRules +
+            listOf(
+                Rule(id = "default-prohibit-adaptation", pattern = "禁止.*二创改编"),
+                Rule(id = "default-studio-suffix", pattern = "录音棚", matchType = MatchType.ANYWHERE),
+                Rule(id = NEIGHBOR_RULE_ID, pattern = "前后均为被排除的歌词"),
+                Rule(id = "default-prefix-mix-by", pattern = "mix by", matchType = MatchType.START),
+                Rule(id = "default-prefix-prod-by", pattern = "prod by", matchType = MatchType.START)
+            )
+    }
+
+    /** A single pass over the original exclusions: never use newly excluded lines as seeds. */
+    internal fun includeExcludedNeighbors(excluded: List<Boolean>): List<Boolean> {
+        if (!enabled || !isDefaultRuleEnabled(NEIGHBOR_RULE_ID)) return excluded
+        return excluded.mapIndexed { index, value ->
+            value || (index > 0 && index < excluded.lastIndex && excluded[index - 1] && excluded[index + 1])
+        }
     }
 
     /** 当前启用的默认规则数量（供 UI 展示）。 */
@@ -419,7 +497,7 @@ object LyricExclusionRules {
         get() = defaultRules.count { isDefaultRuleEnabled(it.id) }
 
     // ------------------------------------------------------------------
-    // 内置关键词表（原 LyricParser 中的列表迁入此处）
+    // 内置关键词表
     // ------------------------------------------------------------------
 
     private val colonKeywords = listOf(
@@ -440,7 +518,10 @@ object LyricExclusionRules {
         "Mixing Studio", "Musicians", "乐器演奏", "厂牌", "伴唱", "商务", "Arranged by", "Produced by",
         "mastering",
         "果沃琴演奏Guowoqin performer", "快递员 Performer", "音乐", "彝语念白", "吴语念白", "箱琴",
-        "收件人", "特别派送"
+        "收件人", "特别派送", "作词", "作曲", "和声编写",
+        "人声配唱", "录音师", "音频编辑", "封面设计", "OP/SP", "混音师", "母带工程师", "项目统筹", "营销推广", "Bass",
+        "by", "器乐监制", "音乐设计", "公司", "人声录音师",
+        "Engineer", "Studio", "念白", "师", "Lyricist", "Composer", "音乐营销机构", "声乐编辑", "配唱制作", "版权方"
     )
 
     /** 额外冒号规则：中英混排的制作信息（用正则表示冒号）。 */
@@ -461,11 +542,6 @@ object LyricExclusionRules {
         "人声编辑 Vocal Editor",
         "母带处理工程师 Mastering Engineer",
         "混音 & 母带处理工作室 Mixing & Mastering Studio"
-    )
-
-    /** 额外的原始正则规则。 */
-    private val extraRawPatterns = listOf(
-        "\\s*[:：]"
     )
 
     private val plainKeywords = listOf(
@@ -497,7 +573,9 @@ object LyricExclusionRules {
         "乐器配置 ",
         "录制 ",
         "音序工坊",
-        "⌈π⌋ 计划"
+        "⌈π⌋ 计划",
+        "酷狗音乐人·星曜计划",
+        "著作.*权利保留", "网易音乐人", "流量扶持"
     )
 
     private val shortDurationKeywords = listOf(

@@ -1,6 +1,6 @@
 package com.hypermusic.miuix.ui.pages
 
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,11 +26,14 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hypermusic.miuix.ui.FeedBottomPads
+import com.hypermusic.miuix.R
+import com.hypermusic.miuix.ui.components.SettingsItemIcon
 import com.hypermusic.miuix.ui.components.BlurredBar
 import com.hypermusic.miuix.ui.components.pageLayerBackdrop
 import com.hypermusic.miuix.ui.components.rememberPageBlurBackdrop
@@ -53,6 +57,8 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ScreenMirroring
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 @Composable
@@ -67,7 +73,11 @@ fun PlayPageSettingsPage(
     var coverRotationIndex by remember { mutableStateOf(ThemeSettings.coverRotationIndex) }
     var smallScreenCoverStyle by remember { mutableIntStateOf(ThemeSettings.smallScreenCoverStyle) }
     var largeScreenCoverStyle by remember { mutableIntStateOf(ThemeSettings.largeScreenCoverStyle) }
-    var coverStyleTab by remember { mutableIntStateOf(0) } // 0=小屏布局, 1=大屏布局
+    // Use the same window-width breakpoint as the player itself.
+    val isLargeScreen = LocalConfiguration.current.screenWidthDp > 600
+    var coverStyleTab by remember(isLargeScreen) {
+        mutableIntStateOf(if (isLargeScreen) 1 else 0)
+    } // 0=小屏布局, 1=大屏布局
     var keepScreenOn by remember { mutableStateOf(ThemeSettings.keepScreenOn) }
     var showCastButton by remember { mutableStateOf(ThemeSettings.showCastButton) }
     var showQuality by remember { mutableStateOf(ThemeSettings.showQuality) }
@@ -107,8 +117,10 @@ fun PlayPageSettingsPage(
                 val action = rebindingAction ?: return@onPreviewKeyEvent false
                 if (event.nativeKeyEvent.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
                 val keyCode = event.nativeKeyEvent.keyCode
+                if (KeyboardShortcutSettings.isModifierKey(keyCode)) return@onPreviewKeyEvent true
+                val modifiers = event.nativeKeyEvent.metaState
                 val conflict = ShortcutAction.entries.firstOrNull { other ->
-                    other != action && KeyboardShortcutSettings.keyFor(other) == keyCode
+                    other != action && KeyboardShortcutSettings.matches(other, keyCode, modifiers)
                 }
                 if (conflict != null) {
                     Toast.makeText(
@@ -117,7 +129,7 @@ fun PlayPageSettingsPage(
                         Toast.LENGTH_SHORT
                     ).show()
                 } else {
-                    KeyboardShortcutSettings.updateKey(action, keyCode)
+                    KeyboardShortcutSettings.updateKey(action, keyCode, modifiers)
                 }
                 rebindingAction = null
                 focusManager.clearFocus()
@@ -157,8 +169,9 @@ fun PlayPageSettingsPage(
         ) {
             item { Spacer(modifier = Modifier.height(12.dp)) }
             // 布局样式设置
-            item { SmallTitle("布局样式") }
+            item { SmallTitle("封面样式") }
             item {
+                val currentCoverStyle = if (coverStyleTab == 0) smallScreenCoverStyle else largeScreenCoverStyle
                 Card(
                     modifier = Modifier
                         .padding(horizontal = 12.dp)
@@ -170,8 +183,6 @@ fun PlayPageSettingsPage(
                         onTabSelected = { coverStyleTab = it },
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
                     )
-                    val currentCoverStyle = if (coverStyleTab == 0) smallScreenCoverStyle else largeScreenCoverStyle
-
                     RadioButtonPreference(
                         title = "卡片封面",
                         selected = currentCoverStyle == 0,
@@ -185,8 +196,31 @@ fun PlayPageSettingsPage(
                             }
                         }
                     )
+                    if (coverStyleTab == 1) {
+                        RadioButtonPreference(
+                            title = "卡片封面（车机布局）",
+                            selected = currentCoverStyle == 2,
+                            onClick = {
+                                largeScreenCoverStyle = 2
+                                ThemeSettings.updateLargeScreenCoverStyle(2)
+                            }
+                        )
+                    }
                     RadioButtonPreference(
-                        title = "全屏渐变封面",
+                        title = "黑胶唱片",
+                        selected = currentCoverStyle == 3,
+                        onClick = {
+                            if (coverStyleTab == 0) {
+                                smallScreenCoverStyle = 3
+                                ThemeSettings.updateSmallScreenCoverStyle(3)
+                            } else {
+                                largeScreenCoverStyle = 3
+                                ThemeSettings.updateLargeScreenCoverStyle(3)
+                            }
+                        }
+                    )
+                    RadioButtonPreference(
+                        title = "渐变封面",
                         selected = currentCoverStyle == 1,
                         onClick = {
                             if (coverStyleTab == 0) {
@@ -198,18 +232,21 @@ fun PlayPageSettingsPage(
                             }
                         }
                     )
+                }
 
-                    if (coverStyleTab == 1) {
-                        RadioButtonPreference(
-                            title = "车机布局",
-                            selected = currentCoverStyle == 2,
-                            onClick = {
-                                largeScreenCoverStyle = 2
-                                ThemeSettings.updateLargeScreenCoverStyle(2)
-                            }
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp)
+                ) {
+                    if (currentCoverStyle == 3 && coverStyleTab == 0) {
+                        WindowDropdownPreference(
+                            title = "左右滑动黑胶唱片的操作",
+                            items = listOf("切换歌曲", "切换封面和歌词"),
+                            selectedIndex = ThemeSettings.vinylSwipeAction,
+                            onSelectedIndexChange = { ThemeSettings.updateVinylSwipeAction(it) }
                         )
                     }
-
                     // 卡片和车机布局共用圆形封面与旋转设置。
                     if (currentCoverStyle == 0 || (coverStyleTab == 1 && currentCoverStyle == 2)) {
                         BasicComponent(
@@ -245,6 +282,7 @@ fun PlayPageSettingsPage(
 
                     WindowDropdownPreference(
                         title = "背景颜色",
+                        startAction = { SettingsItemIcon(R.drawable.ic_md3_texture) },
                         items = playerColorSchemeOptions,
                         selectedIndex = playerColorSchemeIndex,
                         onSelectedIndexChange = { newIndex ->
@@ -330,6 +368,7 @@ fun PlayPageSettingsPage(
                 ) {
                     BasicComponent(
                         title = "键盘快捷键",
+                        startAction = { SettingsItemIcon(R.drawable.ic_md3_keyboard) },
                         endActions = {
                             Switch(
                                 checked = shortcutsEnabled,
@@ -354,7 +393,7 @@ fun PlayPageSettingsPage(
                                 endActions = {
                                     Text(
                                         text = if (rebindingAction == action) {
-                                            "点击键盘按键进行重设"
+                                            "按下按键或 Ctrl / Shift / Alt 组合键"
                                         } else {
                                             KeyboardShortcutSettings.keyLabel(action)
                                         },
@@ -384,6 +423,7 @@ fun PlayPageSettingsPage(
                     // 显示小米妙播快捷按钮
                     BasicComponent(
                         title = "显示音频投放按钮",
+                        startAction = { Icon(MiuixIcons.ScreenMirroring, contentDescription = null, modifier = Modifier.size(24.dp)) },
                         endActions = {
                             Switch(
                                 checked = showCastButton,
@@ -402,6 +442,7 @@ fun PlayPageSettingsPage(
                     // 显示当前歌曲音质
                     BasicComponent(
                         title = "显示当前歌曲音质",
+                        startAction = { SettingsItemIcon(R.drawable.ic_md3_audio_description) },
                         endActions = {
                             Switch(
                                 checked = showQuality,
@@ -420,6 +461,7 @@ fun PlayPageSettingsPage(
                     // 播放页保持屏幕常亮
                     BasicComponent(
                         title = "播放页保持屏幕常亮",
+                        startAction = { SettingsItemIcon(R.drawable.ic_md3_display_settings) },
                         endActions = {
                             Switch(
                                 checked = keepScreenOn,

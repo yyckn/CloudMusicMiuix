@@ -35,7 +35,10 @@ import androidx.compose.ui.graphics.Color
 import com.hypermusic.miuix.ui.components.BlurredBar
 import com.hypermusic.miuix.ui.components.pageLayerBackdrop
 import com.hypermusic.miuix.ui.components.rememberPageBlurBackdrop
-import coil.compose.AsyncImage
+import com.hypermusic.miuix.ui.components.sharedCover
+import com.hypermusic.miuix.ui.components.playlistCoverKey
+import com.hypermusic.miuix.ui.components.albumCoverKey
+import com.hypermusic.miuix.ui.components.AsyncImage
 import com.hypermusic.miuix.data.model.AlbumInfo
 import com.hypermusic.miuix.data.model.RecommendPlaylist
 import com.hypermusic.miuix.data.model.displayPlaylistTitle
@@ -61,8 +64,7 @@ fun PlaylistPage(
     isLoggedIn: Boolean,
     onLoginClick: () -> Unit = {},
     onIntelligenceMode: (String, String) -> Unit = { _, _ -> },
-    onLoadCloudDiskCover: () -> Unit = {},
-    onNavigateToAlbum: (Long) -> Unit = {},
+    onNavigateToAlbum: (Long, String) -> Unit = { _, _ -> },
     onSearchClick: () -> Unit = {},
     showSearchAction: Boolean = true,
     modifier: Modifier = Modifier
@@ -71,21 +73,10 @@ fun PlaylistPage(
     var isRefreshing by remember { mutableStateOf(false) }
     val pullToRefreshState = rememberPullToRefreshState()
 
-    // 自动加载歌单 + 云盘封面 + 收藏专辑
-    LaunchedEffect(Unit) {
-        if (isLoggedIn) {
-            if (recommendState.userPlaylists.isEmpty()) {
-                onRefresh()
-            }
-            onLoadCloudDiskCover()
-        }
-    }
-
     // 下拉刷新回调
     LaunchedEffect(isRefreshing) {
         if (isRefreshing && isLoggedIn) {
             onRefresh()
-            onLoadCloudDiskCover()
             isRefreshing = false
         } else {
             isRefreshing = false
@@ -229,7 +220,7 @@ fun PlaylistPage(
                         items(userAlbums) { album ->
                             UserAlbumCard(
                                 album = album,
-                                onClick = { onNavigateToAlbum(album.id) },
+                                onClick = { onNavigateToAlbum(album.id, album.picUrl) },
                                 modifier = Modifier
                                     .padding(horizontal = 12.dp)
                                     .padding(bottom = 12.dp)
@@ -243,14 +234,14 @@ fun PlaylistPage(
 }
 
 @Composable
-private fun UserPlaylistCard(
+internal fun UserPlaylistCard(
     playlist: RecommendPlaylist,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        pressFeedbackType = PressFeedbackType.Tilt,
+        pressFeedbackType = PressFeedbackType.Sink,
         showIndication = true,
         onClick = onClick
     ) {
@@ -260,14 +251,14 @@ private fun UserPlaylistCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = playlist.coverImgUrl,
+            AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.THUMBNAIL), model = playlist.coverImgUrl,
                 contentDescription = playlist.title,
                 modifier = Modifier
                     .size(56.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(RoundedCornerShape(8.dp))
+                    .sharedCover(playlistCoverKey(playlist.id)),
                 contentScale = ContentScale.Crop,
-                error = painterResource(android.R.drawable.ic_menu_gallery)
+                error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
             )
 
             Spacer(modifier = Modifier.width(16.dp))
@@ -295,14 +286,15 @@ private fun UserPlaylistCard(
 }
 
 @Composable
-private fun UserAlbumCard(
+internal fun UserAlbumCard(
     album: AlbumInfo,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isQq: Boolean = false
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        pressFeedbackType = PressFeedbackType.Tilt,
+        pressFeedbackType = PressFeedbackType.Sink,
         showIndication = true,
         onClick = onClick
     ) {
@@ -312,14 +304,14 @@ private fun UserAlbumCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = album.picUrl,
+            AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.THUMBNAIL), model = album.picUrl,
                 contentDescription = album.name,
                 modifier = Modifier
                     .size(56.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(RoundedCornerShape(8.dp))
+                    .sharedCover(albumCoverKey(album.id, isQq)),
                 contentScale = ContentScale.Crop,
-                error = painterResource(android.R.drawable.ic_menu_gallery)
+                error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
             )
 
             Spacer(modifier = Modifier.width(16.dp))

@@ -1,6 +1,8 @@
 package com.hypermusic.miuix.ui.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,13 +35,15 @@ fun LyricsView(
     sourceStartPadding: Dp = 0.dp,
     showSourceHelp: Boolean = false,
     onSourceClick: (() -> Unit)? = null,
-    positionProvider: (() -> Long)? = null
+    positionProvider: (() -> Long)? = null,
+    waitingForLyrics: Boolean = false
 ) {
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.Start
     ) {
         AppleMusicLyricsView(
+            waitingForLyrics = waitingForLyrics,
             lyrics = lyrics,
             currentPosition = currentPosition,
             onSeekTo = onSeekTo,
@@ -52,18 +56,10 @@ fun LyricsView(
         if (!source.isNullOrBlank() && lyrics != null && lyrics.lines.isNotEmpty()) {
             Row(
                 modifier = Modifier
-                    .then(
-                        if (onSourceClick != null) {
-                            Modifier.clickable { onSourceClick() }
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .padding(
-                        start = sourceStartPadding,
-                        top = 4.dp,
-                        bottom = 8.dp
-                    ),
+                    .padding(start = sourceStartPadding, bottom = 8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .then(if (onSourceClick != null) Modifier.clickable { onSourceClick() } else Modifier)
+                    .padding(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (showSourceHelp) {

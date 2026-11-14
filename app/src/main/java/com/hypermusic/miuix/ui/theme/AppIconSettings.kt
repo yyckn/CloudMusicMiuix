@@ -14,10 +14,11 @@ import androidx.compose.runtime.setValue
  */
 object AppIconSettings {
 
-    enum class AppIcon { NOTES, NETEASE, KUGOU, KUGOU_CLASSIC, NETEASE_CLASSIC, QISHUI_CLASSIC, QQ_CLASSIC }
+    enum class AppIcon { NOTES, NETEASE, KUGOU, KUGOU_CLASSIC, NETEASE_CLASSIC, QISHUI_CLASSIC, QQ_CLASSIC, BODIAN_CLASSIC }
     enum class AppName(val label: String, val suffix: String) {
         HYPERMUSIC("HyperMusic", ""), MUSIC("Music", "NameMusic"), CHINESE("音乐", "NameChinese"),
-        NETEASE("网易云音乐", "NameNetease"), QQ("QQ音乐", "NameQq")
+        NETEASE("网易云音乐", "NameNetease"), QQ("QQ音乐", "NameQq"),
+        KUGOU("酷狗音乐", "NameKugou"), QISHUI("汽水音乐", "NameQishui"), BODIAN("波点音乐", "NameBodian")
     }
 
     private const val PREFS_NAME = "app_icon_settings"
@@ -52,6 +53,14 @@ object AppIconSettings {
         apply(context, current)
     }
 
+    fun save(context: Context, icon: AppIcon, name: AppName) {
+        val storage = prefs ?: context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).also { prefs = it }
+        check(storage.edit().putString(KEY_ICON, icon.name).putString("current_name", name.name).commit()) { "保存图标和名称失败" }
+        current = icon
+        currentName = name
+        apply(context, icon)
+    }
+
     fun select(context: Context, icon: AppIcon) {
         current = icon
         prefs?.edit()?.putString(KEY_ICON, icon.name)?.apply()
@@ -72,7 +81,8 @@ object AppIconSettings {
             AppIcon.KUGOU_CLASSIC to KUGOU_ALIAS,
             AppIcon.NETEASE_CLASSIC to NETEASE_CLASSIC_ALIAS,
             AppIcon.QISHUI_CLASSIC to ".IconQishuiClassic",
-            AppIcon.QQ_CLASSIC to ".IconQqClassic"
+            AppIcon.QQ_CLASSIC to ".IconQqClassic",
+            AppIcon.BODIAN_CLASSIC to ".IconBodianClassic"
         )
         val changes = aliases.flatMap { (appIcon, alias) -> AppName.entries.mapNotNull { name ->
             val component = ComponentName(packageName, com.hypermusic.miuix.MainActivity::class.java.name.substringBeforeLast('.') + alias + name.suffix)

@@ -40,11 +40,13 @@
 -dontwarn kotlinx.coroutines.**
 
 # Keep AndroidX
--keep class androidx.** { *; }
+# Material icons are referenced directly; let R8 remove unused icons instead of
+# retaining every style from material-icons-extended through these broad rules.
+-keep class !androidx.compose.material.icons.**,androidx.** { *; }
 -dontwarn androidx.**
 
 # Keep Compose
--keep class androidx.compose.** { *; }
+-keep class !androidx.compose.material.icons.**,androidx.compose.** { *; }
 -dontwarn androidx.compose.**
 
 # Keep MediaSession
@@ -57,3 +59,9 @@
     public static int d(...);
     public static int i(...);
 }
+
+# jaudiotagger 的桌面图片实现不会在 Android 分支使用。
+-dontwarn java.awt.image.**
+-dontwarn javax.imageio.**
+-keep class com.hypermusic.miuix.data.download.DownloadEntry { *; }
+-keep class com.hypermusic.miuix.data.cache.AudioCache$CachedAudio { *; }

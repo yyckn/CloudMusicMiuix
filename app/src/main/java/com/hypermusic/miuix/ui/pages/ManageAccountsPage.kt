@@ -2,7 +2,7 @@ package com.hypermusic.miuix.ui.pages
 
 import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -31,7 +31,7 @@ import androidx.compose.ui.graphics.Color
 import com.hypermusic.miuix.ui.components.BlurredBar
 import com.hypermusic.miuix.ui.components.pageLayerBackdrop
 import com.hypermusic.miuix.ui.components.rememberPageBlurBackdrop
-import coil.compose.AsyncImage
+import com.hypermusic.miuix.ui.components.AsyncImage
 import com.hypermusic.miuix.R
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -73,7 +73,7 @@ fun ManageAccountsPage(
     val context = LocalContext.current
     
     // 构建账号显示列表
-    val accountOptions = accounts.map { "${it.nickname}${it.loginLabel?.let { label -> "（$label）" }.orEmpty()}（ID：${it.userId}）" }
+    val accountOptions = accountOptionLabels(accounts)
 
     BackHandler {
         onBackClick()
@@ -136,26 +136,25 @@ fun ManageAccountsPage(
                                     .size(48.dp)
                                     .clip(RoundedCornerShape(24.dp)),
                                 contentScale = ContentScale.Crop,
-                                error = painterResource(android.R.drawable.ic_menu_gallery)
+                                error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = androidx.compose.ui.text.buildAnnotatedString {
-                                        append(account.nickname)
-                                        account.loginLabel?.let { label ->
-                                            pushStyle(androidx.compose.ui.text.SpanStyle(color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f), fontSize = 14.sp))
-                                            append("（$label）")
-                                            pop()
-                                        }
-                                    },
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MiuixTheme.colorScheme.onSurface
-                                )
+                                androidx.compose.foundation.layout.FlowRow(
+                                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = account.nickname,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MiuixTheme.colorScheme.onSurface
+                                    )
+                                    account.loginLabel?.let { com.hypermusic.miuix.ui.components.AccountLoginTag(it) }
+                                }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "ID: ${account.userId}" + if (account.userId == activeAccountId) " · 当前数据账号" else "",
+                                    text = "ID: ${account.userId}",
                                     fontSize = 14.sp,
                                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                 )

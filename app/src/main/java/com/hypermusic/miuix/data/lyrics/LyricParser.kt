@@ -27,6 +27,7 @@ object LyricParser {
         artistNames: List<String> = emptyList(),
         phonetic: String = ""
     ): SongLyrics {
+        if (lrc.isBlank() && yrc.isBlank()) return SongLyrics()
         val effectiveArtistNames = resolveArtistNames(songArtist, artistNames)
         val lyrics = if (yrc.isNotEmpty()) {
             val fromYrc = parseYrc(yrc, tlyric, effectiveArtistNames, songTitle, songAlbum, phonetic)
@@ -44,7 +45,9 @@ object LyricParser {
 
     /** 统一收尾：行尾中文标点清理、纯音乐判断与开头标题行。 */
     private fun finalize(lyrics: SongLyrics, songTitle: String, songArtist: String): SongLyrics {
-        val normalized = lyrics.copy(lines = lyrics.lines.map { normalizeTrailingPunctuation(it) })
+        val normalized = lyrics.copy(lines = lyrics.lines.map {
+            normalizeTrailingPunctuation(LyricTextCleanup.removeOuterMusicNotes(it))
+        })
         val isPureMusic = normalized.lines.size <= 3
         return if (isPureMusic) {
             SongLyrics(lines = normalized.lines, isPureMusic = true)
@@ -113,12 +116,19 @@ object LyricParser {
     ): SongLyrics {
         val effectiveArtistNames = resolveArtistNames(songArtist, artistNames)
         val content = extractQrcContent(qrc)
+        if (content.isBlank()) return SongLyrics()
         val tlyricMap = parseTranslation(tlyric)
         val phoneticMap = parseTranslation(phonetic)
         val lines = mutableListOf<LyricLine>()
+        val exclusions = LyricExclusionPass(songTitle, effectiveArtistNames, songAlbum)
         val headerRegex = Regex("""^\[(\d+),(\d+)]""")
         val timingRegex = Regex("""\((\d+),(\d+)\)""")
 
+        val repeatedLabels = repeatedArtistLabels(content.lineSequence().mapNotNull { raw ->
+            val line = raw.trim()
+            val header = headerRegex.find(line) ?: return@mapNotNull null
+            timingRegex.replace(line.substring(header.range.last + 1), "")
+        }.toList())
         for (raw in content.split("\n")) {
             val line = raw.trim()
             val header = headerRegex.find(line) ?: continue
@@ -144,7 +154,7 @@ object LyricParser {
             }
 
             val text = words.joinToString("") { it.text }.trim()
-            if (text.isEmpty() || shouldExclude(text, dur, songTitle, effectiveArtistNames, songAlbum)) continue
+            if (text.isEmpty() || exclusions.shouldExclude(text, dur, start, lines.size)) continue
             appendParsedLine(
                 lines = lines,
                 text = text,
@@ -153,12 +163,13 @@ object LyricParser {
                 start = start,
                 end = start + dur,
                 words = words,
-                artistNames = effectiveArtistNames
+                artistNames = effectiveArtistNames,
+                repeatedLabels = repeatedLabels
             )
         }
 
         return finalize(
-            SongLyrics(lines = expandIrrelevantBetween(lines.sortedBy { it.startAt })),
+            SongLyrics(lines = expandIrrelevantBetween(exclusions.filter(lines).sortedBy { it.startAt })),
             songTitle,
             songArtist
         )
@@ -178,13 +189,20 @@ object LyricParser {
         artistNames: List<String> = emptyList(),
         phonetic: String = ""
     ): SongLyrics {
+        if (krc.isBlank()) return SongLyrics()
         val effectiveArtistNames = resolveArtistNames(songArtist, artistNames)
         val tlyricMap = parseTranslation(tlyric)
         val phoneticMap = parseTranslation(phonetic)
         val lines = mutableListOf<LyricLine>()
+        val exclusions = LyricExclusionPass(songTitle, effectiveArtistNames, songAlbum)
         val headerRegex = Regex("""^\[(\d+),(\d+)]""")
         val wordRegex = Regex("""<(\d+),(\d+)(?:,[-\d]+)?>([^<]*)""")
 
+        val repeatedLabels = repeatedArtistLabels(krc.lineSequence().mapNotNull { raw ->
+            val line = raw.trim()
+            val header = headerRegex.find(line) ?: return@mapNotNull null
+            wordRegex.findAll(line.substring(header.range.last + 1)).joinToString("") { it.groupValues[3] }
+        }.toList())
         for (raw in krc.split("\n")) {
             val line = raw.trim()
             val header = headerRegex.find(line) ?: continue
@@ -201,7 +219,7 @@ object LyricParser {
             }.toList()
 
             val text = words.joinToString("") { it.text }.trim()
-            if (text.isEmpty() || shouldExclude(text, dur, songTitle, effectiveArtistNames, songAlbum)) continue
+            if (text.isEmpty() || exclusions.shouldExclude(text, dur, start, lines.size)) continue
             appendParsedLine(
                 lines = lines,
                 text = text,
@@ -210,12 +228,13 @@ object LyricParser {
                 start = start,
                 end = start + dur,
                 words = words,
-                artistNames = effectiveArtistNames
+                artistNames = effectiveArtistNames,
+                repeatedLabels = repeatedLabels
             )
         }
 
         return finalize(
-            SongLyrics(lines = expandIrrelevantBetween(lines.sortedBy { it.startAt })),
+            SongLyrics(lines = expandIrrelevantBetween(exclusions.filter(lines).sortedBy { it.startAt })),
             songTitle,
             songArtist
         )
@@ -227,21 +246,6 @@ object LyricParser {
         } else {
             songArtist.split("/", "、", " ").map { it.trim() }.filter { it.isNotEmpty() }
         }
-
-    /** 交给可配置的排除规则处理。 */
-    private fun shouldExclude(
-        text: String,
-        duration: Long,
-        songTitle: String,
-        artistNames: List<String>,
-        songAlbum: String
-    ): Boolean = LyricExclusionRules.shouldExclude(
-        text = text,
-        durationMs = duration,
-        title = songTitle,
-        artists = artistNames,
-        album = songAlbum
-    )
 
     /** 有些来源用 "//"、"///" 等占位符表示无翻译，需当作空翻译处理。 */
     private fun normalizeTranslationText(text: String): String {
@@ -298,6 +302,22 @@ object LyricParser {
             .replace("&#039;", "'")
             .replace("&amp;", "&")
 
+    /** Preserve timings while removing the singer prefix from a split lyric line. */
+    private fun lyricWordsAfterArtist(words: List<LyricWord>, lyricText: String): List<LyricWord>? {
+        val joined = words.joinToString("") { it.text }
+        val start = joined.lastIndexOf(lyricText)
+        if (start < 0) return null
+        val end = start + lyricText.length
+        var offset = 0
+        return words.mapNotNull { word ->
+            val wordStart = offset
+            offset += word.text.length
+            val from = (start - wordStart).coerceIn(0, word.text.length)
+            val to = (end - wordStart).coerceIn(0, word.text.length)
+            if (from >= to) null else word.copy(text = word.text.substring(from, to))
+        }.takeIf { it.isNotEmpty() }
+    }
+
     /** QRC/KRC 共用：歌手行拆分、过滤后追加到结果。 */
     private fun appendParsedLine(
         lines: MutableList<LyricLine>,
@@ -307,10 +327,11 @@ object LyricParser {
         start: Long,
         end: Long,
         words: List<LyricWord>,
-        artistNames: List<String>
+        artistNames: List<String>,
+        repeatedLabels: Set<String>
     ) {
         val wordList = words.takeIf { it.isNotEmpty() }
-        val (isArtist, splitLyrics) = parseArtistLine(text, artistNames)
+        val (isArtist, splitLyrics) = parseArtistLine(text, artistNames, repeatedLabels)
 
         if (isArtist && splitLyrics != null) {
             val artistText = formatArtistText(splitLyrics.first)
@@ -331,7 +352,7 @@ object LyricParser {
                     translation = translation,
                     startAt = start,
                     endAt = end,
-                    words = wordList,
+                    words = lyricWordsAfterArtist(words, lyricText),
                     isArtistLine = false,
                     phonetic = phonetic
                 )
@@ -394,6 +415,7 @@ object LyricParser {
 
         // 解析原文歌词
         val lines = mutableListOf<LyricLine>()
+        val exclusions = LyricExclusionPass(songTitle, artistNames, songAlbum)
 
         // 收集所有歌词行及其时间（支持行尾结束时间戳）
         val rawLines = mutableListOf<Triple<Long, Long?, String>>()
@@ -420,6 +442,7 @@ object LyricParser {
             }
         }
 
+        val repeatedLabels = repeatedArtistLabels(rawLines.map { it.third })
         // 按时间排序
         rawLines.sortBy { it.first }
 
@@ -434,10 +457,10 @@ object LyricParser {
                 else -> 0L // 最后一行
             }
 
-            if (!shouldExclude(text, duration, songTitle, artistNames, songAlbum)) {
+            if (!exclusions.shouldExclude(text, duration, time, lines.size)) {
                 val translation = findTranslation(tlyricMap, time)
                 val phoneticText = findTranslation(phoneticMap, time)
-                val (isArtist, splitLyrics) = parseArtistLine(text, artistNames)
+                val (isArtist, splitLyrics) = parseArtistLine(text, artistNames, repeatedLabels)
 
                 if (isArtist && splitLyrics != null) {
                     // 需要拆行：冒号前是歌手行，冒号后是正常歌词
@@ -458,7 +481,7 @@ object LyricParser {
             }
         }
 
-        return SongLyrics(lines = expandIrrelevantBetween(lines.sortedBy { it.startAt }))
+        return SongLyrics(lines = expandIrrelevantBetween(exclusions.filter(lines).sortedBy { it.startAt }))
     }
 
     /**
@@ -499,13 +522,27 @@ object LyricParser {
         return trimmed
     }
 
+    /** Count labels only within the current song; never carry them over to another song. */
+    private fun repeatedArtistLabels(texts: List<String>): Set<String> = texts.mapNotNull { text ->
+        val content = removeOuterBrackets(text)
+        val index = content.indexOf('：').takeIf { it >= 0 } ?: content.indexOf(':')
+        if (index < 0) return@mapNotNull null
+        content.substring(0, index).trim().takeIf { label ->
+            label.isNotEmpty() && label.none { it in "(（[【" }
+        }
+    }.groupingBy { it }.eachCount().filterValues { it >= 2 }.keys
+
     /**
      * 解析歌手行
      * 返回：Pair<Boolean, Pair<String, String>?>
      * - 第一个值：是否是歌手行
      * - 第二个值：如果需要拆行，返回Pair(歌手文本, 歌词文本)；否则返回null
      */
-    private fun parseArtistLine(text: String, artistNames: List<String>): Pair<Boolean, Pair<String, String>?> {
+    private fun parseArtistLine(
+        text: String,
+        artistNames: List<String>,
+        repeatedLabels: Set<String>
+    ): Pair<Boolean, Pair<String, String>?> {
         val trimmedText = text.trim()
 
         // 1. 去掉外围完整括号
@@ -516,7 +553,7 @@ object LyricParser {
         // 歌手名称（拆分/、顿号、空格）
         keywords.addAll(artistNames.flatMap { it.split("/", "、", " ") }.map { it.trim() }.filter { it.isNotEmpty() })
         // 额外关键词
-        keywords.addAll(listOf("童声", "合", "合唱", "男", "女", "何炅", "方力申", "万妮达", "袁娅维", "时代少年团宋亚轩", "艾热AIR"))
+        keywords.addAll(listOf("童声", "合", "合唱", "男", "女", "男歌手合", "女歌手合", "何炅", "方力申", "万妮达", "袁娅维", "时代少年团宋亚轩", "艾热AIR"))
 
         // 3. 检查是否包含冒号（中英文都算）
         val hasChineseColon = contentWithoutBrackets.contains("：")
@@ -535,6 +572,15 @@ object LyricParser {
             }
 
             val afterColon = contentWithoutBrackets.substring(colonIndex + 1).trim()
+
+            // Repeated labels and actual singers' first characters require an explicit colon.
+            // Plain lyric lines keep their existing, stricter matching behavior.
+            val label = beforeColon.trim()
+            if (label in repeatedLabels || (label.length == 1 &&
+                artistNames.flatMap { it.split("/", "、", " ") }
+                    .any { it.trim().startsWith(label) })) {
+                return true to if (afterColon.isNotEmpty()) (label to afterColon) else null
+            }
 
             if (afterColon.isNotEmpty()) {
                 // 3.1.1 冒号后有文字：检查冒号前是否包含关键词
@@ -676,7 +722,11 @@ object LyricParser {
         val phoneticMap = parseTranslation(phonetic)
 
         val lines = mutableListOf<LyricLine>()
+        val exclusions = LyricExclusionPass(songTitle, artistNames, songAlbum)
 
+        val repeatedLabels = repeatedArtistLabels(yrc.lineSequence()
+            .filter { headerRegex.containsMatchIn(it) }
+            .map { line -> segRegex.findAll(line).joinToString("") { it.groupValues[3] } }.toList())
         for (line in yrc.split("\n")) {
             val header = headerRegex.find(line) ?: continue
             val start = header.groupValues[1].toLong()
@@ -704,11 +754,11 @@ object LyricParser {
             }
 
             val text = sb.toString().trim()
-            if (text.isNotEmpty() && !shouldExclude(text, dur, songTitle, artistNames, songAlbum)) {
+            if (text.isNotEmpty() && !exclusions.shouldExclude(text, dur, start, lines.size)) {
                 // 查找翻译（使用开始时间匹配）
                 val translation = findTranslation(tlyricMap, start)
                 val phoneticText = findTranslation(phoneticMap, start)
-                val (isArtist, splitLyrics) = parseArtistLine(text, artistNames)
+                val (isArtist, splitLyrics) = parseArtistLine(text, artistNames, repeatedLabels)
 
                 if (isArtist && splitLyrics != null) {
                     // 需要拆行：冒号前是歌手行，冒号后是正常歌词
@@ -732,7 +782,7 @@ object LyricParser {
                             translation = translation,
                             startAt = start,
                             endAt = end,
-                            words = words.takeIf { it.isNotEmpty() },
+                            words = lyricWordsAfterArtist(words, lyricText),
                             isArtistLine = false,
                             phonetic = phoneticText
                         )
@@ -767,7 +817,7 @@ object LyricParser {
             }
         }
 
-        return SongLyrics(lines = expandIrrelevantBetween(lines.sortedBy { it.startAt }))
+        return SongLyrics(lines = expandIrrelevantBetween(exclusions.filter(lines).sortedBy { it.startAt }))
     }
 
     /**

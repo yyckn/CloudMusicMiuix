@@ -66,7 +66,9 @@ internal class LyricsPlaybackTimeline(lyrics: SyncedLyrics, prepared: PreparedLy
 
     init {
         val lines = lyrics.lines
-        val starts =
+        // Focus/scroll follows the normal lyric, not an earlier nested backing-vocal cue.
+        val starts = IntArray(lines.size) { lines[it].start }
+        val vocalStarts =
             IntArray(lines.size) { index ->
                 val line = lines[index]
                 minOf(
@@ -86,8 +88,9 @@ internal class LyricsPlaybackTimeline(lyrics: SyncedLyrics, prepared: PreparedLy
                     } ?: line.end,
                 )
             }
-        interludeEnds = starts
-        introEnd = starts.firstOrNull() ?: 0
+        // Breathing dots still end when singing actually begins, including an early backing vocal.
+        interludeEnds = vocalStarts
+        introEnd = vocalStarts.firstOrNull() ?: 0
         interludeStarts = IntArray(lines.size) { if (it > 0) ends[it - 1] else 0 }
         val events = sortedMapOf<Int, TimelineBoundary>()
         fun at(time: Int) = events.getOrPut(time) { TimelineBoundary() }
@@ -103,9 +106,9 @@ internal class LyricsPlaybackTimeline(lyrics: SyncedLyrics, prepared: PreparedLy
                 at(starts[index]).startingLines.add(index)
                 at(ends[index]).endingLines.add(index)
             }
-            if (index > 0 && starts[index].toLong() - ends[index - 1] > 5000) {
+            if (index > 0 && vocalStarts[index].toLong() - ends[index - 1] > 5000) {
                 at(ends[index - 1]).startingInterludes.add(index)
-                at(starts[index]).endingInterludes.add(index)
+                at(vocalStarts[index]).endingInterludes.add(index)
             }
         }
         for (row in allRows) for (window in row.windows) {

@@ -1,11 +1,14 @@
 package com.hypermusic.miuix.ui.pages
 
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -19,12 +22,14 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -42,23 +47,31 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import com.hypermusic.miuix.ui.components.BlurredBar
 import com.hypermusic.miuix.ui.components.pageLayerBackdrop
 import com.hypermusic.miuix.ui.components.rememberPageBlurBackdrop
+import com.hypermusic.miuix.ui.components.sharedCover
+import com.hypermusic.miuix.ui.components.playlistCoverKey
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import com.hypermusic.miuix.ui.components.AsyncImage
 import com.hypermusic.miuix.data.model.AlbumInfo
 import com.hypermusic.miuix.data.model.ArtistInfo
 import com.hypermusic.miuix.data.model.RecommendPlaylist
@@ -107,7 +120,6 @@ fun RecommendPage(
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
-    val isTablet = LocalConfiguration.current.screenWidthDp > 600
     var isRefreshing by remember { mutableStateOf(false) }
     val pullToRefreshState = rememberPullToRefreshState()
     val context = LocalContext.current
@@ -118,7 +130,7 @@ fun RecommendPage(
             // 不显示全屏加载态，仅刷新数据（顶部 4 个卡片保持不重建，仅每日推荐封面随数据更新）
             viewModel.loadRecommendPlaylists(showLoading = false)
             viewModel.loadDailyRecommendSongs()
-            viewModel.loadUserPlaylists()
+            viewModel.loadUserPlaylists(force = true)
             viewModel.loadRadarPlaylists()
             viewModel.loadTopArtists()
             viewModel.loadNewAlbums()
@@ -182,6 +194,7 @@ fun RecommendPage(
                             dailySongs = recommendState.dailySongs,
                             userPlaylists = recommendState.userPlaylists,
                             isLoggedIn = isLoggedIn,
+                            randomBackgroundActive = !isPlayerPageVisible,
                             onRandomPlayClick = {
                                 if (isLoggedIn) {
                                     viewModel.playRandomOne()
@@ -223,29 +236,15 @@ fun RecommendPage(
                     if (recommendState.playlists.isNotEmpty()) {
                         item {
                             val sectionTitle = "专属歌单"
-                            if (isTablet) {
-                                TabletHomeSection(
-                                    title = sectionTitle,
-                                    cards = recommendState.playlists
-                                ) { playlist, cardModifier ->
-                                    TabletCoverCard(
+                            HomeSection(title = sectionTitle, lastCardTitle = recommendState.playlists.lastOrNull()?.title) {
+                                items(recommendState.playlists) { playlist ->
+                                    CoverCard(
                                         coverUrl = playlist.coverImgUrl,
+                                        sharedCoverKey = playlistCoverKey(playlist.id),
                                         title = playlist.title,
                                         subtitle = if (playlist.playCount > 0) formatRecommendPlayCount(playlist.playCount) else "",
-                                        onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) },
-                                        modifier = cardModifier
+                                        onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }
                                     )
-                                }
-                            } else {
-                                HomeSection(title = sectionTitle) {
-                                    items(recommendState.playlists) { playlist ->
-                                        CoverCard(
-                                            coverUrl = playlist.coverImgUrl,
-                                            title = playlist.title,
-                                            subtitle = if (playlist.playCount > 0) formatRecommendPlayCount(playlist.playCount) else "",
-                                            onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) }
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -254,42 +253,24 @@ fun RecommendPage(
                     // 3. 雷达歌单
                     if (recommendState.radarPlaylists.isNotEmpty()) {
                         item {
-                            if (isTablet) {
-                                TabletHomeSection(
-                                    title = "雷达歌单",
-                                    cards = recommendState.radarPlaylists
-                                ) { playlist, cardModifier ->
+                            HomeSection(
+                                title = "雷达歌单",
+                                lastCardTitle = recommendState.radarPlaylists.lastOrNull()?.title?.substringAfterLast("|")?.trim()
+                            ) {
+                                items(recommendState.radarPlaylists) { playlist ->
+                                    // 「私人雷达」等个性化歌单：首页只显示基础名称（如「私人雷达」），点进去再看完整歌单
                                     val displayTitle = if (playlist.title.contains("|")) {
                                         playlist.title.substringAfterLast("|").trim()
                                     } else {
                                         playlist.title
                                     }
-                                    TabletCoverCard(
+                                    CoverCard(
                                         coverUrl = playlist.coverImgUrl,
+                                        sharedCoverKey = playlistCoverKey(playlist.id),
                                         title = displayTitle,
                                         subtitle = if (playlist.playCount > 0) formatRecommendPlayCount(playlist.playCount) else "",
-                                        onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, displayTitle) },
-                                        modifier = cardModifier
+                                        onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, displayTitle) }
                                     )
-                                }
-                            } else {
-                                HomeSection(
-                                    title = "雷达歌单"
-                                ) {
-                                    items(recommendState.radarPlaylists) { playlist ->
-                                        // 「私人雷达」等个性化歌单：首页只显示基础名称（如「私人雷达」），点进去再看完整歌单
-                                        val displayTitle = if (playlist.title.contains("|")) {
-                                            playlist.title.substringAfterLast("|").trim()
-                                        } else {
-                                            playlist.title
-                                        }
-                                        CoverCard(
-                                            coverUrl = playlist.coverImgUrl,
-                                            title = displayTitle,
-                                            subtitle = if (playlist.playCount > 0) formatRecommendPlayCount(playlist.playCount) else "",
-                                            onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, displayTitle) }
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -298,29 +279,15 @@ fun RecommendPage(
                     // 4. 新碟上架
                     if (recommendState.newAlbums.isNotEmpty()) {
                         item {
-                            if (isTablet) {
-                                TabletHomeSection(
-                                    title = "新碟上架",
-                                    cards = recommendState.newAlbums
-                                ) { album, cardModifier ->
-                                    TabletCoverCard(
-                                        coverUrl = album.picUrl,
-                                        title = album.name,
-                                        subtitle = album.artist,
-                                        onClick = { if (album.id > 0) onAlbumClick(album.id) },
-                                        modifier = cardModifier
+                            HomeSection(
+                                title = "新碟上架",
+                                lastCardTitle = recommendState.newAlbums.lastOrNull()?.name
+                            ) {
+                                items(recommendState.newAlbums) { album ->
+                                    AlbumCard(
+                                        album = album,
+                                        onClick = { if (album.id > 0) onAlbumClick(album.id) }
                                     )
-                                }
-                            } else {
-                                HomeSection(
-                                    title = "新碟上架"
-                                ) {
-                                    items(recommendState.newAlbums) { album ->
-                                        AlbumCard(
-                                            album = album,
-                                            onClick = { if (album.id > 0) onAlbumClick(album.id) }
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -340,16 +307,65 @@ fun RecommendPage(
 @Composable
 internal fun HomeSection(
     title: String,
+    lastCardTitle: String? = null,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit
 ) {
+    val rowState = rememberLazyListState()
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val titleLayout = measurer.measure(
+        text = lastCardTitle.orEmpty(),
+        style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium),
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        constraints = Constraints(maxWidth = with(density) { 156.dp.roundToPx() })
+    )
+    val footerLayout = measurer.measure("0次播放", MiuixTheme.textStyles.footnote2)
+    val placeholderHeight = 156.dp + 8.dp + 4.dp + with(density) {
+        (titleLayout.size.height + footerLayout.size.height).toDp()
+    }
+    val placeholderColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.08f)
     Column(modifier = Modifier.fillMaxWidth()) {
         SmallTitle(title)
-        LazyRow(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp)
-        ) {
-            content()
+        Box(Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            .heightIn(min = if (lastCardTitle != null) placeholderHeight else 0.dp)) {
+            // Paint only unused viewport space; placeholders are never LazyRow items.
+            Canvas(Modifier.matchParentSize()) {
+                val info = rowState.layoutInfo
+                val last = info.visibleItemsInfo.lastOrNull()
+                if (lastCardTitle != null && last != null && last.index == info.totalItemsCount - 1) {
+                    val gap = 12.dp.toPx()
+                    val cardSize = 156.dp.toPx()
+                    var x = last.offset + last.size - info.viewportStartOffset + gap
+                    val right = size.width - gap
+                    val lineCount = titleLayout.lineCount.coerceAtLeast(1)
+                    val lineHeight = titleLayout.size.height.toFloat() / lineCount
+                    clipRect(right = right) {
+                        while (x < right) {
+                            drawRoundRect(placeholderColor, Offset(x, 0f), Size(cardSize, cardSize), CornerRadius(12.dp.toPx()))
+                            val titleTop = cardSize + 8.dp.toPx()
+                            repeat(lineCount) { line ->
+                                drawRoundRect(placeholderColor,
+                                    Offset(x, titleTop + line * lineHeight + lineHeight * 0.18f),
+                                    Size(cardSize * (if (line == 0) 0.9f else 0.65f), lineHeight * 0.64f), CornerRadius(4.dp.toPx()))
+                            }
+                            val footerHeight = footerLayout.size.height.toFloat()
+                            drawRoundRect(placeholderColor,
+                                Offset(x, titleTop + titleLayout.size.height + 4.dp.toPx() + footerHeight * 0.18f),
+                                Size(cardSize * 0.45f, footerHeight * 0.64f), CornerRadius(4.dp.toPx()))
+                            x += cardSize + gap
+                        }
+                    }
+                }
+            }
+            LazyRow(
+                state = rowState,
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp)
+            ) {
+                content()
+            }
         }
     }
 }
@@ -358,7 +374,7 @@ internal fun HomeSection(
  * 平板首页板块：两行卡片，按列横向滚动
  */
 @Composable
-private fun <T> TabletHomeSection(
+internal fun <T> TabletHomeSection(
     title: String,
     cards: List<T>,
     card: @Composable (T, Modifier) -> Unit
@@ -395,16 +411,17 @@ private fun <T> TabletHomeSection(
  * 平板首页横向卡片：左封面，右信息
  */
 @Composable
-private fun TabletCoverCard(
+internal fun TabletCoverCard(
     coverUrl: String,
     title: String,
     subtitle: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sharedCoverKey: String? = null
 ) {
     Card(
         modifier = modifier,
-        pressFeedbackType = PressFeedbackType.Tilt,
+        pressFeedbackType = PressFeedbackType.Sink,
         showIndication = true,
         onClick = onClick
     ) {
@@ -414,14 +431,14 @@ private fun TabletCoverCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = coverUrl,
+            AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.THUMBNAIL), model = coverUrl,
                 contentDescription = title,
                 modifier = Modifier
                     .size(64.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(RoundedCornerShape(8.dp))
+                    .sharedCover(sharedCoverKey),
                 contentScale = ContentScale.Crop,
-                error = painterResource(android.R.drawable.ic_menu_gallery)
+                error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -430,7 +447,6 @@ private fun TabletCoverCard(
                     style = MiuixTheme.textStyles.body1,
                     fontWeight = FontWeight.Medium,
                     color = MiuixTheme.colorScheme.onSurface,
-                    minLines = 2,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
@@ -459,48 +475,38 @@ internal fun CoverCard(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sharedCoverKey: String? = null,
+    imageScale: Float = 1f
 ) {
-    Card(
-        modifier = modifier.width(156.dp),
-        pressFeedbackType = PressFeedbackType.Tilt,
-        showIndication = true,
-        onClick = onClick
-    ) {
-        AsyncImage(
-            model = coverUrl,
-            contentDescription = title,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f),
-            contentScale = ContentScale.Crop,
-            error = painterResource(android.R.drawable.ic_menu_gallery)
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp)
+    Column(modifier = modifier.width(156.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+            pressFeedbackType = PressFeedbackType.Tilt,
+            showIndication = true,
+            onClick = onClick
         ) {
-            Text(
-                text = title,
-                style = MiuixTheme.textStyles.body2,
-                fontWeight = FontWeight.Medium,
-                color = MiuixTheme.colorScheme.onSurface,
-                minLines = 2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            AsyncImage(
+                imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.THUMBNAIL),
+                model = coverUrl, contentDescription = title,
+                modifier = Modifier.fillMaxSize(imageScale.coerceIn(.1f, 1f)).clip(RoundedCornerShape(12.dp)).sharedCover(sharedCoverKey),
+                contentScale = if (imageScale < 1f) ContentScale.Fit else ContentScale.Crop, error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
             )
+            }
+        }
+        Column(modifier = Modifier.fillMaxWidth().clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onClick
+        ).padding(top = 8.dp)) {
+            Text(text = title, style = MiuixTheme.textStyles.body2, fontWeight = FontWeight.Medium,
+                color = MiuixTheme.colorScheme.onSurface, maxLines = 2,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = subtitle,
-                style = MiuixTheme.textStyles.footnote2,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                minLines = 1,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Text(text = subtitle, style = MiuixTheme.textStyles.footnote2,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f), minLines = 1, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -514,39 +520,18 @@ private fun ArtistCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.width(136.dp),
-        pressFeedbackType = PressFeedbackType.Tilt,
-        showIndication = true,
-        onClick = onClick
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            AsyncImage(
-                model = artist.picUrl,
-                contentDescription = artist.name,
-                modifier = Modifier
-                    .size(96.dp)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop,
-                error = painterResource(android.R.drawable.ic_menu_gallery)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = artist.name,
-                style = MiuixTheme.textStyles.body2,
-                fontWeight = FontWeight.Medium,
-                color = MiuixTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+    Column(modifier = modifier.width(136.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Card(modifier = Modifier.size(96.dp).clip(CircleShape), pressFeedbackType = PressFeedbackType.Tilt,
+            showIndication = true, onClick = onClick) {
+            AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.ARTIST),
+                model = artist.picUrl, contentDescription = artist.name,
+                modifier = Modifier.fillMaxSize().clip(CircleShape), contentScale = ContentScale.Crop,
+                error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter())
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(text = artist.name, style = MiuixTheme.textStyles.body2, fontWeight = FontWeight.Medium,
+            color = MiuixTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick))
     }
 }
 
@@ -559,48 +544,9 @@ private fun AlbumCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.width(156.dp),
-        pressFeedbackType = PressFeedbackType.Tilt,
-        showIndication = true,
-        onClick = onClick
-    ) {
-        AsyncImage(
-            model = album.picUrl,
-            contentDescription = album.name,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f),
-            contentScale = ContentScale.Crop,
-            error = painterResource(android.R.drawable.ic_menu_gallery)
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp)
-        ) {
-            Text(
-                text = album.name,
-                style = MiuixTheme.textStyles.body2,
-                fontWeight = FontWeight.Medium,
-                color = MiuixTheme.colorScheme.onSurface,
-                minLines = 2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = album.artist,
-                style = MiuixTheme.textStyles.footnote2,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                minLines = 1,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    }
+    CoverCard(coverUrl = album.picUrl, title = album.name, subtitle = album.artist,
+        onClick = onClick, modifier = modifier)
+
 }
 
 /**
@@ -615,6 +561,7 @@ private fun PlayModeRow(
     onDailyRecommendClick: () -> Unit,
     onFmClick: () -> Unit,
     onIntelligenceModeClick: (String, String) -> Unit,
+    randomBackgroundActive: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val likedPlaylistId = userPlaylists.firstOrNull { it.title.contains("喜欢") }?.id
@@ -651,8 +598,7 @@ private fun PlayModeRow(
                 backgroundCoverUrl = dailyCover
             ) {
                 if (!dailyCover.isNullOrEmpty()) {
-                    AsyncImage(
-                        model = dailyCover,
+                    AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.COVER), model = dailyCover,
                         contentDescription = "每日推荐",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -669,46 +615,31 @@ private fun PlayModeRow(
             PlayModeCard(
                 title = "随机播放",
                 subtitle = "试试手气",
-                gradientColor = randomColor,
-                onClick = onRandomPlayClick
-            ) {
-                Image(
-                    painter = painterResource(com.hypermusic.miuix.R.drawable.random_play),
-                    contentDescription = "随机播放",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
+                gradientColor = if (ThemeSettings.followMonet) MiuixTheme.colorScheme.primary else dailyColor,
+                onClick = onRandomPlayClick,
+                randomGradientBackground = true,
+                randomBackgroundActive = randomBackgroundActive
+            ) { }
         }
         item {
             PlayModeCard(
                 title = "私人FM",
                 subtitle = "为你不停推荐",
                 gradientColor = fmColor,
-                onClick = onFmClick
-            ) {
-                Image(
-                    painter = painterResource(com.hypermusic.miuix.R.drawable.personal_fm),
-                    contentDescription = "私人FM",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
+                onClick = onFmClick,
+                fanGradientBackground = true,
+                randomBackgroundActive = randomBackgroundActive
+            ) { }
         }
         item {
             PlayModeCard(
                 title = "心动模式",
                 subtitle = "根据喜好智能播放",
                 gradientColor = heartColor,
-                onClick = { onIntelligenceModeClick(heartSeedId, likedPlaylistId) }
-            ) {
-                Image(
-                    painter = painterResource(com.hypermusic.miuix.R.drawable.xindong_mode),
-                    contentDescription = "心动模式",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
+                onClick = { onIntelligenceModeClick(heartSeedId, likedPlaylistId) },
+                curveGradientBackground = true,
+                randomBackgroundActive = randomBackgroundActive
+            ) { }
         }
     }
 }
@@ -721,6 +652,11 @@ internal fun PlayModeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     backgroundCoverUrl: String? = null,
+    blurCover: Boolean = false,
+    randomGradientBackground: Boolean = false,
+    fanGradientBackground: Boolean = false,
+    curveGradientBackground: Boolean = false,
+    randomBackgroundActive: Boolean = true,
     cover: @Composable () -> Unit
 ) {
     val onColor = Color.White
@@ -732,15 +668,38 @@ internal fun PlayModeCard(
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             // 每日推荐：用封面放大裁切、模糊、压暗作为整张卡片背景
-            if (!backgroundCoverUrl.isNullOrEmpty()) {
-                AsyncImage(
-                    model = backgroundCoverUrl,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .matchParentSize()
-                        .blur(40.dp),
-                    contentScale = ContentScale.Crop
-                )
+            val useBlurredCover = blurCover || !backgroundCoverUrl.isNullOrEmpty()
+            val useAnimatedBackground = randomGradientBackground || fanGradientBackground || curveGradientBackground
+            if (useAnimatedBackground) {
+                if (curveGradientBackground) {
+                    com.hypermusic.miuix.ui.effects.CurveCardBackground(
+                        modifier = Modifier.matchParentSize(), active = randomBackgroundActive
+                    )
+                } else if (fanGradientBackground) {
+                    com.hypermusic.miuix.ui.effects.FanCardBackground(
+                        modifier = Modifier.matchParentSize(), active = randomBackgroundActive
+                    )
+                } else {
+                    com.hypermusic.miuix.ui.effects.FluidCardBackground(
+                        modifier = Modifier.matchParentSize(), active = randomBackgroundActive
+                    )
+                }
+                Box(Modifier.matchParentSize().background(Brush.verticalGradient(
+                    0f to Color.Transparent,
+                    0.68f to Color.Transparent,
+                    0.84f to Color.Black.copy(alpha = 0.32f),
+                    1f to Color.Black.copy(alpha = 0.48f)
+                )))
+            }
+            if (useBlurredCover) {
+                Box(Modifier.matchParentSize().blur(40.dp)) {
+                    if (!backgroundCoverUrl.isNullOrEmpty()) {
+                        AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.COVER), model = backgroundCoverUrl, contentDescription = null,
+                            modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    } else {
+                        cover()
+                    }
+                }
                 Box(
                     modifier = Modifier
                         .matchParentSize()
@@ -761,7 +720,7 @@ internal fun PlayModeCard(
                         .fillMaxWidth()
                         .aspectRatio(1f)
                 ) {
-                    if (backgroundCoverUrl.isNullOrEmpty()) {
+                    if (!useBlurredCover && !useAnimatedBackground) {
                         cover()
                         Box(
                             modifier = Modifier
@@ -773,7 +732,7 @@ internal fun PlayModeCard(
                                     )
                                 )
                         )
-                    } else {
+                    } else if (useBlurredCover) {
                         // 封面底部渐隐：0.8 处不透明 → 1.0 处完全透明，露出模糊背景
                         Box(
                             modifier = Modifier
@@ -798,7 +757,7 @@ internal fun PlayModeCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(
-                            if (backgroundCoverUrl.isNullOrEmpty()) {
+                            if (!useBlurredCover && !useAnimatedBackground) {
                                 Modifier.background(gradientColor)
                             } else {
                                 Modifier

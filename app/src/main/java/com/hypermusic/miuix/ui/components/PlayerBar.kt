@@ -42,10 +42,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import com.hypermusic.miuix.ui.components.AsyncImage
 import com.hypermusic.miuix.viewmodel.PlayerState
 import com.hypermusic.miuix.ui.effects.liquid.lens
 import com.hypermusic.miuix.ui.effects.liquid.vibrancy
+import com.hypermusic.miuix.ui.theme.LocalEnableBlur
 import com.hypermusic.miuix.ui.theme.isInDarkTheme
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
@@ -95,6 +96,7 @@ fun PlayerBar(
     val currentSwipeRight by rememberUpdatedState(onSwipeRight)
     val currentSwipeUp by rememberUpdatedState(onSwipeUp)
     val currentSwipeDown by rememberUpdatedState(onSwipeDown)
+    val verticalSwipeEnabled by rememberUpdatedState(enableSwipeUp)
     if (playerState.currentTrack != null) {
         val navBarBottomPadding = if (!hasBottomBar) {
             WindowInsets.navigationBars.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()
@@ -111,8 +113,10 @@ fun PlayerBar(
         val coverSize = lerp(48.dp, 44.dp, floatingFraction)
         val coverCorner = lerp(8.dp, 10.dp, floatingFraction)
         val liquidContainerColor = MiuixTheme.colorScheme.surfaceContainer.copy(liquidAlpha)
-        // 非液态玻璃状态下使用更透明的背景
-        val translucentBarColor = MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+        // With Gaussian blur disabled, both the bar and its navigation-inset filler are opaque.
+        val translucentBarColor = MiuixTheme.colorScheme.surfaceVariant.copy(
+            alpha = if (LocalEnableBlur.current) 0.72f else 1f
+        )
         val liquidModifier = if (liquidBackdrop != null) {
             Modifier.drawBackdrop(
                 backdrop = liquidBackdrop,
@@ -182,7 +186,6 @@ fun PlayerBar(
                             animatedVisibilityScope = animatedVisibilityScope
                         )
                         .then(
-                            if (enableSwipeUp) {
                                 Modifier.pointerInput(Unit) {
                                     var totalX = 0f
                                     var totalY = 0f
@@ -207,7 +210,7 @@ fun PlayerBar(
                                                         triggered = true
                                                         currentSwipeRight()
                                                     }
-                                                } else {
+                                                } else if (verticalSwipeEnabled) {
                                                     if (totalY < -threshold) {
                                                         triggered = true
                                                         currentSwipeUp()
@@ -230,9 +233,6 @@ fun PlayerBar(
                                         }
                                     )
                                 }
-                            } else {
-                                Modifier
-                            }
                         )
                         .then(backgroundModifier),
                     shape = surfaceShape,
@@ -247,14 +247,13 @@ fun PlayerBar(
                             Box(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
                             ) {
-                                AsyncImage(
-                                    model = playerState.currentTrack?.imgUrl,
+                                AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.THUMBNAIL), model = playerState.currentTrack?.imgUrl,
                                     contentDescription = playerState.currentTrack?.title,
                                     modifier = Modifier
                                         .size(coverSize)
                                         .clip(RoundedCornerShape(coverCorner)),
                                     contentScale = ContentScale.Crop,
-                                    error = painterResource(android.R.drawable.ic_menu_gallery)
+                                    error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
                                 )
                             }
                         } else {
@@ -283,14 +282,13 @@ fun PlayerBar(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // 封面图片
-                            AsyncImage(
-                                model = playerState.currentTrack?.imgUrl,
+                            AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.THUMBNAIL), model = playerState.currentTrack?.imgUrl,
                                 contentDescription = playerState.currentTrack?.title,
                                 modifier = Modifier
                                     .size(coverSize)
                                     .clip(RoundedCornerShape(coverCorner)),
                                 contentScale = ContentScale.Crop,
-                                error = painterResource(android.R.drawable.ic_menu_gallery)
+                                error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter()
                             )
 
                             Spacer(modifier = Modifier.width(12.dp))

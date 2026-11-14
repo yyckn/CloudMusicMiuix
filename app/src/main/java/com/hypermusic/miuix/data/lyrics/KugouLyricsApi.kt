@@ -6,6 +6,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.hypermusic.miuix.data.model.Track
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,6 +29,7 @@ object KugouLyricsApi {
     private val gson = Gson()
 
     private val client = OkHttpClient.Builder()
+        .addInterceptor(com.hypermusic.miuix.data.lyrics.LyricRequests)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(12, TimeUnit.SECONDS)
         .build()
@@ -39,32 +41,68 @@ object KugouLyricsApi {
     )
 
     private val hashCache = ConcurrentHashMap<String, String>()
+    @Volatile private var catalogClient: com.hypermusic.miuix.data.api.KugouClient? = null
+    fun init(context: android.content.Context) {
+        if (catalogClient == null) synchronized(this) {
+            if (catalogClient == null) catalogClient = com.hypermusic.miuix.data.api.KugouClient(context.applicationContext)
+        }
+    }
+    private data class SongRef(val hash: String, val image: String)
 
     suspend fun fetch(track: Track): PlatformLyricResult? = withContext(Dispatchers.IO) {
         try {
-            val hash = hashCache[track.id]
-                ?: searchHash(track)?.also { hashCache[track.id] = it }
+            val cacheKey = "${track.source}:${track.id}"
+            val hash = nativeHash(track) ?: hashCache[cacheKey]
+                ?: (if (track.source == "kugou" && track.kugouAlbumAudioId.isNotBlank()) {
+                    try { catalogClient?.trackHash(track)?.also { hashCache[cacheKey] = it } }
+                    catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+                } else null)
+                ?: searchHash(track)?.also { hashCache[cacheKey] = it }
                 ?: return@withContext null
             fetchLyric(track, hash)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "fetch failed: ${e.message}")
             null
         }
     }
 
-    private fun searchHash(track: Track): String? {
+    internal fun nativeHash(track: Track): String? {
+        if (track.source != "kugou") return null
+        val value = track.kugouHash.ifBlank {
+            when {
+                track.id.startsWith("kgtrack_") -> track.id.removePrefix("kgtrack_")
+                track.id.startsWith("kugou_") -> track.id.removePrefix("kugou_")
+                else -> ""
+            }
+        }
+        return value.takeIf { it.matches(Regex("[A-Fa-f0-9]{32}")) }?.uppercase()
+    }
+
+    suspend fun searchTracks(track: Track): List<Track> = withContext(Dispatchers.IO) {
+        searchCandidates(track).map { candidate ->
+            Track(id = "kgtrack_${candidate.extra.hash}", title = candidate.name, artist = candidate.artist,
+                artistId = "", album = candidate.album.orEmpty(), albumId = "", source = "kugou", sourceUrl = "",
+                imgUrl = candidate.extra.image, duration = candidate.duration, kugouHash = candidate.extra.hash)
+        }
+    }
+
+    private fun searchHash(track: Track): String? = (LyricsMatch.pickBestCandidate(searchCandidates(track), track)?.extra as? SongRef)?.hash
+
+    private fun searchCandidates(track: Track): List<LyricsCandidate<SongRef>> {
         val keyword = listOf(track.title, track.artist)
             .filter { it.isNotBlank() }
             .joinToString(" ")
-        if (keyword.isBlank()) return null
+        if (keyword.isBlank()) return emptyList()
 
         val url = "$SEARCH_URL?keyword=${encode(keyword)}&page=1&pagesize=20" +
             "&userid=0&clientver=&platform=WebFilter&filter=2" +
             "&iscorrection=1&privilege_filter=0&area_code=1"
-        val root = getJson(url, mapOf("User-Agent" to "Mozilla/5.0")) ?: return null
-        val lists = root.obj("data")?.arr("lists") ?: return null
+        val root = getJson(url, mapOf("User-Agent" to "Mozilla/5.0")) ?: return emptyList()
+        val lists = root.obj("data")?.arr("lists") ?: return emptyList()
 
-        val candidates = mutableListOf<LyricsCandidate<String>>()
+        val candidates = mutableListOf<LyricsCandidate<SongRef>>()
         fun addSong(song: JsonObject) {
             val hash = song.str("FileHash") ?: return
             if (hash.isBlank()) return
@@ -82,7 +120,7 @@ object KugouLyricsApi {
                     artist = artist,
                     album = album,
                     duration = duration * 1000L,
-                    extra = hash
+                    extra = SongRef(hash, (song.str("Image") ?: "").replace("{size}", "400").replace("http://", "https://"))
                 )
             )
         }
@@ -96,8 +134,7 @@ object KugouLyricsApi {
             }
         }
 
-        val best = LyricsMatch.pickBestCandidate(candidates, track) ?: return null
-        return best.extra as? String
+        return candidates.distinctBy { it.extra.hash }
     }
 
     private fun fetchLyric(track: Track, hash: String): PlatformLyricResult? {
@@ -153,11 +190,12 @@ object KugouLyricsApi {
                 songAlbum = track.album,
                 artistNames = track.artistNames
             )
-            if (lyrics.lines.isEmpty()) return null
+            if (lyrics.lines.isEmpty() && !lyrics.isPureMusic) return null
             PlatformLyricResult(
                 lyrics = lyrics,
                 hasWordLines = lyrics.lines.any { !it.words.isNullOrEmpty() },
-                platform = "kugou"
+                platform = "kugou",
+                rawDebugText = formatRawLyricSections("酷狗原歌词 / KRC（解密后）" to raw, "翻译" to translation)
             )
         } else {
             val lrc = runCatching {
@@ -172,11 +210,12 @@ object KugouLyricsApi {
                 songAlbum = track.album,
                 artistNames = track.artistNames
             )
-            if (lyrics.lines.isEmpty()) return null
+            if (lyrics.lines.isEmpty() && !lyrics.isPureMusic) return null
             PlatformLyricResult(
                 lyrics = lyrics,
                 hasWordLines = false,
-                platform = "kugou"
+                platform = "kugou",
+                rawDebugText = formatRawLyricSections("酷狗原歌词 / LRC" to lrc)
             )
         }
     }

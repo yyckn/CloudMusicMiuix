@@ -4,16 +4,14 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.util.Log
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -106,8 +104,9 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.hypermusic.miuix.data.model.Track
-import com.hypermusic.miuix.data.lyrics.LyricUpgradeBlacklist
-import com.hypermusic.miuix.data.lyrics.LyricUpgradeRequiredList
+import com.hypermusic.miuix.ui.components.TrackMoreActions
+import com.hypermusic.miuix.R
+import com.hypermusic.miuix.ui.components.SettingsItemIcon
 import com.hypermusic.miuix.ui.components.LyricsView
 import com.hypermusic.miuix.ui.theme.ThemeSettings
 import com.hypermusic.miuix.ui.theme.rememberPlayerDark
@@ -142,7 +141,6 @@ import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
@@ -187,11 +185,12 @@ fun PlayerPage(
     onSeekTo: (Long) -> Unit,
     onDownload: () -> Unit = {},
     onDownloadCover: () -> Unit = {},
-    onDownloadAndShare: () -> Unit = {},
-    onDownloadCoverAndShare: () -> Unit = {},
+
+
     onShare: () -> Unit = {},
     onPlayTrack: (Track) -> Unit = {},
     onLoadLyrics: () -> Unit = {},
+    onNavigateToSoundEffects: () -> Unit = {},
     onOpenSystemUI: () -> Unit = {},
     onLikeTrack: () -> Unit = {},
     onDrawerStateChanged: (Boolean) -> Unit = {},
@@ -206,6 +205,10 @@ fun PlayerPage(
     val track = playerState.currentTrack
     // 与「等待歌曲」一致：加载中播放按钮转圈，并禁用进度/上一首/下一首/播放顺序/播放列表
     val controlsLocked = playerState.isLoading
+    val trackTitle = track?.title ?: if (controlsLocked) "正在加载歌曲" else "未知歌曲"
+    val qualityLabel = getQualityText(playerState.bitrate,
+        if (controlsLocked && track == null) "正在加载" else playerState.audioQuality,
+        isFMMode, isIntelligenceMode, ThemeSettings.showQuality, viewModel.fmModeLabel)
     val controlIconAlpha = if (controlsLocked) 0.35f else 1f
     val onPreviousSafe: () -> Unit = { if (!controlsLocked) onPrevious() }
     val onNextSafe: () -> Unit = { if (!controlsLocked) onNext() }
@@ -218,24 +221,27 @@ fun PlayerPage(
     LaunchedEffect(showMoreSheet, scrollToArtists) {
         if (showMoreSheet && scrollToArtists) {
             kotlinx.coroutines.delay(100)
-            moreListState.scrollToItem(2)
+            moreListState.scrollToItem(5)
             scrollToArtists = false
         }
     }
     var showLyricUpgradeSheet by remember { mutableStateOf(false) }
-    var restoreOriginalLyrics by remember { mutableStateOf(false) }
-    var forceUpgradeLyrics by remember { mutableStateOf(false) }
-    // 仅在开启「自动升级为逐字歌词」时展示歌词来源标识
-    val lyricSourceLabel = if (ThemeSettings.wordByWordLyrics && ThemeSettings.autoUpgradeLyrics) {
-        lyricState.source
-    } else {
-        null
-    }
+    var showAddTrackSheet by remember { mutableStateOf(false) }
     var showUnlikeDialog by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var speedInput by remember { mutableStateOf("") }
     val playlistListState = rememberLazyListState()
     val isPureMusic = lyricState.lyrics?.isPureMusic == true
+    var waitingForLyrics by remember(lyricState.loadingStartedAt) {
+        mutableStateOf(com.hypermusic.miuix.data.lyrics.initialLyricWaitRemaining(
+            lyricState.loadingStartedAt, android.os.SystemClock.elapsedRealtime()) > 0)
+    }
+    LaunchedEffect(lyricState.loadingStartedAt) {
+        val remaining = com.hypermusic.miuix.data.lyrics.initialLyricWaitRemaining(
+            lyricState.loadingStartedAt, android.os.SystemClock.elapsedRealtime())
+        if (remaining > 0) kotlinx.coroutines.delay(remaining)
+        waitingForLyrics = false
+    }
     var albumArtist by remember { mutableStateOf<String?>(null) }
     var albumArtistId by remember { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
@@ -250,10 +256,17 @@ fun PlayerPage(
 
     // 歌词引擎逐帧读取的实时播放位置，避免使用 100ms 刷新的 playerState 而造成卡顿
     val liveLyricsPositionProvider = remember { { viewModel.getPlaybackPositionMs() } }
+    val lyricPosition = playerState.currentPosition + playerState.lyricOffsetMs
+    val onLyricSeek: (Long) -> Unit = { position ->
+        onSeekTo((position - playerState.lyricOffsetMs).coerceIn(0L, playerState.duration.coerceAtLeast(0L)))
+    }
 
     // 封面只联网拉取一次，之后所有位置复用同一张 Bitmap 进行渲染
     var coverBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(track?.imgUrl) {
+    var coverBitmapKey by remember { mutableStateOf<String?>(null) }
+    val trackCoverKey = track?.let { "${it.source}:${it.id}:${it.imgUrl}" }
+    LaunchedEffect(trackCoverKey) {
+        val loadingKey = trackCoverKey
         val url = track?.imgUrl?.let { cover ->
             if (track.source == "qqmusic" && cover.startsWith("https://y.gtimg.cn/music/photo_new/T002R"))
                 cover.replace(Regex("T002R(?:300x300|800x800)M000"), "T002R1500x1500M000")
@@ -261,6 +274,7 @@ fun PlayerPage(
         }
         if (url.isNullOrEmpty()) {
             coverBitmap = null
+            coverBitmapKey = loadingKey
             return@LaunchedEffect
         }
         val request = ImageRequest.Builder(context)
@@ -269,10 +283,10 @@ fun PlayerPage(
             .memoryCacheKey("player_cover_$url")
             .diskCacheKey(url)
             .build()
-        val firstResult = context.imageLoader.execute(request)
+        val firstResult = com.hypermusic.miuix.data.cache.ImageCaches.get(context, com.hypermusic.miuix.data.cache.ImageCaches.Kind.COVER).execute(request)
         val result = if (firstResult !is SuccessResult && track?.source == "qqmusic" && url.contains("T002R1500x1500M000")) {
             val fallbackUrl = url.replace("T002R1500x1500M000", "T002R800x800M000")
-            context.imageLoader.execute(ImageRequest.Builder(context).data(fallbackUrl).size(800)
+            com.hypermusic.miuix.data.cache.ImageCaches.get(context, com.hypermusic.miuix.data.cache.ImageCaches.Kind.COVER).execute(ImageRequest.Builder(context).data(fallbackUrl).size(800)
                 .memoryCacheKey("player_cover_$fallbackUrl").diskCacheKey(fallbackUrl).build())
         } else firstResult
         when (result) {
@@ -292,8 +306,9 @@ fun PlayerPage(
                 }
                 coverBitmap = bitmap.asImageBitmap()
             }
-            else -> { /* 保留上一张封面，渲染时使用占位图 */ }
+            else -> { coverBitmap = null }
         }
+        coverBitmapKey = loadingKey
     }
     
     // 音质选项随当前平台变化。
@@ -316,47 +331,31 @@ fun PlayerPage(
     }
 
     // 获取专辑歌手信息
-    LaunchedEffect(track?.albumId) {
-        if (track?.source != "qqmusic" && track?.albumId?.isNotEmpty() == true) {
+    LaunchedEffect(track?.source, track?.albumId) {
+        albumArtist = null
+        albumArtistId = null
+        if (track?.source == "netease" && track.albumId.isNotEmpty()) {
             val albumIdStr = track.albumId.removePrefix("nealbum_")
             val albumId = albumIdStr.toLongOrNull()
             if (albumId != null) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    com.hypermusic.miuix.data.api.NeteaseApi.getAlbumDetail(albumId.toString()).fold(
-                        onSuccess = { (albumInfo, _) ->
-                            albumArtist = albumInfo.artist.ifEmpty { null }
-                            albumArtistId = if (albumInfo.artistId > 0) albumInfo.artistId else null
-                        },
-                        onFailure = {
-                            albumArtist = null
-                            albumArtistId = null
-                        }
-                    )
+                com.hypermusic.miuix.data.api.NeteaseApi.getAlbumDetail(albumId.toString()).onSuccess { (albumInfo, _) ->
+                    albumArtist = albumInfo.artist.ifEmpty { null }
+                    albumArtistId = albumInfo.artistId.takeIf { it > 0 }
                 }
             }
-        } else {
-            albumArtist = null
-            albumArtistId = null
         }
     }
 
     // 通知外部抽屉状态变化
-    LaunchedEffect(showPlaylistSheet, showMoreSheet, showLyricUpgradeSheet) {
-        onDrawerStateChanged(showPlaylistSheet || showMoreSheet || showLyricUpgradeSheet)
+    LaunchedEffect(showPlaylistSheet, showMoreSheet, showLyricUpgradeSheet, showAddTrackSheet) {
+        onDrawerStateChanged(showPlaylistSheet || showMoreSheet || showLyricUpgradeSheet || showAddTrackSheet)
     }
 
-    // 打开歌词来源弹窗时，同步当前歌曲的黑名单/需要升级状态
-    LaunchedEffect(showLyricUpgradeSheet) {
-        if (showLyricUpgradeSheet) {
-            val track = playerState.currentTrack
-            restoreOriginalLyrics = track != null && LyricUpgradeBlacklist.contains(track.id)
-            forceUpgradeLyrics = track != null && LyricUpgradeRequiredList.contains(track.id)
-        }
-    }
     // 始终有2页（封面+歌词），纯音乐时歌词页显示"纯音乐，请欣赏"
     val pageCount = 2
     val pagerState = rememberPagerState(pageCount = { pageCount })
     val coroutineScope = rememberCoroutineScope()
+    val vinylSwipeSongs = ThemeSettings.vinylSwipeAction == 0
     
     // 全屏封面模式下，歌词显示状态
     var showLyricsInFullScreen by remember { mutableStateOf(false) }
@@ -377,40 +376,24 @@ fun PlayerPage(
     )
 
     // 封面旋转动画
+    val vinylLayout = if (LocalConfiguration.current.screenWidthDp > 600) largeScreenCoverStyleSetting == 3 else coverStyleIndex == 3
     val useRoundCover = ThemeSettings.useRoundCover
-    val coverRotationIndex = ThemeSettings.coverRotationIndex
+    val coverRotationIndex = if (vinylLayout) 1 else ThemeSettings.coverRotationIndex
     val isPlaying = playerState.isPlaying
     
-    // 计算封面旋转角度
-    val coverRotation = when {
-        !useRoundCover -> 0f
-        coverRotationIndex == 0 -> 0f // 静止
-        coverRotationIndex == 1 && isPlaying -> { // 播放时旋转
-            val infiniteTransition = rememberInfiniteTransition(label = "cover_rotation")
-            val rotation by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 8000, easing = LinearEasing)
-                ),
-                label = "rotation"
-            )
-            rotation
+    val rotation = remember { Animatable(0f) }
+    LaunchedEffect(useRoundCover, vinylLayout, coverRotationIndex, isPlaying) {
+        if ((!useRoundCover && !vinylLayout) || coverRotationIndex == 0) {
+            rotation.snapTo(0f)
+        } else if (coverRotationIndex == 2 || (coverRotationIndex == 1 && isPlaying)) {
+            while (true) {
+                val remainingMillis = ((360f - rotation.value) / 360f * 8000f).toInt().coerceAtLeast(1)
+                rotation.animateTo(360f, tween(durationMillis = remainingMillis, easing = LinearEasing))
+                rotation.snapTo(0f)
+            }
         }
-        coverRotationIndex == 2 -> { // 始终旋转
-            val infiniteTransition = rememberInfiniteTransition(label = "cover_rotation")
-            val rotation by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 8000, easing = LinearEasing)
-                ),
-                label = "rotation"
-            )
-            rotation
-        }
-        else -> 0f
     }
+    val coverRotation = rotation.value
 
     // 封面形状
     val coverShape = if (useRoundCover) CircleShape else RoundedCornerShape(16.dp)
@@ -461,8 +444,8 @@ fun PlayerPage(
 
     // 弹窗/抽屉（如输入播放速度的输入框）会抢走焦点，关闭后把焦点还给播放页，
     // 否则键盘快捷键会失效。
-    LaunchedEffect(showSpeedDialog, showUnlikeDialog, showMoreSheet, showPlaylistSheet, showLyricUpgradeSheet) {
-        if (!showSpeedDialog && !showUnlikeDialog && !showMoreSheet && !showPlaylistSheet && !showLyricUpgradeSheet) {
+    LaunchedEffect(showSpeedDialog, showUnlikeDialog, showMoreSheet, showPlaylistSheet, showLyricUpgradeSheet, showAddTrackSheet) {
+        if (!showSpeedDialog && !showUnlikeDialog && !showMoreSheet && !showPlaylistSheet && !showLyricUpgradeSheet && !showAddTrackSheet) {
             shortcutFocusRequester.requestFocus()
         }
     }
@@ -475,36 +458,40 @@ fun PlayerPage(
             .onPreviewKeyEvent { event ->
                 if (!KeyboardShortcutSettings.enabled) return@onPreviewKeyEvent false
                 if (event.nativeKeyEvent.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
-                when (event.nativeKeyEvent.keyCode) {
-                    KeyboardShortcutSettings.keyFor(ShortcutAction.PlayPause) -> {
+                val action = ShortcutAction.entries.firstOrNull {
+                    KeyboardShortcutSettings.matches(it, event.nativeKeyEvent.keyCode, event.nativeKeyEvent.metaState)
+                } ?: return@onPreviewKeyEvent false
+                if (event.nativeKeyEvent.repeatCount > 0 && action !in listOf(ShortcutAction.SeekBackward, ShortcutAction.SeekForward)) return@onPreviewKeyEvent true
+                when (action) {
+                    ShortcutAction.PlayPause -> {
                         onTogglePlayPause()
                         true
                     }
-                    KeyboardShortcutSettings.keyFor(ShortcutAction.Previous) -> {
+                    ShortcutAction.Previous -> {
                         onPrevious()
                         true
                     }
-                    KeyboardShortcutSettings.keyFor(ShortcutAction.Next) -> {
+                    ShortcutAction.Next -> {
                         onNext()
                         true
                     }
-                    KeyboardShortcutSettings.keyFor(ShortcutAction.SeekBackward) -> {
-                        onSeekTo((playerState.currentPosition - 10_000L).coerceAtLeast(0L))
+                    ShortcutAction.SeekBackward -> {
+                        onSeekTo((playerState.currentPosition - 5_000L).coerceAtLeast(0L))
                         true
                     }
-                    KeyboardShortcutSettings.keyFor(ShortcutAction.SeekForward) -> {
-                        val target = playerState.currentPosition + 10_000L
+                    ShortcutAction.SeekForward -> {
+                        val target = playerState.currentPosition + 5_000L
                         onSeekTo(
                             if (playerState.duration > 0L) target.coerceAtMost(playerState.duration)
                             else target
                         )
                         true
                     }
-                    KeyboardShortcutSettings.keyFor(ShortcutAction.Like) -> {
+                    ShortcutAction.Like -> {
                         onLikeTrack()
                         true
                     }
-                    else -> false
+                    ShortcutAction.More -> { showMoreSheet = true; true }
                 }
             }
     ) {
@@ -632,7 +619,7 @@ fun PlayerPage(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(text = track?.title ?: "未知歌曲", fontSize = 24.sp, fontWeight = FontWeight.Medium, color = playerText, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+                                        Text(text = trackTitle, fontSize = 24.sp, fontWeight = FontWeight.Medium, color = playerText, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
                                         Spacer(modifier = Modifier.height(4.dp))
                                         PlayerArtistAlbumText(track, playerText, 14.sp, onArtistTextClick, onAlbumTextClick, modifier = Modifier.fillMaxWidth())
                                     }
@@ -650,7 +637,7 @@ fun PlayerPage(
                                             Text(text = "纯音乐，请欣赏", fontSize = 16.sp, color = playerText.copy(alpha = 0.5f))
                                         }
                                     } else {
-                                        LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = lyricHorizontalPadding), source = lyricSourceLabel, sourceColor = playerText.copy(alpha = 0.5f), sourceStartPadding = 24.dp - lyricHorizontalPadding, showSourceHelp = true, onSourceClick = { showLyricUpgradeSheet = true }, positionProvider = liveLyricsPositionProvider)
+                                        LyricsView(lyrics = lyricState.lyrics, waitingForLyrics = waitingForLyrics, currentPosition = lyricPosition, onSeekTo = onLyricSeek, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = lyricHorizontalPadding), source = null, sourceColor = playerText.copy(alpha = 0.5f), sourceStartPadding = 24.dp - lyricHorizontalPadding, showSourceHelp = true, onSourceClick = { showLyricUpgradeSheet = true }, positionProvider = liveLyricsPositionProvider)
                                     }
                                 }
                                 
@@ -659,10 +646,10 @@ fun PlayerPage(
                                     var seekPosition by remember { mutableStateOf<Long?>(null) }
                                     val displayPosition = seekPosition ?: playerState.currentPosition
                                     val progress = if (playerState.duration > 0) displayPosition.toFloat() / playerState.duration.toFloat() else 0f
-                                    PlayerProgressSlider(value = progress, color = playerText, onValueChange = { newValue -> seekPosition = (newValue * playerState.duration).toLong() }, onValueChangeFinished = { seekPosition?.let { onSeekTo(it) }; seekPosition = null }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
+                                    PlayerProgressSlider(value = progress, color = playerText, onValueChange = { newValue -> seekPosition = (newValue * playerState.duration).toLong() }, onValueChangeFinished = { seekPosition?.let { onSeekTo(it) }; seekPosition = null }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp))
                                     Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                         Text(text = formatDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
-                                        Text(text = getQualityText(playerState.bitrate, playerState.audioQuality, isFMMode, isIntelligenceMode, ThemeSettings.showQuality), fontSize = 12.sp, color = playerText)
+                                        Text(text = qualityLabel, fontSize = 12.sp, color = playerText)
                                         Text(text = formatDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                                     }
                                     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -723,7 +710,7 @@ fun PlayerPage(
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(track?.title ?: "未知歌曲", fontSize = 24.sp, fontWeight = FontWeight.Medium,
+                                Text(trackTitle, fontSize = 24.sp, fontWeight = FontWeight.Medium,
                                     color = playerText, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Spacer(Modifier.height(4.dp))
                                 PlayerArtistAlbumText(track, playerText, 14.sp, onArtistTextClick, onAlbumTextClick)
@@ -750,9 +737,9 @@ fun PlayerPage(
                                 if (isPureMusic) {
                                     Text("纯音乐，请欣赏", fontSize = 16.sp, color = playerText.copy(alpha = 0.5f))
                                 } else {
-                                    LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition,
-                                        onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize(),
-                                        source = lyricSourceLabel, sourceColor = playerText.copy(alpha = 0.5f),
+                                    LyricsView(lyrics = lyricState.lyrics, waitingForLyrics = waitingForLyrics, currentPosition = lyricPosition,
+                                        onSeekTo = onLyricSeek, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize(),
+                                        source = null, sourceColor = playerText.copy(alpha = 0.5f),
                                         showSourceHelp = true, onSourceClick = { showLyricUpgradeSheet = true },
                                         positionProvider = liveLyricsPositionProvider)
                                 }
@@ -766,7 +753,7 @@ fun PlayerPage(
                             enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth())
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(formatDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
-                            Text(getQualityText(playerState.bitrate, playerState.audioQuality, isFMMode, isIntelligenceMode, ThemeSettings.showQuality),
+                            Text(qualityLabel,
                                 fontSize = 12.sp, color = playerText)
                             Text(formatDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                         }
@@ -1001,7 +988,7 @@ fun PlayerPage(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(
-                                    text = track?.title ?: "未知歌曲",
+                                    text = trackTitle,
                                     fontSize = 24.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = playerText,
@@ -1027,15 +1014,21 @@ fun PlayerPage(
 
                         // 封面（小屏模式下隐藏）
                         if (!isSmallScreen) {
-                            Box(
+                            BoxWithConstraints(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .fillMaxWidth(),
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Card(
+                                val constrainedCoverSize = minOf(imageSize, maxWidth, maxHeight).coerceAtLeast(0.dp)
+                                if (largeScreenCoverStyle == 3) {
+                                    VinylRecordCover(coverBitmap.takeIf { coverBitmapKey == trackCoverKey }, track?.title, constrainedCoverSize, coverRotation, isPlaying,
+                                        trackCoverKey, coverBitmapKey == trackCoverKey, true, onPreviousSafe, onNextSafe,
+                                        onShowLyrics = null)
+                                } else Card(
                                     modifier = Modifier
-                                        .size(imageSize)
+                                        .size(constrainedCoverSize)
                                         .aspectRatio(1f),
                                     cornerRadius = 24.dp,
                                     colors = CardDefaults.defaultColors(
@@ -1086,7 +1079,7 @@ fun PlayerPage(
                                 enabled = !playerState.isLoading,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 4.dp)
+                                    .padding(bottom = 2.dp)
                             )
 
                             // 时间显示和音质
@@ -1102,7 +1095,7 @@ fun PlayerPage(
                                     color = playerText.copy(alpha = 0.6f)
                                 )
                                 Text(
-                                    text = getQualityText(playerState.bitrate, playerState.audioQuality, isFMMode, isIntelligenceMode, ThemeSettings.showQuality),
+                                    text = qualityLabel,
                                     fontSize = 12.sp,
                                     color = playerText
                                 )
@@ -1279,12 +1272,12 @@ fun PlayerPage(
                             } else {
                                 // 显示歌词
                                 LyricsView(
-                                    lyrics = lyricState.lyrics,
-                                    currentPosition = playerState.currentPosition,
-                                    onSeekTo = onSeekTo,
+                                    lyrics = lyricState.lyrics, waitingForLyrics = waitingForLyrics,
+                                    currentPosition = lyricPosition,
+                                    onSeekTo = onLyricSeek,
                                     isPlaying = playerState.isPlaying,
                                     modifier = Modifier.fillMaxSize(),
-                                    source = lyricSourceLabel,
+                                    source = null,
                                     sourceColor = playerText.copy(alpha = 0.5f),
                                     showSourceHelp = true,
                                     onSourceClick = { showLyricUpgradeSheet = true },
@@ -1433,7 +1426,7 @@ fun PlayerPage(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(text = track?.title ?: "未知歌曲", fontSize = 24.sp, fontWeight = FontWeight.Medium, color = playerText, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+                                    Text(text = trackTitle, fontSize = 24.sp, fontWeight = FontWeight.Medium, color = playerText, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
                                     Spacer(modifier = Modifier.height(4.dp))
                                     PlayerArtistAlbumText(track, playerText, 14.sp, onArtistTextClick, onAlbumTextClick, modifier = Modifier.fillMaxWidth())
                                 }
@@ -1487,7 +1480,7 @@ fun PlayerPage(
                                                 Text(text = "纯音乐，请欣赏", fontSize = 16.sp, color = playerText.copy(alpha = 0.5f))
                                             }
                                         } else {
-                                            LyricsView(lyrics = lyricState.lyrics, currentPosition = playerState.currentPosition, onSeekTo = onSeekTo, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = lyricHorizontalPadding), source = lyricSourceLabel, sourceColor = playerText.copy(alpha = 0.5f), sourceStartPadding = 24.dp - lyricHorizontalPadding, showSourceHelp = true, onSourceClick = { showLyricUpgradeSheet = true }, positionProvider = liveLyricsPositionProvider)
+                                            LyricsView(lyrics = lyricState.lyrics, waitingForLyrics = waitingForLyrics, currentPosition = lyricPosition, onSeekTo = onLyricSeek, isPlaying = playerState.isPlaying, modifier = Modifier.fillMaxSize().padding(horizontal = lyricHorizontalPadding), source = null, sourceColor = playerText.copy(alpha = 0.5f), sourceStartPadding = 24.dp - lyricHorizontalPadding, showSourceHelp = true, onSourceClick = { showLyricUpgradeSheet = true }, positionProvider = liveLyricsPositionProvider)
                                         }
                                     }
                                 }
@@ -1504,10 +1497,10 @@ fun PlayerPage(
                                 var seekPosition by remember { mutableStateOf<Long?>(null) }
                                 val displayPosition = seekPosition ?: playerState.currentPosition
                                 val progress = if (playerState.duration > 0) displayPosition.toFloat() / playerState.duration.toFloat() else 0f
-                                PlayerProgressSlider(value = progress, color = playerText, onValueChange = { newValue -> seekPosition = (newValue * playerState.duration).toLong() }, onValueChangeFinished = { seekPosition?.let { onSeekTo(it) }; seekPosition = null }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(horizontal = if (screenWidth < 400.dp) 16.dp else 0.dp).padding(bottom = 4.dp))
+                                PlayerProgressSlider(value = progress, color = playerText, onValueChange = { newValue -> seekPosition = (newValue * playerState.duration).toLong() }, onValueChangeFinished = { seekPosition?.let { onSeekTo(it) }; seekPosition = null }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(horizontal = if (screenWidth < 400.dp) 16.dp else 0.dp).padding(bottom = 2.dp))
                                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = if (screenWidth < 400.dp) 16.dp else 0.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text(text = formatDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
-                                    Text(text = getQualityText(playerState.bitrate, playerState.audioQuality, isFMMode, isIntelligenceMode, ThemeSettings.showQuality), fontSize = 12.sp, color = playerText)
+                                    Text(text = qualityLabel, fontSize = 12.sp, color = playerText)
                                     Text(text = formatDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                                 }
                                 Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1525,6 +1518,8 @@ fun PlayerPage(
                                         if (isFMMode || isIntelligenceMode) {
                                             IconButton(onClick = onBackClick, modifier = Modifier.size(48.dp)) { Icon(imageVector = MiuixIcons.Close, contentDescription = "关闭", tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
                                             if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
+                                            IconButton(onClick = { showLyricsInFullScreen = !showLyricsInFullScreen }, modifier = Modifier.size(48.dp)) { Icon(imageVector = if (showLyricsInFullScreen) MiuixIcons.NotesFill else MiuixIcons.Notes, contentDescription = "歌词", tint = if (showLyricsInFullScreen) playerText else playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
+                                            if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                                             FmLikeButton(
                                                 isLiked = isCurrentTrackLiked,
                                                 onClick = {
@@ -1533,10 +1528,6 @@ fun PlayerPage(
                                             )
                                             if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                                             PlayerShareButton(playerText) { onShare() }
-                                            if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
-                                            PlayerCommentButton(playerText) {
-                                                playerState.currentTrack?.let { onNavigateToComment(it.id, it.title) }
-                                            }
                                             if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                                         } else {
                                             IconButton(onClick = { showLyricsInFullScreen = !showLyricsInFullScreen }, modifier = Modifier.size(48.dp)) { Icon(imageVector = if (showLyricsInFullScreen) MiuixIcons.NotesFill else MiuixIcons.Notes, contentDescription = "歌词", tint = if (showLyricsInFullScreen) playerText else playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp)) }
@@ -1573,7 +1564,7 @@ fun PlayerPage(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = track?.title ?: "未知歌曲",
+                                text = trackTitle,
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = playerText,
@@ -1600,6 +1591,7 @@ fun PlayerPage(
                     // 水平翻页器（封面/歌词）
                     HorizontalPager(
                         state = pagerState,
+                        userScrollEnabled = coverStyleIndex != 3 || !vinylSwipeSongs,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
@@ -1617,7 +1609,7 @@ fun PlayerPage(
                                             horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
                                             Text(
-                                                text = track?.title ?: "未知歌曲",
+                                                text = trackTitle,
                                                 fontSize = 28.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = playerText,
@@ -1631,13 +1623,18 @@ fun PlayerPage(
                                     }
                                 } else {
                                     // 正常模式：显示封面
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
+                                    BoxWithConstraints(
+                                        modifier = Modifier.fillMaxSize().padding(vertical = 8.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Card(
+                                        val constrainedCoverSize = minOf(imageSize, maxWidth, maxHeight).coerceAtLeast(0.dp)
+                                        if (coverStyleIndex == 3) {
+                                            VinylRecordCover(coverBitmap.takeIf { coverBitmapKey == trackCoverKey }, track?.title, constrainedCoverSize, coverRotation, isPlaying,
+                                                trackCoverKey, coverBitmapKey == trackCoverKey, vinylSwipeSongs, onPreviousSafe, onNextSafe,
+                                                onShowLyrics = { coroutineScope.launch { pagerState.animateScrollToPage(1) } })
+                                        } else Card(
                                             modifier = Modifier
-                                                .size(imageSize)
+                                                .size(constrainedCoverSize)
                                                 .aspectRatio(1f),
                                             cornerRadius = 24.dp,
                                             colors = CardDefaults.defaultColors(
@@ -1666,6 +1663,9 @@ fun PlayerPage(
                                 }
                             }
                             1 -> {
+                                Box(Modifier.fillMaxSize().then(if (coverStyleIndex == 3 && vinylSwipeSongs) Modifier.clickable {
+                                    coroutineScope.launch { pagerState.animateScrollToPage(0) }
+                                } else Modifier)) {
                                 // 歌词页面
                                 if (isPureMusic) {
                                     // 纯音乐显示提示
@@ -1683,20 +1683,21 @@ fun PlayerPage(
                                     }
                                 } else {
                                     LyricsView(
-                                        lyrics = lyricState.lyrics,
-                                        currentPosition = playerState.currentPosition,
-                                        onSeekTo = onSeekTo,
+                                        lyrics = lyricState.lyrics, waitingForLyrics = waitingForLyrics,
+                                        currentPosition = lyricPosition,
+                                        onSeekTo = onLyricSeek,
                                         isPlaying = playerState.isPlaying,
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .padding(horizontal = lyricHorizontalPadding),
-                                        source = lyricSourceLabel,
+                                        source = null,
                                         sourceColor = playerText.copy(alpha = 0.5f),
                                         sourceStartPadding = 24.dp - lyricHorizontalPadding,
                                         showSourceHelp = true,
                                         onSourceClick = { showLyricUpgradeSheet = true },
                                         positionProvider = liveLyricsPositionProvider
                                     )
+                                }
                                 }
                             }
                         }
@@ -1726,7 +1727,7 @@ fun PlayerPage(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = if (screenWidth < 400.dp) 16.dp else 0.dp)
-                                .padding(bottom = 4.dp)
+                                .padding(bottom = 2.dp)
                         )
 
                         // 时间显示和音质
@@ -1743,7 +1744,7 @@ fun PlayerPage(
                             color = playerText.copy(alpha = 0.6f)
                         )
                         Text(
-                            text = getQualityText(playerState.bitrate, playerState.audioQuality, isFMMode, isIntelligenceMode, ThemeSettings.showQuality),
+                            text = qualityLabel,
                             fontSize = 12.sp,
                             color = playerText
                         )
@@ -1821,6 +1822,14 @@ fun PlayerPage(
                                         tint = playerText.copy(alpha = 0.6f), modifier = Modifier.size(24.dp))
                                 }
                                 if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
+                                IconButton(onClick = {
+                                    coroutineScope.launch { pagerState.animateScrollToPage(if (pagerState.currentPage == 0) 1 else 0) }
+                                }, modifier = Modifier.size(48.dp)) {
+                                    Icon(imageVector = if (pagerState.currentPage == 1) MiuixIcons.NotesFill else MiuixIcons.Notes,
+                                        contentDescription = "歌词", tint = if (pagerState.currentPage == 1) playerText else playerText.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(24.dp))
+                                }
+                                if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                                 FmLikeButton(
                                     isLiked = isCurrentTrackLiked,
                                     onClick = {
@@ -1829,10 +1838,6 @@ fun PlayerPage(
                                 )
                                 if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
                                 PlayerShareButton(playerText) { onShare() }
-                                if (screenWidth >= 400.dp) Spacer(modifier = Modifier.width(16.dp))
-                                PlayerCommentButton(playerText) {
-                                    playerState.currentTrack?.let { onNavigateToComment(it.id, it.title) }
-                                }
                             } else {
                                 // 歌词按钮
                                 IconButton(
@@ -2037,6 +2042,15 @@ fun PlayerPage(
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp)
                 ) {
+                    item {
+                        TrackMoreActions(liked = isCurrentTrackLiked,
+                            onShare = { showMoreSheet = false; onShare() },
+                            onLike = {
+                                showMoreSheet = false
+                                if (isCurrentTrackLiked) showUnlikeDialog = true else onLikeTrack()
+                            },
+                            onComment = { showMoreSheet = false; track?.let { onNavigateToComment(it.id, it.title) } })
+                    }
                     // 歌曲区域
                     item { SmallTitle("歌曲") }
                     item {
@@ -2050,14 +2064,20 @@ fun PlayerPage(
                         ) {
                             WindowDropdownPreference(
                                 title = "音质",
-                                summary = "设置播放及下载的最高音质；播放时切歌生效，实际音质取决于歌曲和账号权限",
+                                summary = com.hypermusic.miuix.data.model.AudioQuality.summary,
                                 items = qualityOptions,
                                 selectedIndex = viewModel.audioQualityIndex,
                                 startAction = { Icon(imageVector = MiuixIcons.Music, contentDescription = null, modifier = Modifier.size(24.dp)) },
                                 onSelectedIndexChange = { viewModel.updateAudioQualityIndex(it) }
                             )
-                            BasicComponent(
+                            com.hypermusic.miuix.ui.components.LoudnessPreference()
+                            ArrowPreference(title = "音效", startAction = { SettingsItemIcon(R.drawable.ic_md3_equalizer) }, onClick = {
+                                showMoreSheet = false
+                                onNavigateToSoundEffects()
+                            })
+                            ArrowPreference(
                                 title = "播放速度",
+                                startAction = { SettingsItemIcon(R.drawable.ic_md3_speed) },
                                 endActions = {
                                     Text(
                                         text = "${formatSpeedValue(viewModel.playbackSpeed)}x",
@@ -2073,7 +2093,9 @@ fun PlayerPage(
                                         },
                                         valueRange = 0.1f..5f,
                                         steps = 48,
-                                        magnetThreshold = 0.1f,
+                                        showKeyPoints = true,
+                                        keyPoints = listOf(1f),
+                                        magnetThreshold = 0.005f,
                                         hapticEffect = SliderDefaults.SliderHapticEffect.Step,
                                         modifier = Modifier.padding(vertical = 4.dp)
                                     )
@@ -2083,55 +2105,22 @@ fun PlayerPage(
                                     showSpeedDialog = true
                                 }
                             )
-                            ArrowPreference(
-                                title = "分享",
-                                startAction = {
-                                    Icon(
-                                        imageVector = MiuixIcons.Share,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                },
-                                onClick = {
-                                    showMoreSheet = false
-                                    onShare()
-                                }
-                            )
-                            ArrowPreference(
-                                title = if (isCurrentTrackLiked) "取消收藏" else "收藏",
-                                startAction = {
-                                    Icon(
-                                        imageVector = if (isCurrentTrackLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                        tint = if (isCurrentTrackLiked) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface
-                                    )
-                                },
-                                onClick = {
-                                    showMoreSheet = false
-                                    if (isCurrentTrackLiked) {
-                                        showUnlikeDialog = true
-                                    } else {
-                                        onLikeTrack()
-                                    }
-                                }
-                            )
-                            ArrowPreference(
-                                title = "评论",
-                                startAction = {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.Comment,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                },
-                                onClick = {
-                                    showMoreSheet = false
-                                    track?.let { t ->
-                                        onNavigateToComment(t.id, t.title)
-                                    }
-                                }
-                            )
+                        }
+                    }
+
+                    if (playerState.currentTrack?.source in setOf("bodian", "kugou", "qishui")) {
+                        item {
+                            Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                                colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer)) {
+                                ArrowPreference(title = "添加到个人歌单", onClick = { showAddTrackSheet = true })
+                            }
+                        }
+                    }
+                    item { SmallTitle("歌词") }
+                    item {
+                        Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                            colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer)) {
+                            ArrowPreference(title = "匹配歌词", onClick = { showLyricUpgradeSheet = true })
                         }
                     }
 
@@ -2230,20 +2219,6 @@ fun PlayerPage(
                                 }
                             )
                             ArrowPreference(
-                                title = "下载此歌曲并分享",
-                                startAction = {
-                                    Icon(
-                                        imageVector = MiuixIcons.Share,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                },
-                                onClick = {
-                                    showMoreSheet = false
-                                    onDownloadAndShare()
-                                }
-                            )
-                            ArrowPreference(
                                 title = "下载封面图片",
                                 startAction = {
                                     Icon(
@@ -2257,117 +2232,18 @@ fun PlayerPage(
                                     onDownloadCover()
                                 }
                             )
-                            ArrowPreference(
-                                title = "下载封面图片并分享",
-                                startAction = {
-                                    Icon(
-                                        imageVector = MiuixIcons.Share,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                },
-                                onClick = {
-                                    showMoreSheet = false
-                                    onDownloadCoverAndShare()
-                                }
-                            )
                         }
                     }
                 }
             }
         }
 
-        // 歌词来源 / 自动升级歌词格式
-        val upgradeTrack = playerState.currentTrack
-        val upgraded = lyricState.upgraded
-        val neteaseHasWordLyrics = !upgraded &&
-            (lyricState.lyrics?.lines?.any { !it.words.isNullOrEmpty() } == true)
-        val upgradeSummary = when {
-            upgraded -> "此歌曲已为您替换为其他平台的逐字歌词，如果您不需要此功能，可以在设置中关闭“自动升级为逐字歌词”。"
-            neteaseHasWordLyrics -> "检测到此歌曲在网易云音乐平台已支持逐字歌词，我们已跳过升级为其他平台的逐字歌曲。"
-            else -> "检测到此歌曲在网易云音乐平台暂未提供逐字歌词，可尝试从其他平台获取逐字歌词。"
-        }
-        OverlayDialog(
-            show = showLyricUpgradeSheet,
-            title = "自动升级歌词格式",
-            summary = upgradeSummary,
-            onDismissRequest = { showLyricUpgradeSheet = false },
-            content = {
-                Column {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp)
-                    ) {
-                        if (upgraded) {
-                            CheckboxPreference(
-                                title = "此歌曲识别有误，恢复原歌词",
-                                checked = restoreOriginalLyrics,
-                                onCheckedChange = { restoreOriginalLyrics = it }
-                            )
-                        } else {
-                            CheckboxPreference(
-                                title = if (neteaseHasWordLyrics) {
-                                    "此歌曲实际没有逐字歌词，升级至其他平台逐字歌词"
-                                } else {
-                                    "升级至其他平台逐字歌词"
-                                },
-                                checked = forceUpgradeLyrics,
-                                onCheckedChange = { forceUpgradeLyrics = it }
-                            )
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                        TextButton(
-                            text = "取消",
-                            onClick = { showLyricUpgradeSheet = false },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(20.dp))
-                        TextButton(
-                            text = "保存",
-                            onClick = {
-                                if (upgradeTrack != null) {
-                                    if (upgraded) {
-                                        if (restoreOriginalLyrics) {
-                                            LyricUpgradeBlacklist.add(
-                                                LyricUpgradeBlacklist.Entry(
-                                                    id = upgradeTrack.id,
-                                                    title = upgradeTrack.title,
-                                                    artist = upgradeTrack.artist,
-                                                    album = upgradeTrack.album
-                                                )
-                                            )
-                                            LyricUpgradeRequiredList.remove(upgradeTrack.id)
-                                        } else {
-                                            LyricUpgradeBlacklist.remove(upgradeTrack.id)
-                                        }
-                                    } else {
-                                        if (forceUpgradeLyrics) {
-                                            LyricUpgradeRequiredList.add(
-                                                LyricUpgradeRequiredList.Entry(
-                                                    id = upgradeTrack.id,
-                                                    title = upgradeTrack.title,
-                                                    artist = upgradeTrack.artist,
-                                                    album = upgradeTrack.album
-                                                )
-                                            )
-                                            LyricUpgradeBlacklist.remove(upgradeTrack.id)
-                                        } else {
-                                            LyricUpgradeRequiredList.remove(upgradeTrack.id)
-                                        }
-                                    }
-                                    viewModel.loadLyrics()
-                                }
-                                showLyricUpgradeSheet = false
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.textButtonColorsPrimary()
-                        )
-                    }
-                }
-            }
-        )
+        AddTrackToPlaylistSheet(show = showAddTrackSheet, track = playerState.currentTrack, onDismiss = { showAddTrackSheet = false })
+        LyricMatchSheet(show = showLyricUpgradeSheet, original = playerState.currentTrack,
+            currentLyrics = lyricState.lyrics,
+            currentLyricSource = lyricState.source.takeIf { lyricState.lyrics?.lines?.isNotEmpty() == true && lyricState.error == null },
+            lyricsLoading = lyricState.isLoading,
+            onDismiss = { showLyricUpgradeSheet = false }, onChanged = { viewModel.loadLyrics() })
 
         // 取消收藏确认对话框
         OverlayDialog(
@@ -2511,15 +2387,10 @@ private fun PlayerProgressSlider(
     modifier: Modifier = Modifier
 ) {
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val playerDark = rememberPlayerDark()
-    val monetController = remember(playerDark) {
-        ThemeController(if (playerDark) ColorSchemeMode.MonetDark else ColorSchemeMode.MonetLight)
-    }
-    val thumbColor = monetController.currentColors().primary
     val progress = value.coerceIn(0f, 1f)
     var isDragging by remember { mutableStateOf(false) }
     val lineWidth by animateDpAsState(if (isDragging) 10.dp else 6.dp, label = "playerProgressWidth")
-    BoxWithConstraints(modifier = modifier.height(28.dp).pointerInput(enabled) {
+    BoxWithConstraints(modifier = modifier.height(24.dp).pointerInput(enabled) {
         if (!enabled) return@pointerInput
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -2553,7 +2424,7 @@ private fun PlayerProgressSlider(
             val y = size.height / 2f
             drawLine(color.copy(alpha = 0.3f), Offset(left, y), Offset(right, y), strokeWidth, StrokeCap.Round)
             drawLine(color, Offset(if (rtl) right else left, y), Offset(thumbX, y), strokeWidth, StrokeCap.Round)
-            drawCircle(thumbColor, radius = radius, center = Offset(thumbX, y))
+            drawCircle(color, radius = radius, center = Offset(thumbX, y))
         }
     }
 }
@@ -2566,18 +2437,19 @@ private fun formatDuration(durationMs: Long): String {
     return "%d:%02d".format(minutes, seconds)
 }
 
-private fun getQualityText(
+internal fun getQualityText(
     bitrate: Int,
     actualQuality: String,
     isFMMode: Boolean = false,
     isIntelligenceMode: Boolean = false,
-    showQuality: Boolean = true
+    showQuality: Boolean = true,
+    fmModeLabel: String = "私人FM"
 ): String {
     val quality = actualQuality.ifBlank {
         if (bitrate > 0) com.hypermusic.miuix.data.model.AudioQuality.neteaseActual(bitrate, "") else "未知音质"
     }
     val prefix = when {
-        isFMMode -> "私人FM"
+        isFMMode -> fmModeLabel
         isIntelligenceMode -> "心动模式"
         else -> ""
     }
@@ -2606,7 +2478,7 @@ private fun CoverImage(
         )
     } else {
         Image(
-            painter = painterResource(android.R.drawable.ic_menu_gallery),
+            painter = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter(),
             contentDescription = contentDescription,
             modifier = modifier,
             contentScale = contentScale

@@ -31,13 +31,15 @@ import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun ShareCredentialQrSheet(show: Boolean, platform: String, onDismiss: () -> Unit) {
-    val bitmapResult = remember(show, platform) {
+fun ShareCredentialQrSheet(show: Boolean, platform: String, accountId: String? = null, onDismiss: () -> Unit) {
+    val bitmapResult = remember(show, platform, accountId) {
         if (!show) null else runCatching {
-            val credential = if (platform == "qq") QqMusicApi.exportCredential() ?: error("账号已退出") else {
+            val credential = if (platform == "qq") QqMusicApi.exportCredential(accountId) ?: error("账号已退出") else {
+                val cookie = if (accountId == null) NeteaseApi.getCookie() else
+                    NeteaseApi.getAccountCookie(accountId) ?: error("账号已退出")
                 val allowed = setOf("MUSIC_A_T", "MUSIC_R_T", "MUSIC_SNS", "MUSIC_U", "NMTID", "__csrf")
                 com.google.gson.JsonObject().apply {
-                    NeteaseApi.getCookie().split(';').forEach { raw ->
+                    cookie.split(';').forEach { raw ->
                         val parts = raw.trim().split('=', limit = 2)
                         if (parts.size == 2 && parts[0] in allowed) addProperty(parts[0], parts[1])
                     }
@@ -66,7 +68,7 @@ fun ShareCredentialQrSheet(show: Boolean, platform: String, onDismiss: () -> Uni
                     .sizeIn(maxWidth = 256.dp, maxHeight = 256.dp).fillMaxWidth().aspectRatio(1f)
                     .clip(RoundedCornerShape(20.dp)).background(Color.White))
                 Spacer(Modifier.height(16.dp))
-                Text("请在另一设备上打开此APP，然后点击“登录新账号”，点击“扫码用户数据二维码”。支持使用相机等系统级应用扫描此二维码。",
+                Text("请在另一设备上打开此APP，然后点击“登录新账号”，点击“扫描用户数据二维码”。支持使用相机等系统级应用扫描此二维码。",
                     style = MiuixTheme.textStyles.footnote1,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.7f), textAlign = TextAlign.Center)
             } else Text("无法生成二维码，请检查账号凭证是否有效。", color = MiuixTheme.colorScheme.error)

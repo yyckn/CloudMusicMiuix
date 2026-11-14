@@ -1,0 +1,129 @@
+{
+  "feed_mode_block": [
+    {
+      "feed_mode": [
+        {
+          "card_context": {},
+          "entity": {
+            "feed_mode": {
+              "cutover_toast": "已为你开启专注模式",
+              "scene_mode": {
+                "scene_mode_id": 6,
+                "sub_queue_type": "scene_mode_focus"
+              },
+              "text": "专注模式",
+              "type": "feed_scene_mode",
+              "url_info": {
+                "expire_time": 0,
+                "height": 0,
+                "need_complete_url": false,
+                "template": "",
+                "template_prefix": "tplv-b829550vbb",
+                "uri": "tos-cn-i-b829550vbb/0bf2894e254b15a7398d410e3f4196ba.png",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "width": 0
+              }
+            }
+          },
+          "fallback_type": "",
+          "id": "6",
+          "type": "feed_scene_mode"
+        },
+        {
+          "card_context": {},
+          "entity": {
+            "feed_mode": {
+              "cutover_toast": "已为你开启摸鱼",
+              "scene_mode": {
+                "scene_mode_id": 34,
+                "sub_queue_type": "scene_mode_fish"
+              },
+              "text": "摸鱼",
+              "type": "feed_scene_mode",
+              "url_info": {
+                "expire_time": 0,
+                "height": 0,
+                "need_complete_url": false,
+                "template": "",
+                "template_prefix": "tplv-b829550vbb",
+                "uri": "tos-cn-i-b829550vbb/5763eb13d180ab85ed7b8b4546c72829.png",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "width": 0
+              }
+            }
+          },
+          "fallback_type": "",
+          "id": "34",
+          "type": "feed_scene_mode"
+        },
+        {
+          "card_context": {},
+          "entity": {
+            "feed_mode": {
+              "cutover_toast": "已为你开启驾车",
+              "scene_mode": {
+                "scene_mode_id": 33,
+                "sub_queue_type": "scene_mode_car_mode"
+              },
+              "text": "驾车",
+              "type": "feed_scene_mode",
+              "url_info": {
+                "expire_time": 0,
+                "height": 0,
+                "need_complete_url": false,
+                "template": "",
+                "template_prefix": "tplv-b829550vbb",
+                "uri": "tos-cn-i-b829550vbb/7e929cecff72d75477711a0f74181b03.png",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "width": 0
+              }
+            }
+          },
+          "fallback_type": "",
+          "id": "33",
+          "type": "feed_scene_mode"
+        },
+        {
+          "card_context": {},
+          "entity": {
+            "feed_mode": {
+              "cutover_toast": "已为你开启通勤必听",
+              "scene_mode": {
+                "scene_mode_id": 1,
+                "sub_queue_type": "scene_mode_commute"
+              },
+              "text": "通勤必听",
+              "type": "feed_scene_mode",
+              "url_info": {
+                "expire_time": 0,
+                "height": 0,
+                "need_complete_url": false,
+                "template": "",
+                "template_prefix": "tplv-b829550vbb",
+                "uri": "tos-cn-i-b829550vbb/d334ce9b776fc9409222998ea2f9d2b2.png",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "width": 0
+              }
+            }
+          },
+          "fallback_type": "",
+          "id": "1",
+          "type": "feed_scene_mode"
+        }
+      ],
+      "title": "场景电台"
+    }
+  ]
+}

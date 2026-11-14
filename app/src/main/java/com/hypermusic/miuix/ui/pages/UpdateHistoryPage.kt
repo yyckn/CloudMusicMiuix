@@ -1,6 +1,6 @@
 package com.hypermusic.miuix.ui.pages
 
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -73,7 +73,7 @@ fun UpdateHistoryPage(
                 Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)) {
                     ArrowPreference(
                         title = "v${info.version}",
-                        summary = "发布于${info.date}",
+                        summary = info.date.takeIf { it.isNotBlank() }?.let { "发布于$it" },
                         onClick = { viewModel.openUpdateLog(info) }
                     )
                 }

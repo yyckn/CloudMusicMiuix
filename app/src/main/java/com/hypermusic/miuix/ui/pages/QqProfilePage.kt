@@ -4,7 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
+import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import coil.compose.AsyncImage
+import com.hypermusic.miuix.ui.components.AsyncImage
 import com.hypermusic.miuix.data.api.QqMusicApi
 import com.hypermusic.miuix.ui.FeedBottomPads
 import com.hypermusic.miuix.ui.components.BlurredBar
@@ -42,10 +42,10 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 @Composable
-fun QqProfilePage(onBackClick: () -> Unit, onLogout: () -> Unit) {
+fun QqProfilePage(onBackClick: () -> Unit, onLogout: () -> Unit, selectedAccountId: String? = null) {
     val context = LocalContext.current
-    val accountId = QqMusicApi.dataAccountId
-    val account = QqMusicApi.currentAccount()
+    val accountId = selectedAccountId ?: QqMusicApi.dataAccountId
+    val account = QqMusicApi.accounts.find { it.credential.musicId == accountId }
     var profile by remember(accountId) { mutableStateOf<QqMusicApi.UserProfile?>(null) }
     var loading by remember(accountId) { mutableStateOf(true) }
     var refreshing by remember { mutableStateOf(false) }
@@ -60,7 +60,7 @@ fun QqProfilePage(onBackClick: () -> Unit, onLogout: () -> Unit) {
     val fileSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) {
             val result = runCatching {
-                val credential = QqMusicApi.exportCredential() ?: error("账号已退出")
+                val credential = QqMusicApi.exportCredential(accountId) ?: error("账号已退出")
                 val output = context.contentResolver.openOutputStream(uri) ?: error("无法打开文件")
                 output.use { it.write(credential.toByteArray(Charsets.UTF_8)) }
             }
@@ -70,13 +70,13 @@ fun QqProfilePage(onBackClick: () -> Unit, onLogout: () -> Unit) {
     BackHandler { onBackClick() }
     LaunchedEffect(accountId) {
         if (accountId != null) {
-            QqMusicApi.getProfile().fold({ profile = it; error = null }, { error = it.message ?: "获取资料失败" })
+            QqMusicApi.getProfile(accountId).fold({ profile = it; error = null }, { error = it.message ?: "获取资料失败" })
         }
         loading = false
     }
     LaunchedEffect(refreshing) {
         if (refreshing) {
-            QqMusicApi.getProfile().fold({ profile = it; error = null }, { error = it.message ?: "刷新失败" })
+            QqMusicApi.getProfile(accountId).fold({ profile = it; error = null }, { error = it.message ?: "刷新失败" })
             refreshing = false
         }
     }
@@ -114,16 +114,14 @@ fun QqProfilePage(onBackClick: () -> Unit, onLogout: () -> Unit) {
                     Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         AsyncImage(model = profile?.avatarUrl ?: account?.avatarUrl, contentDescription = "头像",
                             modifier = Modifier.size(80.dp).clip(RoundedCornerShape(40.dp)), contentScale = ContentScale.Crop,
-                            error = painterResource(android.R.drawable.ic_menu_gallery))
+                            error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter())
                         Spacer(Modifier.height(12.dp))
-                        Text(androidx.compose.ui.text.buildAnnotatedString {
-                            append(profile?.name ?: account?.name.orEmpty())
-                            account?.let {
-                                pushStyle(androidx.compose.ui.text.SpanStyle(color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f), fontSize = 14.sp, fontWeight = FontWeight.Normal))
-                                append(if (it.credential.loginType == 1) "（微信登录）" else "（QQ登录）")
-                                pop()
-                            }
-                        }, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
+                        Text(profile?.name ?: account?.name.orEmpty(), fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
+                        account?.let {
+                            Spacer(Modifier.height(6.dp))
+                            com.hypermusic.miuix.ui.components.AccountLoginTag(if (it.credential.loginType == 1) "微信登录" else "QQ登录")
+                        }
                         if (profile?.isVip == true) {
                             Spacer(Modifier.height(6.dp))
                             Box(Modifier.clip(RoundedCornerShape(4.dp)).background(MiuixTheme.colorScheme.primary.copy(alpha = 0.15f))
@@ -169,7 +167,8 @@ fun QqProfilePage(onBackClick: () -> Unit, onLogout: () -> Unit) {
                 }
             }
         }
-        com.hypermusic.miuix.ui.scan.ShareCredentialQrSheet(showCredentialQr, "qq") { showCredentialQr = false }
+        com.hypermusic.miuix.ui.scan.ShareCredentialQrSheet(showCredentialQr, "qq",
+            accountId = accountId) { showCredentialQr = false }
         OverlayDialog(show = showLogout, title = "退出登录", summary = "确定要退出当前QQ音乐账号吗？",
             onDismissRequest = { showLogout = false }, content = {
                 Row(horizontalArrangement = Arrangement.SpaceBetween) {
@@ -188,7 +187,7 @@ fun QqProfilePage(onBackClick: () -> Unit, onLogout: () -> Unit) {
                             val type = exportType
                             exportType = null
                             if (type == "file") fileSaver.launch("qqmusic-loginkey.json") else {
-                                val credential = QqMusicApi.exportCredential()
+                                val credential = QqMusicApi.exportCredential(accountId)
                                 if (credential != null) {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     clipboard.setPrimaryClip(ClipData.newPlainText("login_credentials", credential))

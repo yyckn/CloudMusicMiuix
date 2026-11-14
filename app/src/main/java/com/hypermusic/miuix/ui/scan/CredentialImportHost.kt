@@ -62,8 +62,11 @@ fun CredentialImportHost() {
                 Toast.makeText(context, "账号导入成功", Toast.LENGTH_SHORT).show()
             }, onFailure = {
                 confirmingReplace = false
-                if (conflict) error = "导入失败，请检查凭证或网络连接后重试"
-                else { pending = null; Toast.makeText(context, "导入失败，请检查凭证或网络连接", Toast.LENGTH_LONG).show() }
+                val message = it.message ?: "导入失败，请检查凭证或网络连接后重试"
+                if (conflict) {
+                    error = message
+                    if (it is NeteaseApi.CredentialExpiredException) Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                } else { pending = null; Toast.makeText(context, message, Toast.LENGTH_LONG).show() }
             })
         }
     }
