@@ -7,6 +7,44 @@ import org.junit.Test
 class LyricExclusionMatchingTest {
     private fun excluded(text: String) = LyricExclusionRules.shouldExclude(text, 3000, "", emptyList(), "")
 
+    @Test fun historicalDefaultIdStillControlsTheSameRule() {
+        val enabled = LyricExclusionRules.enabled
+        val ruleEnabled = LyricExclusionRules.isDefaultRuleEnabled("default-colon-1")
+        LyricExclusionRules.updateEnabled(true)
+        try {
+            LyricExclusionRules.updateDefaultRuleEnabled("default-colon-1", true)
+            assertTrue(excluded("母带：某人"))
+            LyricExclusionRules.updateDefaultRuleEnabled("default-colon-1", false)
+            assertFalse(excluded("母带：某人"))
+            assertTrue(excluded("音乐制作发行某工作室"))
+        } finally {
+            LyricExclusionRules.updateDefaultRuleEnabled("default-colon-1", ruleEnabled)
+            LyricExclusionRules.updateEnabled(enabled)
+        }
+    }
+
+    @Test fun presetDurationLimitIncludesUpperBound() {
+        val enabled = LyricExclusionRules.enabled
+        LyricExclusionRules.updateEnabled(true)
+        try {
+            assertTrue(LyricExclusionRules.shouldExclude("工作团队", 1999, "", emptyList(), ""))
+            assertFalse(LyricExclusionRules.shouldExclude("工作团队", 2000, "", emptyList(), ""))
+        } finally { LyricExclusionRules.updateEnabled(enabled) }
+    }
+
+    @Test fun plainCopyrightAndPrefixCreditsDoNotRequireColon() {
+        val enabled = LyricExclusionRules.enabled
+        LyricExclusionRules.updateEnabled(true)
+        try {
+            assertTrue(excluded("本作品版权所有，保留一切权利"))
+            assertTrue(excluded("音乐制作发行某工作室"))
+            assertTrue(excluded("作詞 某人"))
+            assertFalse(excluded("我们一起音乐制作发行"))
+            assertFalse(excluded("这一句作詞 某人"))
+            assertFalse(excluded("作詞某人"))
+        } finally { LyricExclusionRules.updateEnabled(enabled) }
+    }
+
     @Test fun sixMetadataSeparatorRulesAcceptUnknownTextOnEitherSide() {
         assertEquals(listOf("{title} - ", " - {title}", "{auther} - ", " - {auther}", "{album} - ", " - {album}"),
             LyricExclusionRules.defaultTitleRules.map { it.pattern })

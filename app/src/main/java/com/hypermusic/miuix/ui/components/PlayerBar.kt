@@ -118,6 +118,7 @@ fun PlayerBar(
             alpha = if (LocalEnableBlur.current) 0.72f else 1f
         )
         val liquidModifier = if (liquidBackdrop != null) {
+            val liquidHighlight = rememberFloatingGlassHighlight()
             Modifier.drawBackdrop(
                 backdrop = liquidBackdrop,
                 shape = { surfaceShape },
@@ -130,6 +131,7 @@ fun PlayerBar(
                         refractionAmount = 24.dp.toPx(),
                     )
                 },
+                highlight = { liquidHighlight.value.copy(alpha = 0.75f) },
                 onDrawSurface = { drawRect(liquidContainerColor) },
             )
         } else {

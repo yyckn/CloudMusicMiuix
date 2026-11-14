@@ -388,100 +388,23 @@ object LyricExclusionRules {
     }
 
     // ------------------------------------------------------------------
-    // 默认规则（内置，不可单独编辑，只能整体开关）
+    // 默认规则（按固定 ID 保存单条开关状态）
     // ------------------------------------------------------------------
 
-    private fun regexLiteral(keyword: String): String {
-        val meta = "\\^$.|?*+()[]{}"
-        return buildString {
-            for (ch in keyword) {
-                if (ch in meta) append('\\')
-                append(ch)
-            }
-        }
-    }
+    private val compiledPresets: List<Rule> by lazy { PresetLyricRuleCompiler.compile() }
 
-    private const val COLON_PATTERN = "[:：﹕]"
-    private val flexibleCreditKeywords = setOf(
-        "作词", "作曲", "编曲", "改编", "混音", "手风琴", "巴拉莱卡", "弦乐", "小提琴", "器乐监制",
-        "总监", "顾问", "设计", "策划", "词", "曲", "吉他", "统筹", "公司", "鸣谢", "发行", "师", "录音", "编辑"
-    )
-    private val mergedCreditKeywords = setOf("Engineer", "Studio", "by", "念白")
-    private val anywhereCreditKeywords = flexibleCreditKeywords + mergedCreditKeywords
-    private val flexibleStartCreditKeywords = setOf("录音棚", "键盘", "监制", "合唱", "和声编写", "文案", "贝斯", "鼓")
+    // 保留这些分组访问器，兼容现有测试与调用；规则定义统一见 PresetLyricRules。
+    val defaultColonRules: List<Rule> by lazy { compiledPresets.filter { it.id.startsWith("default-colon-") } }
+    val defaultExtraRules: List<Rule> by lazy { compiledPresets.filter { it.id.startsWith("default-extra-") } }
+    val defaultPlainRules: List<Rule> by lazy { compiledPresets.filter { it.id.startsWith("default-plain-") } }
+    val defaultTitleRules: List<Rule> by lazy { compiledPresets.filter { it.id.startsWith("default-title-") || it.id.startsWith("default-info-") } }
+    val defaultShortDurationRules: List<Rule> by lazy { compiledPresets.filter { it.id.startsWith("default-short-") } }
 
-    private fun coveredByFlexibleCredit(keyword: String): Boolean =
-        flexibleCreditKeywords.any { it != keyword && keyword.contains(it) } ||
-            mergedCreditKeywords.any { it != keyword && keyword.trimEnd().endsWith(it) }
-
-    /** 保留原有规则 ID，合并并扩展制作信息的匹配范围。 */
-    val defaultColonRules: List<Rule> by lazy {
-        colonKeywords.mapIndexedNotNull { index, keyword ->
-            // Keep explicitly requested start rules; merge other covered credits into the broader rule.
-            if (keyword != "音乐设计" && coveredByFlexibleCredit(keyword)) return@mapIndexedNotNull null
-            Rule(
-                id = "default-colon-$index",
-                pattern = regexLiteral(keyword) + (if (keyword in flexibleCreditKeywords || keyword in flexibleStartCreditKeywords) ".*" else "") + "\\s*" + COLON_PATTERN,
-                matchType = if (keyword in anywhereCreditKeywords) MatchType.ANYWHERE else MatchType.START
-            )
-        }
-    }
-
-    /** 纯文本关键词（含版权声明类）。 */
-    val defaultPlainRules: List<Rule> by lazy {
-        plainKeywords.mapIndexed { index, keyword ->
-            Rule(id = "default-plain-$index", pattern = keyword)
-        }
-    }
-
-    /** 额外冒号规则（中文/英文混排的制作信息）。 */
-    val defaultExtraRules: List<Rule> by lazy {
-        val fromKeywords = extraColonKeywords.mapIndexedNotNull { index, keyword ->
-            if (coveredByFlexibleCredit(keyword) ||
-                flexibleStartCreditKeywords.any { keyword.startsWith(it) }) return@mapIndexedNotNull null
-            Rule(
-                id = "default-extra-$index",
-                pattern = regexLiteral(keyword) + "\\s*" + COLON_PATTERN,
-                matchType = MatchType.START
-            )
-        }
-        fromKeywords
-    }
-
-    /** 歌名、歌手、专辑任一项与分隔符相邻；另一侧不要求匹配已知歌曲信息。 */
-    val defaultTitleRules: List<Rule> = listOf(
-        "default-title-6" to "{title} - ",
-        "default-info-title-suffix" to " - {title}",
-        "default-info-artist-prefix" to "{auther} - ",
-        "default-info-artist-suffix" to " - {auther}",
-        "default-info-album-prefix" to "{album} - ",
-        "default-info-album-suffix" to " - {album}"
-    ).map { (id, template) ->
-        Rule(id = id, pattern = template)
-    }
-
-    /** 短时关键词：仅当行时长不超过 1999ms 时排除。 */
-    val defaultShortDurationRules: List<Rule> by lazy {
-        shortDurationKeywords.mapIndexed { index, keyword ->
-            Rule(
-                id = "default-short-$index",
-                pattern = keyword,
-                durationMs = 1999L
-            )
-        }
-    }
-
-    /** 全部默认规则。 */
+    /** 特殊规则沿用原有 ID 和实现，其余规则由分类清单编译。 */
     val defaultRules: List<Rule> by lazy {
         listOf(Rule(id = SLASH_RULE_ID, pattern = "包含超过4个斜杠或反斜杠")) +
-            defaultColonRules + defaultExtraRules + defaultPlainRules + defaultTitleRules + defaultShortDurationRules +
-            listOf(
-                Rule(id = "default-prohibit-adaptation", pattern = "禁止.*二创改编"),
-                Rule(id = "default-studio-suffix", pattern = "录音棚", matchType = MatchType.ANYWHERE),
-                Rule(id = NEIGHBOR_RULE_ID, pattern = "前后均为被排除的歌词"),
-                Rule(id = "default-prefix-mix-by", pattern = "mix by", matchType = MatchType.START),
-                Rule(id = "default-prefix-prod-by", pattern = "prod by", matchType = MatchType.START)
-            )
+            compiledPresets +
+            listOf(Rule(id = NEIGHBOR_RULE_ID, pattern = "前后均为被排除的歌词"))
     }
 
     /** A single pass over the original exclusions: never use newly excluded lines as seeds. */
@@ -496,90 +419,4 @@ object LyricExclusionRules {
     val enabledDefaultRuleCount: Int
         get() = defaultRules.count { isDefaultRuleEnabled(it.id) }
 
-    // ------------------------------------------------------------------
-    // 内置关键词表
-    // ------------------------------------------------------------------
-
-    private val colonKeywords = listOf(
-        "编曲", "母带", "OP", "SP", "出品", "贡献者", "调教", "编写", "改编", "和声", "吉他", "鼓", "混音",
-        "剪辑", "MV", "曲绘", "后期", "推广", "出品人", "制作人", "监制", "统筹", "平面视觉", "感谢",
-        "录音棚", "录音", "设计", "手风琴", "巴拉莱卡", "弦乐", "小提琴", "编辑", "录音室", "工程师",
-        "导演", "造型师", "妆发", "文案", "企划", "宣传", "艺人经纪", "经纪人", "营销", "总监", "op", "sp",
-        "pv", "PV", "OA", "OC", "oa", "oc", "制作", "署名", "策划", "表演", "词", "曲", "发行", "原唱",
-        "打击乐", "贝斯", "钢琴", "键盘", "Program", "合音", "合唱", "演唱", "乐谱", "提琴", "和音",
-        "鸣谢", "运营", "执行", "拍摄", "摄影", "花絮", "助理", "服装", "顾问", "版权", "翻译", "制片",
-        "道具师", "灯光师", "调色", "合成", "承制", "艺人", "行销", "媒介", "有限公司", "资产",
-        "技术支持", "合作伙伴", "视频平台", "口哨", "三弦", "长笛", "黑管", "童声", "缩混", "合作",
-        "指导", "PGM", "编舞", "舞团", "宣发", "录混", "唢呐", "萨克斯", "笛子", "声明", "古筝", "箫",
-        "人声", "配唱", "主唱", "封面", "A&R", "乐队", "队长", "女生", "项目支持", "曼陀林", "指挥",
-        "簧管", "独奏", "乐团", "协力", "项目", "rap", "友情客串", "二胡", "帮帮团", "Guitar",
-        "旋律创作", "陶笛", "冬不拉", "扬琴", "卡龙", "小号", "中号", "大号", "竹笛", "音乐技术",
-        "Producers", "采样", "Drum", "Recording Engineers", "Mixing Engineer", "Recording Studio",
-        "Mixing Studio", "Musicians", "乐器演奏", "厂牌", "伴唱", "商务", "Arranged by", "Produced by",
-        "mastering",
-        "果沃琴演奏Guowoqin performer", "快递员 Performer", "音乐", "彝语念白", "吴语念白", "箱琴",
-        "收件人", "特别派送", "作词", "作曲", "和声编写",
-        "人声配唱", "录音师", "音频编辑", "封面设计", "OP/SP", "混音师", "母带工程师", "项目统筹", "营销推广", "Bass",
-        "by", "器乐监制", "音乐设计", "公司", "人声录音师",
-        "Engineer", "Studio", "念白", "师", "Lyricist", "Composer", "音乐营销机构", "声乐编辑", "配唱制作", "版权方"
-    )
-
-    /** 额外冒号规则：中英混排的制作信息（用正则表示冒号）。 */
-    private val extraColonKeywords = listOf(
-        "歌词版权管理",
-        "作词（寄件人）",
-        "作曲（寄件人）",
-        "监制Executive producer",
-        "制作公司Manufacturing Company",
-        "词 Lyricist",
-        "曲 Composer",
-        "编曲 Arrangement",
-        "制作人 Producer",
-        "贝斯 Bass",
-        "和声编写 Backing Vocal Editor",
-        "和声 Backing Vocal",
-        "录音工程师 Recording Engineer",
-        "人声编辑 Vocal Editor",
-        "母带处理工程师 Mastering Engineer",
-        "混音 & 母带处理工作室 Mixing & Mastering Studio"
-    )
-
-    private val plainKeywords = listOf(
-        "支持好歌曲，为歌曲留名",
-        "支持好音乐，为歌曲留名",
-        "网易云音乐ACG企划",
-        "纯音乐，请欣赏",
-        "未经著作权人许可",
-        "未经著作权人书面许可",
-        "版权公司授权",
-        "保留著作权",
-        "著作权保留",
-        "未经书面授权",
-        "不得翻唱",
-        "本作品经过词曲著作权利方授权",
-        "ISRC ",
-        "Co.",
-        "Ltd.",
-        "发布会现场",
-        "萨克斯管/",
-        "小号/",
-        "长号",
-        "@牛班NEWBAND",
-        "御坂的蓝白",
-        "长笛 ",
-        "钟琴 ",
-        "竖琴 ",
-        "YCE ",
-        "乐器配置 ",
-        "录制 ",
-        "音序工坊",
-        "⌈π⌋ 计划",
-        "酷狗音乐人·星曜计划",
-        "著作.*权利保留", "网易音乐人", "流量扶持"
-    )
-
-    private val shortDurationKeywords = listOf(
-        "工作团队", "出品", "广播电视台", "故宫博物院", "音乐集团",
-        "联合出品", "文化传媒", "微博", "协办单位", "产业大会", "汪斯遥", "Zhang"
-    )
 }

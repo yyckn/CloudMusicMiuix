@@ -162,6 +162,11 @@ private fun rememberGravityRotatedHighlight(
     }
 }
 
+/** 悬浮导航栏与迷你播放条共用的液态玻璃边缘高光。 */
+@Composable
+internal fun rememberFloatingGlassHighlight(): State<Highlight> =
+    rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = -45f)
+
 @Composable
 fun RowScope.FloatingBottomBarItem(
     selected: Boolean,
@@ -327,7 +332,7 @@ fun FloatingBottomBar(
         )
     }
 
-    val baseHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = -45f)
+    val baseHighlight = rememberFloatingGlassHighlight()
     val pillHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = 90f)
 
     val combinedBackdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop)
