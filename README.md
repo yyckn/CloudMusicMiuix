@@ -8,7 +8,6 @@
 <p align="center">网易云音乐 · QQ 音乐 · 波点音乐 · 酷狗音乐 · 汽水音乐</p>
 <p align="center">
   <a href="https://github.com/yyckn/CloudMusicMiuix/releases">下载版本</a> ·
-  <a href="app/src/main/java/com/hypermusic/miuix/data/model/VersionHistory.kt">历史更新日志</a> ·
   <a href="LICENSE">AGPL-3.0</a>
 </p>
 
@@ -18,9 +17,8 @@
 
 各平台的账号、收藏、播放队列与音质设置独立管理，主题、歌词渲染和通用界面组件共用。切换平台时保留各自的歌曲与队列，恢复后默认暂停。
 
-- 当前开发版本：`2.1.0-dev2`，以 [构建配置](app/build.gradle.kts) 为准。
 - 应用包名：`com.hypermusic.miuix`。
-- 运行要求：Android 13（API 33）及以上；当前 APK 仅包含 `arm64-v8a` 架构。
+- 运行要求：Android 13（API 33）及以上；Release仅打包适用于 arm64-v8a 设备的安装包，如果其他架构请自行参考下方构建教程进行构建。
 
 ## 功能
 
