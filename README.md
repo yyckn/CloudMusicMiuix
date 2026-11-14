@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/hypermusic-monet.jpg" width="112" alt="HyperMusic 莫奈音符 LOGO" />
+  <img src="docs/images/hypermusic-monet.png" width="112" alt="HyperMusic 莫奈音符 LOGO" />
 </p>
 
 <h1 align="center">HyperMusic</h1>
