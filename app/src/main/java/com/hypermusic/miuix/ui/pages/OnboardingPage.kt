@@ -213,7 +213,7 @@ fun OnboardingPage() {
                         RadioButtonPreference(title = "汽水音乐", selected = PlatformManager.current == MusicPlatform.QISHUI,
                             onClick = { PlatformManager.select(MusicPlatform.QISHUI) })
                     }
-                    Text("*稍后也可在APP内切换平台。", modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    Text("*稍后也可在APP右上角随时切换平台", modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                         style = MiuixTheme.textStyles.footnote1,
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 }
