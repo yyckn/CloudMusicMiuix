@@ -23,6 +23,7 @@ object ThemeSettings {
     private const val KEY_FLOATING_BAR_ALIGNMENT = "floating_bar_alignment"
     private const val KEY_AUTO_COLLAPSE_FLOATING_PLAYER = "auto_collapse_floating_player"
     private const val KEY_LIQUID_GLASS_EFFECT = "liquid_glass_effect"
+    private const val KEY_DEFAULT_HOME_PAGE = "default_home_page"
     private const val KEY_FOLLOW_MONET = "follow_monet"
     private const val KEY_LYRIC_FONT_SIZE = "lyric_font_size"
     private const val KEY_LYRIC_TRANSLATION_RATIO = "lyric_translation_ratio"
@@ -76,6 +77,10 @@ object ThemeSettings {
         private set
     var colorSpecIndex by mutableIntStateOf(1)
         private set
+    // 0=推荐，1=收藏；只在启动时选择默认页面。
+    var defaultHomePageIndex by mutableIntStateOf(0)
+        private set
+
     var predictiveBackEnabled by mutableStateOf(true)
         private set
     var pageScale by mutableStateOf(1f)
@@ -163,6 +168,7 @@ object ThemeSettings {
         accentIndex = (prefs?.getInt("accent_index", 0) ?: 0).coerceIn(0, SOURCE_ACCENT_INDEX)
         paletteStyleIndex = (prefs?.getInt("palette_style_index", 4) ?: 4).coerceIn(0, 8)
         colorSpecIndex = (prefs?.getInt("color_spec_index", 1) ?: 1).coerceIn(0, 1)
+        defaultHomePageIndex = (prefs?.getInt(KEY_DEFAULT_HOME_PAGE, 0) ?: 0).coerceIn(0, 1)
         predictiveBackEnabled = prefs?.getBoolean("predictive_back", true) ?: true
         pageScale = (prefs?.getFloat("page_scale", 1f) ?: 1f).coerceIn(0.8f, 1.1f)
         lyricFontSize = prefs?.getInt(KEY_LYRIC_FONT_SIZE, 32) ?: 32
@@ -186,6 +192,10 @@ object ThemeSettings {
     fun updateAccentIndex(value: Int) { accentIndex = value.coerceIn(0, SOURCE_ACCENT_INDEX); prefs?.edit()?.putInt("accent_index", accentIndex)?.apply() }
     fun updatePaletteStyleIndex(value: Int) { paletteStyleIndex = value.coerceIn(0, 8); prefs?.edit()?.putInt("palette_style_index", paletteStyleIndex)?.apply() }
     fun updateColorSpecIndex(value: Int) { colorSpecIndex = value.coerceIn(0, 1); prefs?.edit()?.putInt("color_spec_index", colorSpecIndex)?.apply() }
+    fun updateDefaultHomePage(index: Int) {
+        defaultHomePageIndex = index.coerceIn(0, 1)
+        prefs?.edit()?.putInt(KEY_DEFAULT_HOME_PAGE, defaultHomePageIndex)?.apply()
+    }
     fun updatePredictiveBack(value: Boolean) { predictiveBackEnabled = value; prefs?.edit()?.putBoolean("predictive_back", value)?.apply() }
     fun updatePageScale(value: Float) { pageScale = value.coerceIn(0.8f, 1.1f); prefs?.edit()?.putFloat("page_scale", pageScale)?.apply() }
 

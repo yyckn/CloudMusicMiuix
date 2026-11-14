@@ -329,6 +329,14 @@ fun ThemeSettingsPage(
             item { SmallTitle("其他") }
             item {
                 Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    WindowDropdownPreference(
+                        title = "默认首页",
+                        summary = "启动时默认显示的页面",
+                        startAction = { ThemeSettingIcon(MiuixIcons.Home) },
+                        items = listOf("推荐页", "收藏页"),
+                        selectedIndex = ThemeSettings.defaultHomePageIndex,
+                        onSelectedIndexChange = { ThemeSettings.updateDefaultHomePage(it) }
+                    )
                     BasicComponent(title = "预测性返回手势", summary = "返回时预览页面过渡动画",
                         startAction = { ThemeSettingIcon(Icons.AutoMirrored.Rounded.MenuOpen) },
                         endActions = { Switch(checked = ThemeSettings.predictiveBackEnabled, onCheckedChange = { ThemeSettings.updatePredictiveBack(it) }) },

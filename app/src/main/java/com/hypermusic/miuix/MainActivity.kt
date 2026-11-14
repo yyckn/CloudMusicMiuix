@@ -315,7 +315,7 @@ fun MainScreen(
     val additionalLibraryCaches = remember { mutableMapOf<com.hypermusic.miuix.data.api.MusicPlatform, com.hypermusic.miuix.ui.pages.AdditionalLibraryCache>() }
     var searchSession by remember { mutableStateOf(com.hypermusic.miuix.ui.pages.SearchSession()) }
     val searchListState = remember(searchSession) { androidx.compose.foundation.lazy.LazyListState() }
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(ThemeSettings.defaultHomePageIndex) }
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Main) }
     var screenStack by remember { mutableStateOf<List<Screen>>(emptyList()) }
     var isLoggedIn by remember { mutableStateOf(NeteaseApi.isLoggedIn()) }
