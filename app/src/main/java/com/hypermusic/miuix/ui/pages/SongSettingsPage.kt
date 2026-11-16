@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.clickable
@@ -67,6 +70,7 @@ fun SongSettingsPage(
     val blurBackdrop = rememberPageBlurBackdrop()
     var showSpeedDialog by remember { mutableStateOf(false) }
     var speedInput by remember { mutableStateOf("") }
+    var speedDraft by remember(viewModel.playbackSpeed) { mutableStateOf(viewModel.playbackSpeed) }
 
     BackHandler {
         onBackClick()
@@ -85,7 +89,7 @@ fun SongSettingsPage(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
                             modifier = Modifier
-                                .padding(start = 8.dp)
+                                .padding(start = pageNavigationIconInset())
                                 .clickable { onBackClick() }
                         )
                     }
@@ -96,11 +100,11 @@ fun SongSettingsPage(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = paddingValues.calculateTopPadding())
+                .padding(top = pageViewportTopInset(paddingValues.calculateTopPadding()))
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .pageLayerBackdrop(blurBackdrop),
-            contentPadding = PaddingValues(bottom = FeedBottomPads.None),
+            contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding()), bottom = FeedBottomPads.None),
             overscrollEffect = null
         ) {
             item { Spacer(modifier = Modifier.height(12.dp)) }
@@ -142,19 +146,20 @@ fun SongSettingsPage(
                         startAction = { SettingsItemIcon(R.drawable.ic_md3_speed) },
                         endActions = {
                             Text(
-                                text = "${formatSongSpeedValue(viewModel.playbackSpeed)}x",
+                                text = "${formatSongSpeedValue(speedDraft)}x",
                                 style = MiuixTheme.textStyles.body2,
                                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         },
                         bottomAction = {
                             Slider(
-                                value = viewModel.playbackSpeed,
+                                value = speedDraft,
                                 onValueChange = { newValue ->
-                                    viewModel.updatePlaybackSpeed(newValue)
+                                    speedDraft = newValue
                                 },
-                                valueRange = 0.1f..5f,
-                                steps = 48,
+                                onValueChangeFinished = { viewModel.updatePlaybackSpeed(speedDraft) },
+                                valueRange = 0.5f..3f,
+                                steps = 24,
                                 showKeyPoints = true,
                                 keyPoints = listOf(1f),
                                 magnetThreshold = 0.005f,
@@ -182,7 +187,7 @@ fun SongSettingsPage(
         OverlayDialog(
             show = showSpeedDialog,
             title = "调节播放速度",
-            summary = "输入0.1-5之间的数字",
+            summary = "输入0.5-3之间的数字，精度为0.1",
             onDismissRequest = { showSpeedDialog = false },
             content = {
                 Column {
@@ -193,7 +198,7 @@ fun SongSettingsPage(
                                 speedInput = newValue
                             }
                         },
-                        label = "0.1 - 5",
+                        label = "0.5 - 3",
                         useLabelAsPlaceholder = true,
                         modifier = Modifier.fillMaxWidth()
                     )

@@ -1,4 +1,5 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
 
 import android.content.Intent
 import android.content.Context
@@ -57,9 +58,9 @@ fun DownloadSettingsPage(onBack: () -> Unit) {
     var parallel by remember { mutableIntStateOf(prefs.getInt("parallel", 2).coerceIn(1, 5)) }
     com.hypermusic.miuix.ui.navigation.BackHandler(onBack = onBack)
     Scaffold(topBar = { SmallTopAppBar(title = "下载设置", navigationIcon = {
-        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", modifier = Modifier.padding(start = 8.dp).clickable(onClick = onBack))
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", modifier = Modifier.padding(start = pageNavigationIconInset()).clickable(onClick = onBack))
     }) }) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding)) {
             SmallTitle("下载")
             Card(Modifier.padding(horizontal = 12.dp)) {
                 ArrowPreference(title = "查看下载任务", onClick = { Downloads.showSheet = true })
@@ -86,26 +87,7 @@ fun DownloadSheet() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     BackHandler(enabled = Downloads.networkConfirmation != null) { }
-    var exporting by remember { mutableStateOf<String?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        val entry = Downloads.entries.find { it.id == exporting }
-        if (uri != null && entry != null) {
-            scope.launch {
-                val result = withContext(Dispatchers.IO) {
-                    runCatching {
-                        val tree = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, uri) ?: error("无法打开目录")
-                        val file = File(entry.path)
-                        val name = "${entry.track.title} - ${entry.track.artist}.${file.extension}".replace(Regex("[\\\\/:*?\"<>|]"), "_")
-                        val target = tree.createFile("audio/*", name) ?: error("无法创建文件")
-                        context.contentResolver.openOutputStream(target.uri)?.use { output -> file.inputStream().use { it.copyTo(output) } } ?: error("无法写入文件")
-                    }
-                }
-                result.onSuccess { android.widget.Toast.makeText(context, "导出成功", android.widget.Toast.LENGTH_SHORT).show() }
-                    .onFailure { android.widget.Toast.makeText(context, it.message ?: "导出失败", android.widget.Toast.LENGTH_SHORT).show() }
-            }
-        }
-        exporting = null
-    }
+    val fileActions = com.hypermusic.miuix.ui.components.rememberDownloadFileActions()
     OverlayBottomSheet(show = Downloads.showSheet, onDismissRequest = { Downloads.showSheet = false }, title = "下载任务", insideMargin = DpSize(12.dp, 0.dp)) {
         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())) {
@@ -117,17 +99,11 @@ fun DownloadSheet() {
             }
             if (done.isNotEmpty()) item { SmallTitle("历史下载") }
             items(done, key = { it.id }) { entry ->
-                DownloadRow(entry, onExport = { exporting = entry.id; picker.launch(null) }, onShare = {
-                    runCatching {
-                        val file = File(entry.path)
-                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                        val intent = Intent(Intent.ACTION_SEND).setType("audio/*").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        context.startActivity(Intent.createChooser(intent, "分享歌曲"))
-                    }.onFailure { android.widget.Toast.makeText(context, "分享失败：${it.message}", android.widget.Toast.LENGTH_SHORT).show() }
-                })
+                DownloadRow(entry, onExport = { fileActions.export(entry) }, onShare = { fileActions.share(entry) })
             }
         }
     }
+    com.hypermusic.miuix.ui.components.BatchDownloadSheets()
     OverlayDialog(show = Downloads.networkConfirmation != null, title = "当前正在使用流量，确认要继续下载吗？",
         onDismissRequest = {}, content = {
             Column(Modifier.fillMaxWidth()) {
@@ -136,6 +112,7 @@ fun DownloadSheet() {
                 TextButton(text = "确认", modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.textButtonColorsPrimary(), onClick = { Downloads.confirmNetwork(false) })
             }
         })
+    com.hypermusic.miuix.ui.components.DownloadDeduplicationDialogs()
 }
 
 @Composable
@@ -143,21 +120,18 @@ private fun DownloadRow(entry: com.hypermusic.miuix.data.download.DownloadEntry,
     val done = entry.state == "complete"
     val size = android.text.format.Formatter.formatShortFileSize(LocalContext.current, entry.bytes)
     val total = if (entry.total > 0) "/${android.text.format.Formatter.formatShortFileSize(LocalContext.current, entry.total)}" else ""
-    val options = if (done) listOf(DropdownItem("分享", onClick = onShare), DropdownItem("导出", onClick = onExport), DropdownItem("删除", onClick = { Downloads.remove(entry.id) }))
-        else listOf(DropdownItem("重新下载", onClick = { Downloads.retry(entry.id) }), DropdownItem("删除", onClick = { Downloads.remove(entry.id) }))
+    val options = if (done) listOf(DropdownItem("分享文件", onClick = onShare), DropdownItem("导出文件", onClick = onExport), DropdownItem(if (done) "删除文件" else "删除任务", onClick = { Downloads.remove(entry.id) }))
+        else listOf(DropdownItem("重新下载", onClick = { Downloads.retry(entry.id) }), DropdownItem(if (done) "删除文件" else "删除任务", onClick = { Downloads.remove(entry.id) }))
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp),
         colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer)) {
         BasicComponent(
             startAction = {
-                AsyncImage(model = entry.track.imgUrl, contentDescription = null,
+                AsyncImage(model = com.hypermusic.miuix.data.download.OfflineLibrary.cover(entry, thumbnail = true) ?: entry.track.imgUrl, contentDescription = null,
                     imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.THUMBNAIL),
                     modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)))
             },
             endActions = {
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Text(if (done) size else size + total, fontSize = 12.sp,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                    Spacer(Modifier.width(8.dp))
                     Box(Modifier.size(32.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
                         OverlayIconDropdownMenu(entry = DropdownEntry(items = options)) {
                             Icon(MiuixIcons.More, "更多", modifier = Modifier.size(20.dp),
@@ -174,15 +148,10 @@ private fun DownloadRow(entry: com.hypermusic.miuix.data.download.DownloadEntry,
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(entry.track.title, fontSize = MiuixTheme.textStyles.headline1.fontSize, fontWeight = FontWeight.Medium,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                if (entry.quality.isNotBlank()) {
-                    Spacer(Modifier.width(4.dp))
-                    Text(entry.quality, fontSize = 10.sp, color = MiuixTheme.colorScheme.primary, maxLines = 1,
-                        modifier = Modifier.border(1.dp, MiuixTheme.colorScheme.primary, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 4.dp, vertical = 1.dp))
-                }
             }
             Text("${entry.track.artist} - ${entry.track.album}", fontSize = MiuixTheme.textStyles.body2.fontSize,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            com.hypermusic.miuix.ui.components.TrackFileDetails(entry.quality, if (done) size else size + total)
             if (entry.message.isNotBlank()) Text(entry.message, style = MiuixTheme.textStyles.footnote1,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }

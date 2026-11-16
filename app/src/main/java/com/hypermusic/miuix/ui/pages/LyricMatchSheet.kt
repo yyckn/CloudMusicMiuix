@@ -163,8 +163,12 @@ internal fun LyricMatchSheet(show: Boolean, original: Track?, currentLyricSource
                 })
             }
             item {
-                TabRow(tabs = lyricPlatformNames, selectedTabIndex = platform, onTabSelected = { platform = it },
-                    minWidth = tabWidth, maxWidth = tabWidth, modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp))
+                androidx.compose.runtime.CompositionLocalProvider(
+                    top.yukonga.miuix.kmp.material.LocalSoftGlassTabsEnabled provides false
+                ) {
+                    TabRow(tabs = lyricPlatformNames, selectedTabIndex = platform, onTabSelected = { platform = it },
+                        minWidth = tabWidth, maxWidth = tabWidth, modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp))
+                }
             }
             val saved = selected?.takeIf { selectedPlatform == lyricPlatforms[platform] }
             val found = results[platform].orEmpty()

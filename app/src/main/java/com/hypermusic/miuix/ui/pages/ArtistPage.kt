@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import com.hypermusic.miuix.ui.navigation.BackHandler
 import com.hypermusic.miuix.ui.components.rememberPageContentSearch
@@ -457,7 +460,23 @@ fun ArtistPage(
                         largeTitle = "歌手",
                         color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                         scrollBehavior = scrollBehavior,
-                        actions = { PageContentSearchAction(pageSearch) },
+                        actions = {
+                            PageContentSearchAction(pageSearch)
+                            com.hypermusic.miuix.ui.components.BatchDownloadMenu(artistSongs, enabled = !isLoading, loadAll = {
+                                var pages = 0
+                                while (hasMoreSongs) {
+                                    check(pages++ < 1000) { "歌手歌曲分页过多，请重试" }
+                                    val before = artistSongs.size
+                                    if (isLoadingMoreSongs) loadMoreSongsJob?.join() else {
+                                        loadMoreSongs()
+                                        loadMoreSongsJob?.join()
+                                    }
+                                    check(!moreSongsError) { "加载歌手歌曲失败，请重试" }
+                                    check(!hasMoreSongs || artistSongs.size > before) { "歌手歌曲分页没有返回新内容" }
+                                }
+                                artistSongs
+                            })
+                        },
                         bottomContent = { PageContentSearchBar(pageSearch, if (selectedTab == 0) "搜索歌手的单曲" else "搜索歌手的专辑") },
                         defaultWindowInsetsPadding = false,
                         navigationIcon = {
@@ -465,7 +484,7 @@ fun ArtistPage(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "返回",
                                 modifier = Modifier
-                                    .padding(start = 8.dp)
+                                    .padding(start = pageNavigationIconInset())
                                     .clickable { if (pageSearch.active) pageSearch.close() else onBackClick() }
                             )
 
@@ -475,7 +494,7 @@ fun ArtistPage(
                         Row(
                             modifier = Modifier.fillMaxWidth()
                                 .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
-                                .padding(horizontal = 68.dp)
+                                .padding(start = 68.dp, end = 112.dp)
                                 .height(top.yukonga.miuix.kmp.basic.TopAppBarDefaults.CollapsedHeight),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
@@ -510,9 +529,10 @@ fun ArtistPage(
             isRefreshing = isRefreshing && !pageSearch.active,
             onRefresh = { if (!pageSearch.active && !isLoading) { isRefreshing = true; refreshGeneration++ } },
             pullToRefreshState = pullToRefreshState,
+            contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding())),
             topAppBarScrollBehavior = scrollBehavior,
             refreshTexts = listOf("继续下拉以刷新", "松手后刷新", "正在刷新...", "刷新成功"),
-            modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
+            modifier = Modifier.padding(top = pageViewportTopInset(paddingValues.calculateTopPadding()))
         ) {
         LazyColumn(
             state = displayedListState,
@@ -521,7 +541,7 @@ fun ArtistPage(
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .pageLayerBackdrop(blurBackdrop),
-            contentPadding = PaddingValues(bottom = FeedBottomPads.Standard),
+            contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding()), bottom = FeedBottomPads.Standard),
             overscrollEffect = null
         ) {
             // 歌手信息区域

@@ -20,7 +20,8 @@ data class Track(
     val qqSongId: Long = 0,
     val bodianFreeSign: String = "",
     val kugouHash: String = "",
-    val kugouAlbumAudioId: String = ""
+    val kugouAlbumAudioId: String = "",
+    val localDownloadId: String? = null
 )
 
 data class Playlist(

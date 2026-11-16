@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import android.content.Intent
 import android.net.Uri
@@ -79,7 +82,7 @@ fun LyriconAdapterPage(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
                             modifier = Modifier
-                                .padding(start = 8.dp)
+                                .padding(start = pageNavigationIconInset())
                                 .clickable { onBackClick() }
                         )
                     }
@@ -89,12 +92,12 @@ fun LyriconAdapterPage(
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
-                .padding(top = paddingValues.calculateTopPadding())
+                .padding(top = pageViewportTopInset(paddingValues.calculateTopPadding()))
                 .fillMaxSize()
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .pageLayerBackdrop(blurBackdrop),
-            contentPadding = PaddingValues(bottom = FeedBottomPads.None)
+            contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding()), bottom = FeedBottomPads.None)
         ) {
             item {
                 Spacer(modifier = Modifier.height(12.dp))

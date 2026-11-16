@@ -1,4 +1,6 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -46,7 +48,8 @@ internal class AdditionalLibraryCache {
 @Composable
 internal fun AdditionalPlatformPage(platform: MusicPlatform, tab: Int, onLogin: () -> Unit,
     onSearch: () -> Unit, showSearchAction: Boolean, onPlaylist: (String, String, String) -> Unit, onAlbum: (Long, String) -> Unit,
-    cache: AdditionalLibraryCache, recommendations: AdditionalRecommendations, onRadio: (String) -> Unit) {
+    cache: AdditionalLibraryCache, recommendations: AdditionalRecommendations, onRadio: (String) -> Unit,
+    onLocalMusicClick: () -> Unit = {}) {
     if (tab == 0) {
         AdditionalRecommendPage(platform, recommendations, cache.recommendListState, onSearch, showSearchAction, onPlaylist, onRadio)
         return
@@ -176,11 +179,13 @@ internal fun AdditionalPlatformPage(platform: MusicPlatform, tab: Int, onLogin: 
             actions = { SearchPlatformActions(onSearch, showSearchAction) }, scrollBehavior = behavior, defaultWindowInsetsPadding = false)
     } }) { padding ->
         PullToRefresh(isRefreshing = loading, onRefresh = { revision++ }, pullToRefreshState = refresh,
+            contentPadding = PaddingValues(top = pageScrollTopInset(padding.calculateTopPadding())),
             topAppBarScrollBehavior = behavior, refreshTexts = listOf("继续下拉以刷新", "松手后刷新", "正在刷新...", "刷新成功"),
-            modifier = Modifier.padding(top = padding.calculateTopPadding()).pageLayerBackdrop(backdrop)) {
+            modifier = Modifier.padding(top = pageViewportTopInset(padding.calculateTopPadding())).pageLayerBackdrop(backdrop)) {
             LazyColumn(state = if (tab == 1) cache.listState else recommendListState, modifier = Modifier.fillMaxSize().overScrollVertical().nestedScroll(behavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = FeedBottomPads.More), overscrollEffect = null) {
+                contentPadding = PaddingValues(top = pageScrollTopInset(padding.calculateTopPadding()) + if (tab == 1) 12.dp else 0.dp, bottom = FeedBottomPads.More), overscrollEffect = null) {
                 if (tab == 1) {
+                    item { com.hypermusic.miuix.ui.components.LocalMusicCard(onLocalMusicClick) }
                     if (!loggedIn && !loading && error == null) item { Card(Modifier.padding(12.dp)) { BasicComponent(title = "点击登录", summary = "登录后查看收藏", onClick = onLogin) } }
                     error?.let { message -> item { Text(message, modifier = Modifier.padding(16.dp)) } }
                     val sections = listOf("个人收藏" to collections.filter { it.personal },

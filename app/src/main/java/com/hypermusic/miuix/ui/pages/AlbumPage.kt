@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import com.hypermusic.miuix.ui.navigation.BackHandler
 import com.hypermusic.miuix.ui.components.rememberPageContentSearch
@@ -305,7 +308,10 @@ fun AlbumPage(
                     largeTitle = "专辑详情",
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                     scrollBehavior = scrollBehavior,
-                    actions = { PageContentSearchAction(pageSearch) },
+                    actions = {
+                        PageContentSearchAction(pageSearch)
+                        com.hypermusic.miuix.ui.components.BatchDownloadMenu(albumSongs, enabled = !isLoading)
+                    },
                     bottomContent = { PageContentSearchBar(pageSearch) },
                     defaultWindowInsetsPadding = false,
                     navigationIcon = {
@@ -313,7 +319,7 @@ fun AlbumPage(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
                             modifier = Modifier
-                                .padding(start = 8.dp)
+                                .padding(start = pageNavigationIconInset())
                                 .clickable { if (pageSearch.active) pageSearch.close() else onBackClick() }
                         )
                     }
@@ -342,9 +348,10 @@ fun AlbumPage(
             isRefreshing = isRefreshing && !pageSearch.active,
             onRefresh = { if (!pageSearch.active && !isLoading) { isRefreshing = true; refreshGeneration++ } },
             pullToRefreshState = pullToRefreshState,
+            contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding())),
             topAppBarScrollBehavior = scrollBehavior,
             refreshTexts = listOf("继续下拉以刷新", "松手后刷新", "正在刷新...", "刷新成功"),
-            modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
+            modifier = Modifier.padding(top = pageViewportTopInset(paddingValues.calculateTopPadding()))
         ) {
         LazyColumn(
             state = displayedListState,
@@ -353,7 +360,7 @@ fun AlbumPage(
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .pageLayerBackdrop(blurBackdrop),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = FeedBottomPads.Standard),
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = pageScrollTopInset(paddingValues.calculateTopPadding()), bottom = FeedBottomPads.Standard),
             overscrollEffect = null
         ) {
             // 专辑头部信息

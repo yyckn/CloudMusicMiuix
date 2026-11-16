@@ -49,7 +49,8 @@ internal object QishuiLyricsApi {
             songArtist = track.artist, songAlbum = track.album, artistNames = track.artistNames)
         if (lyrics.lines.isEmpty() && !lyrics.isPureMusic) return null
         return PlatformLyricResult(lyrics, lyrics.lines.any { !it.words.isNullOrEmpty() }, "qishui",
-            formatRawLyricSections("汽水原歌词" to content, "翻译" to text), track)
+            formatRawLyricSections("汽水原歌词" to content, "翻译" to text), track,
+            rawDocument = RawLyricDocument(if (entity.text("type").equals("krc", true)) "krc" else "lrc", content, plainTranslation, providerTranslation = text))
     }
 
     private fun JsonObject.text(key: String) = get(key)?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()

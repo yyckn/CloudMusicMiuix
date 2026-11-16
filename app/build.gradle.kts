@@ -11,8 +11,8 @@ android {
         applicationId = "com.hypermusic.miuix"
         minSdk = 33
         targetSdk = 36
-        versionCode = 68
-        versionName = "2.1.0-dev2"
+        versionCode = 70
+        versionName = "2.1.0"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -54,6 +54,11 @@ android {
     }
 }
 
+configurations.configureEach {
+    exclude(group = "top.yukonga.miuix.kmp", module = "miuix-ui")
+    exclude(group = "top.yukonga.miuix.kmp", module = "miuix-ui-android")
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
@@ -63,10 +68,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.miuix.ui)
+    implementation(project(":miuix-controls"))
     implementation(libs.miuix.icons)
     implementation(libs.miuix.blur)
-    implementation(libs.miuix.preference)
     implementation(libs.androidx.navigationevent)
     implementation(libs.okhttp)
     implementation(libs.gson)

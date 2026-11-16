@@ -195,6 +195,7 @@ object KugouLyricsApi {
                 lyrics = lyrics,
                 hasWordLines = lyrics.lines.any { !it.words.isNullOrEmpty() },
                 platform = "kugou",
+                rawDocument = RawLyricDocument("krc", raw, translation),
                 rawDebugText = formatRawLyricSections("酷狗原歌词 / KRC（解密后）" to raw, "翻译" to translation)
             )
         } else {
@@ -215,6 +216,7 @@ object KugouLyricsApi {
                 lyrics = lyrics,
                 hasWordLines = false,
                 platform = "kugou",
+                rawDocument = RawLyricDocument("lrc", lrc),
                 rawDebugText = formatRawLyricSections("酷狗原歌词 / LRC" to lrc)
             )
         }

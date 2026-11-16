@@ -27,7 +27,8 @@ internal object BodianLyricsApi {
             val (lrc, krc) = decode(raw)
             val lyrics = parseLyrics(lrc, krc, track)
             if (lyrics.lines.isEmpty() && !lyrics.isPureMusic) null else PlatformLyricResult(lyrics, lyrics.lines.any { !it.words.isNullOrEmpty() },
-                "bodian", formatRawLyricSections("波点原歌词" to raw, "解码逐字" to krc), track)
+                "bodian", formatRawLyricSections("波点原歌词" to raw, "解码逐字" to krc), track,
+                rawDocument = RawLyricDocument("bodian", lrc, wordLyric = krc, providerOriginal = raw))
         }.getOrElse { error ->
             if (error is kotlinx.coroutines.CancellationException) throw error
             null

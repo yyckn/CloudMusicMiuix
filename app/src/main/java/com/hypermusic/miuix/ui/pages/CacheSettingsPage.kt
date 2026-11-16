@@ -1,4 +1,5 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
 
 import android.content.Context
 import androidx.activity.compose.BackHandler
@@ -49,9 +50,9 @@ fun CacheSettingsPage(onBack: () -> Unit) {
     }
     com.hypermusic.miuix.ui.navigation.BackHandler(enabled = pendingClear == null, onBack = onBack)
     Scaffold(topBar = { SmallTopAppBar(title = "缓存设置", navigationIcon = {
-        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", modifier = Modifier.padding(start = 8.dp).clickable(onClick = onBack))
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", modifier = Modifier.padding(start = pageNavigationIconInset()).clickable(onClick = onBack))
     }) }) { padding ->
-        Column(Modifier.padding(padding).verticalScroll(rememberScrollState())) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(padding)) {
             SmallTitle("图片缓存")
             Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
                 WindowDropdownPreference(title = "图片缓存容量", summary = "更改后重启应用生效", items = imageSizes.map { if (it >= 1024) "${it / 1024} GB" else "$it MB" }, selectedIndex = imageSelected,

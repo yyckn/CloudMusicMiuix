@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import android.content.Intent
 import android.net.Uri
@@ -205,7 +208,7 @@ fun ThemeSettingsPage(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
                             modifier = Modifier
-                                .padding(start = 8.dp)
+                                .padding(start = pageNavigationIconInset())
                                 .clickable { onBackClick() }
                         )
                     }
@@ -214,21 +217,21 @@ fun ThemeSettingsPage(
         }
     ) { paddingValues ->
         BoxWithConstraints(
-            modifier = modifier.padding(top = paddingValues.calculateTopPadding()).fillMaxSize()
+            modifier = modifier.padding(top = pageViewportTopInset(paddingValues.calculateTopPadding())).fillMaxSize()
                 .pageLayerBackdrop(blurBackdrop)
         ) {
             // Include the preview's outer margins when fitting it into a small window.
             val previewHeight = minOf(
                 ThemePreviewMaxHeight,
-                (maxHeight - 32.dp).coerceAtLeast(1.dp),
+                (maxHeight - pageScrollTopInset(paddingValues.calculateTopPadding()) - 32.dp).coerceAtLeast(1.dp),
                 (maxWidth - 24.dp).coerceAtLeast(1.dp) / windowAspectRatio
             )
             val previewWidth = previewHeight * windowAspectRatio
             val wideLayout = maxWidth >= 600.dp && maxWidth >= previewWidth + 32.dp + 280.dp
-            val previewViewportHeight = maxHeight
+            val previewViewportHeight = maxHeight - pageScrollTopInset(paddingValues.calculateTopPadding())
             Row(Modifier.fillMaxSize()) {
                 if (wideLayout) {
-                    Box(Modifier.width(previewWidth + 32.dp).fillMaxSize(fraction = 1f)
+                    Box(Modifier.width(previewWidth + 32.dp).fillMaxSize(fraction = 1f).padding(top = pageScrollTopInset(paddingValues.calculateTopPadding()))
                         .verticalScroll(rememberScrollState()).heightIn(min = previewViewportHeight),
                         contentAlignment = Alignment.Center) {
                         ThemePreview(previewWidth, previewHeight)
@@ -238,7 +241,7 @@ fun ThemeSettingsPage(
                     modifier = Modifier.weight(1f).fillMaxSize()
                         .overScrollVertical()
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(bottom = FeedBottomPads.None),
+                    contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding()), bottom = FeedBottomPads.None),
                     overscrollEffect = null
                 ) {
                     if (!wideLayout) item { ThemePreview(previewWidth, previewHeight) }
@@ -253,13 +256,18 @@ fun ThemeSettingsPage(
                     if (ThemeSettings.followMonet) {
                         WindowDropdownPreference(title = "强调色", startAction = { ThemeSettingIcon(Icons.Rounded.Colorize) }, items = listOf("跟随系统", "跟随音乐来源主题色", "红色", "粉红", "紫色", "深紫", "靛蓝", "蓝色", "青色", "青绿", "绿色", "黄色", "琥珀", "橙色", "棕色", "蓝灰", "浅粉"),
                             selectedIndex = accentMenuIndex(ThemeSettings.accentIndex), onSelectedIndexChange = { ThemeSettings.updateAccentIndex(accentSavedIndex(it)) })
-                        if (ThemeSettings.accentIndex != ThemeSettings.SOURCE_ACCENT_INDEX) {
                         WindowDropdownPreference(title = "色彩风格", startAction = { ThemeSettingIcon(Icons.Rounded.Style) }, items = listOf("柔和（Tonal Spot）", "中性（Neutral）", "鲜艳（Vibrant）", "表现力（Expressive）", "彩虹（Rainbow）", "水果沙拉（Fruit Salad）", "单色（Monochrome）", "保真（Fidelity）", "内容（Content）"),
                             selectedIndex = ThemeSettings.paletteStyleIndex, onSelectedIndexChange = { ThemeSettings.updatePaletteStyleIndex(it) })
                         WindowDropdownPreference(title = "色彩标准", startAction = { ThemeSettingIcon(Icons.Rounded.DesignServices) }, items = listOf("SPEC_2021", "SPEC_2025"),
                             selectedIndex = ThemeSettings.colorSpecIndex, onSelectedIndexChange = { ThemeSettings.updateColorSpecIndex(it) })
-                        }
                     }
+                    WindowDropdownPreference(
+                        title = "控件样式",
+                        startAction = { ThemeSettingIcon(Icons.Rounded.WaterDrop) },
+                        items = listOf("柔光玻璃", "高斯模糊"),
+                        selectedIndex = ThemeSettings.controlStyleIndex,
+                        onSelectedIndexChange = { ThemeSettings.updateControlStyle(it) }
+                    )
                 }
             }
             item { SmallTitle("底栏") }
@@ -269,21 +277,17 @@ fun ThemeSettingsPage(
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 12.dp)
                 ) {
-                    BasicComponent(
-                        title = "启用悬浮底栏",
+                    WindowDropdownPreference(
+                        title = "底栏样式",
                         startAction = { ThemeSettingIcon(Icons.Rounded.CallToAction) },
-                        summary = if (ThemeSettings.useFloatingBar) "已启用" else "未启用",
-                        endActions = {
-                            Switch(
-                                checked = ThemeSettings.useFloatingBar,
-                                onCheckedChange = { ThemeSettings.updateUseFloatingBar(it) }
-                            )
-                        },
-                        onClick = { ThemeSettings.updateUseFloatingBar(!ThemeSettings.useFloatingBar) }
+                        items = listOf("悬浮底栏（液态玻璃）", "正常底栏（高斯模糊）"),
+                        selectedIndex = if (ThemeSettings.useFloatingBar) 0 else 1,
+                        onSelectedIndexChange = { ThemeSettings.updateUseFloatingBar(it == 0) }
                     )
                     if (ThemeSettings.useFloatingBar) {
                         WindowDropdownPreference(
-                            title = "底栏对齐方向",
+                            title = "适人握持",
+                            summary = "选择底栏对齐方向，适用于阔屏和平板机型",
                             startAction = { ThemeSettingIcon(Icons.AutoMirrored.Rounded.AlignHorizontalLeft) },
                             items = floatingBarAlignOptions,
                             selectedIndex = ThemeSettings.floatingBarAlignmentIndex,

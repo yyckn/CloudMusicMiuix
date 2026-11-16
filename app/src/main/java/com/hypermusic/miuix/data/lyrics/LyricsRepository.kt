@@ -42,7 +42,8 @@ object LyricsRepository {
         val source: String?,
         val upgraded: Boolean,
         val rawDebugText: String = "",
-        val matchedTrack: Track? = null
+        val matchedTrack: Track? = null,
+        val rawDocument: RawLyricDocument? = null
     )
 
     internal data class LoadOutcome(
@@ -50,8 +51,12 @@ object LyricsRepository {
         val upgraded: Boolean
     )
 
-    suspend fun load(track: Track, onUpdate: suspend (LyricsLoadResult) -> Unit = {}): Result<LyricsLoadResult> = withContext(Dispatchers.IO) {
+    suspend fun load(track: Track, preferDownload: Boolean = true, onUpdate: suspend (LyricsLoadResult) -> Unit = {}): Result<LyricsLoadResult> = withContext(Dispatchers.IO) {
         try {
+            if (preferDownload) com.hypermusic.miuix.data.download.OfflineLibrary.loadLyrics(track)?.let {
+                onUpdate(it)
+                return@withContext Result.success(it)
+            }
             supervisorScope {
                 val saved = LyricMatches.find(track)
                 val savedPlatform = when (saved?.platform) {
@@ -81,6 +86,7 @@ object LyricsRepository {
                         val matched = if (durationValid) fetchSafely { fetch(savedPlatform, saved.match, exactMatch = true) } else null
                         if (matched != null) {
                             val result = matched.asLoadResult(false).copy(matchedTrack = saved.match)
+                            com.hypermusic.miuix.data.download.OfflineLibrary.saveLyrics(track, result)
                             publishing.withLock { finalPublished = true; onUpdate(result) }
                             Result.success(result)
                         } else {
@@ -96,6 +102,7 @@ object LyricsRepository {
                             source = track.source,
                             onWinner = { winner -> publishing.withLock {
                                 finalPublished = true
+                                com.hypermusic.miuix.data.download.OfflineLibrary.saveLyrics(track, winner.result.asLoadResult(winner.upgraded))
                                 onUpdate(winner.result.asLoadResult(winner.upgraded))
                             } }
                         ) { requests.getValue(it).await() }
@@ -116,7 +123,7 @@ object LyricsRepository {
     }
 
     private fun PlatformLyricResult.asLoadResult(upgraded: Boolean) =
-        LyricsLoadResult(lyrics, platformLabel(platform), upgraded, rawDebugText, matchedTrack)
+        LyricsLoadResult(lyrics, platformLabel(platform), upgraded, rawDebugText, matchedTrack, rawDocument)
 
     internal suspend fun publishNativeFallback(request: Deferred<PlatformLyricResult?>,
         publish: suspend (PlatformLyricResult) -> Unit) {
@@ -257,6 +264,7 @@ object LyricsRepository {
                         lyrics = lyrics,
                         hasWordLines = lyrics.lines.any { !it.words.isNullOrEmpty() },
                         platform = "netease",
+                        rawDocument = RawLyricDocument("lrc", raw.lrc, raw.tlyric, raw.yrc, raw.romalrc, raw.ytlrc, raw.yromalrc),
                         rawDebugText = formatRawLyricSections("YRC 逐字" to raw.yrc, "LRC" to raw.lrc,
                             "翻译 YTLRC" to raw.ytlrc, "翻译 TLYRIC" to raw.tlyric,
                             "罗马音 YROMALRC" to raw.yromalrc, "罗马音 ROMALRC" to raw.romalrc),

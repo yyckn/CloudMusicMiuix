@@ -476,7 +476,7 @@ private fun AboutContent(
                             onClick = onCurrentLogClick
                         )
                         ArrowPreference(
-                            title = "查看历史版本",
+                            title = "查看历史版本更新日志",
                             onClick = onViewHistory
                         )
                     }
@@ -580,6 +580,20 @@ private fun OpenSourceEntries(context: android.content.Context) {
         summary = "提供响度平衡和音效功能",
         onClick = {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/chthollyphile/folia-major")))
+        }
+    )
+    ArrowPreference(
+        title = "NexioSchedule",
+        summary = "参考了柔光玻璃控件和渐进模糊标题栏样式",
+        onClick = {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/HaoZai000/NexioSchedule")))
+        }
+    )
+    ArrowPreference(
+        title = "Softglass",
+        summary = "提供柔光玻璃着色器和材质参数",
+        onClick = {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/HaoZai000/softglass")))
         }
     )
 }

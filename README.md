@@ -84,6 +84,7 @@
 ### 主题与界面
 
 - Miuix 大小标题、卡片、搜索组件、抽屉、菜单与下拉刷新。
+- 柔光玻璃／高斯模糊两套控件样式，覆盖标题栏、菜单、弹窗和分段选项。
 - 深色、浅色、跟随系统，Monet 取色、自选强调色与跟随音乐来源主题色。
 - 色彩风格、色彩标准、主题预览、界面缩放与预测性返回手势。
 - 标准底栏、可选高斯模糊、悬浮底栏与液态玻璃迷你播放条。
@@ -168,6 +169,8 @@ app/src/main/
 | [Accompanist Lyrics UI](https://github.com/6xingyv/accompanist-lyrics-ui) | 歌词渲染组件 |
 | [Folia](https://github.com/chthollyphile/folia-major) | 响度平衡、音效及多平台接口参考 |
 | [HyperCeiler](https://github.com/ReChronoRain/HyperCeiler) | OOBE 交互及部分图标 |
+| [NexioSchedule](https://github.com/HaoZai000/NexioSchedule) | 柔光玻璃控件与渐进模糊标题栏参考 |
+| [Softglass](https://github.com/HaoZai000/softglass) | 柔光玻璃着色器及材质参数 |
 
 感谢 AndroidX、OkHttp、Coil、Gson，以及所有开源依赖的维护者与贡献者。仓库中保留的第三方源码、资源、许可证与署名仍遵循各自的许可条款，详见 [第三方许可证目录](app/src/main/assets/licenses/) 及对应源码说明。
 
@@ -179,6 +182,6 @@ HyperMusic 是独立的第三方客户端，与所接入的音乐平台无隶属
 
 ## 许可证
 
-Copyright © 2026 王尧。
+Copyright © 2026 yyckn。
 
 本项目采用 **GNU Affero General Public License v3.0（SPDX：`AGPL-3.0-only`）**，完整条款见 [LICENSE](LICENSE)。第三方组件和资源保留其原有许可证及署名。

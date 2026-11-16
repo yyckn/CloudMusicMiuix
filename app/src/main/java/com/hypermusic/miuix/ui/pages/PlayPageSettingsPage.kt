@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import com.hypermusic.miuix.ui.navigation.BackHandler
 import android.widget.Toast
@@ -149,7 +152,7 @@ fun PlayPageSettingsPage(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
                             modifier = Modifier
-                                .padding(start = 8.dp)
+                                .padding(start = pageNavigationIconInset())
                                 .clickable { onBackClick() }
                         )
                     }
@@ -160,11 +163,11 @@ fun PlayPageSettingsPage(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = paddingValues.calculateTopPadding())
+                .padding(top = pageViewportTopInset(paddingValues.calculateTopPadding()))
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .pageLayerBackdrop(blurBackdrop),
-            contentPadding = PaddingValues(bottom = FeedBottomPads.None),
+            contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding()), bottom = FeedBottomPads.None),
             overscrollEffect = null
         ) {
             item { Spacer(modifier = Modifier.height(12.dp)) }

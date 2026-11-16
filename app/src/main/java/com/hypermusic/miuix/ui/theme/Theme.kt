@@ -36,23 +36,30 @@ fun CloudMusicMiuixTheme(content: @Composable () -> Unit) {
         usesGeneratedColors -> Color(0xFF6750A4)
         else -> null
     }
+    val paletteStyle = themePaletteStyles[ThemeSettings.paletteStyleIndex]
+    val colorSpec = if (ThemeSettings.colorSpecIndex == 1) ThemeColorSpec.Spec2025 else ThemeColorSpec.Spec2021
     val controller = ThemeController(mode, keyColor = key, isDark = dark,
-        paletteStyle = if (followsSource) ThemePaletteStyle.Rainbow else themePaletteStyles[ThemeSettings.paletteStyleIndex],
-        colorSpec = if (followsSource || ThemeSettings.colorSpecIndex == 1) ThemeColorSpec.Spec2025 else ThemeColorSpec.Spec2021)
+        paletteStyle = paletteStyle, colorSpec = colorSpec)
     val density = LocalDensity.current
     MiuixTheme(controller = controller) {
         val themedContent: @Composable () -> Unit = {
         CompositionLocalProvider(
             LocalDensity provides Density(density.density * ThemeSettings.pageScale, density.fontScale),
             LocalEnableBlur provides (ThemeSettings.useFloatingBar || ThemeSettings.gaussianBlurEnabled),
-            content = content
+            content = {
+                top.yukonga.miuix.kmp.material.SoftGlassTheme(
+                    enabled = ThemeSettings.controlStyleIndex == 0,
+                    isDark = dark,
+                    content = content
+                )
+            }
         )
         }
         if (followsSource && sourceAccent.secondary != null) {
             val secondary = ThemeController(mode, keyColor = sourceAccent.secondary, isDark = dark,
-                paletteStyle = ThemePaletteStyle.Rainbow, colorSpec = ThemeColorSpec.Spec2025).currentColors()
+                paletteStyle = paletteStyle, colorSpec = colorSpec).currentColors()
             val tertiary = ThemeController(mode, keyColor = sourceAccent.tertiary ?: sourceAccent.secondary, isDark = dark,
-                paletteStyle = ThemePaletteStyle.Rainbow, colorSpec = ThemeColorSpec.Spec2025).currentColors()
+                paletteStyle = paletteStyle, colorSpec = colorSpec).currentColors()
             val base = MiuixTheme.colorScheme
             val combined = remember(base, secondary, tertiary) {
                 base.copy(

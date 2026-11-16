@@ -24,4 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "CloudMusicMiuix"
 include(":app")
- 
+include(":miuix-controls")
+

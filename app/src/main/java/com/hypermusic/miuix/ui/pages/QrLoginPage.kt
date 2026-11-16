@@ -1,4 +1,5 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -196,7 +197,7 @@ internal fun LoginPageFrame(onBackClick: () -> Unit, onRefreshClick: () -> Unit,
                 defaultWindowInsetsPadding = false,
                 navigationIcon = {
                     Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回",
-                        modifier = Modifier.padding(start = 8.dp).clickable { onBackClick() })
+                        modifier = Modifier.padding(start = pageNavigationIconInset()).clickable { onBackClick() })
                 },
                 actions = {
                     IconButton(onClick = onRefreshClick) {

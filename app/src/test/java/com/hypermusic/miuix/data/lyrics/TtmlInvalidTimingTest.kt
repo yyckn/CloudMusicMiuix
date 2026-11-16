@@ -14,6 +14,35 @@ class TtmlInvalidTimingTest {
         """<p begin="${start}ms" end="${end}ms"><span begin="${first}ms" end="${(first + last) / 2}ms">你</span><span begin="${(first + last) / 2}ms" end="${last}ms">好</span></p>"""
     ).lines.single()
 
+    @Test fun untimedZeroDurationExclamationsAreSkippedWithoutAffectingTimedLines() {
+        val lines = parse("""
+            <p begin="26.510s" end="36.281s" ttm:agent="v1"><span begin="26.510s" end="36.281s">上一句</span></p>
+            <p begin="00:00.000" end="00:00.000" ttm:agent="v1">喔</p>
+            <p begin="37.424s" end="42.905s" ttm:agent="v2"><span begin="37.424s" end="42.905s">下一句</span></p>
+            <p begin="0s" end="0s" ttm:agent="v2">喔</p>
+            <p begin="68.799s" end="75.359s" ttm:agent="v2"><span begin="68.799s" end="69.170s">喔 </span><span begin="69.170s" end="75.359s">半路上的我</span></p>
+        """.trimIndent()).lines
+        assertEquals(listOf("上一句", "下一句", "喔 半路上的我"), lines.map { it.text })
+        assertEquals(listOf(26510L, 37424L, 68799L), lines.map { it.startAt })
+        assertEquals(listOf("v1", "v2", "v2"), lines.map { it.amllAgent })
+    }
+
+    @Test fun validPlainTextAtSongStartAndZeroParagraphsWithUsableWordTimesRemainSupported() {
+        val lines = parse("""
+            <p begin="0s" end="1s">喔</p>
+            <p begin="0s" end="0s"><span begin="10s" end="11s">喔</span></p>
+            <p begin="12s" end="12s">没有可恢复时间</p>
+            <p begin="15s" end="14s">倒置时间</p>
+        """.trimIndent()).lines
+        assertEquals(2, lines.size)
+        assertEquals(0L, lines[0].startAt)
+        assertEquals(1000L, lines[0].endAt)
+        assertNull(lines[0].words)
+        assertEquals(10000L, lines[1].startAt)
+        assertEquals(11000L, lines[1].endAt)
+        assertNotNull(lines[1].words)
+    }
+
     @Test fun apparentlyValidSongLongIntervalsOnlyTightenTheExcessiveSide() {
         val leading = timedLine(0, 180000, 175268, 177188)
         assertEquals(175268L, leading.startAt)

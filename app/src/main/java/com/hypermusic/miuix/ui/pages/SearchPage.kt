@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import android.content.Intent
 import com.hypermusic.miuix.ui.navigation.BackHandler
@@ -235,7 +238,7 @@ fun SearchPage(
                 actions = { PlatformSwitch() }, defaultWindowInsetsPadding = false,
                 navigationIcon = {
                     Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回",
-                        modifier = Modifier.padding(start = 8.dp).clickable { onBack() })
+                        modifier = Modifier.padding(start = pageNavigationIconInset()).clickable { onBack() })
                 }, color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface)
         }
     }) { padding ->
@@ -248,10 +251,10 @@ fun SearchPage(
             }
         }, pullToRefreshState = refreshState, topAppBarScrollBehavior = scrollBehavior,
             refreshTexts = listOf("继续下拉以刷新", "松手后刷新", "正在刷新...", "刷新成功"),
-            modifier = Modifier.padding(top = padding.calculateTopPadding()).pageLayerBackdrop(backdrop)) {
+            modifier = Modifier.padding(top = pageViewportTopInset(padding.calculateTopPadding())).pageLayerBackdrop(backdrop)) {
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()
             .overScrollVertical().nestedScroll(scrollBehavior.nestedScrollConnection).pageLayerBackdrop(backdrop),
-            contentPadding = PaddingValues(bottom = FeedBottomPads.Standard), overscrollEffect = null) {
+            contentPadding = PaddingValues(top = pageScrollTopInset(padding.calculateTopPadding()), bottom = FeedBottomPads.Standard), overscrollEffect = null) {
             item {
                 SearchBar(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), inputField = {
                     InputField(modifier = Modifier.focusRequester(focusRequester), query = query, onQueryChange = {
@@ -263,8 +266,12 @@ fun SearchPage(
             if (submittedQuery.isNotBlank()) {
                 item {
                     Box(Modifier.padding(start = 12.dp, bottom = 4.dp).widthIn(max = 283.dp)) {
-                        TabRow(tabs = SearchCategory.entries.map { it.title }, selectedTabIndex = category.ordinal,
-                            onTabSelected = { category = SearchCategory.entries[it] }, minWidth = 64.dp, maxWidth = 64.dp)
+                        androidx.compose.runtime.CompositionLocalProvider(
+                            top.yukonga.miuix.kmp.material.LocalSoftGlassTabsEnabled provides false
+                        ) {
+                            TabRow(tabs = SearchCategory.entries.map { it.title }, selectedTabIndex = category.ordinal,
+                                onTabSelected = { category = SearchCategory.entries[it] }, minWidth = 64.dp, maxWidth = 64.dp)
+                        }
                     }
                 }
                 if ((category == SearchCategory.SONG && state.isLoading) || (category != SearchCategory.SONG && entityLoading)) {

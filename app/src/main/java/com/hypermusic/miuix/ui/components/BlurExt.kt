@@ -26,7 +26,9 @@ fun rememberBlurBackdrop(enableBlur: Boolean): LayerBackdrop? {
 
 /** 页面标题栏模糊用的背景层（跟随全局模糊开关）。 */
 @Composable
-fun rememberPageBlurBackdrop(): LayerBackdrop? = rememberBlurBackdrop(LocalEnableBlur.current)
+fun rememberPageBlurBackdrop(): LayerBackdrop? =
+    if (top.yukonga.miuix.kmp.material.LocalSoftGlassEnabled.current) null
+    else rememberBlurBackdrop(LocalEnableBlur.current)
 
 /** 将页面内容记录到标题栏模糊背景层。 */
 fun Modifier.pageLayerBackdrop(backdrop: LayerBackdrop?): Modifier =
@@ -36,8 +38,14 @@ fun Modifier.pageLayerBackdrop(backdrop: LayerBackdrop?): Modifier =
 fun BlurredBar(
     backdrop: LayerBackdrop?,
     blurActive: Boolean = true,
+    isTopBar: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    // 柔光玻璃由标题栏组件统一绘制渐进模糊，避免再叠加旧的高浓度高斯底色。
+    if (isTopBar && top.yukonga.miuix.kmp.material.LocalSoftGlassEnabled.current) {
+        content()
+        return
+    }
     Box(
         modifier = if (blurActive && backdrop != null) {
             Modifier.textureBlur(

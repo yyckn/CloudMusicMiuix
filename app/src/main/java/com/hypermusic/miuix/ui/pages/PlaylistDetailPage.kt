@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import com.hypermusic.miuix.ui.navigation.BackHandler
 import com.hypermusic.miuix.ui.components.rememberPageContentSearch
@@ -120,6 +123,12 @@ fun PlaylistDetailPage(
     onPlayAllClick: (List<Track>) -> Unit,
     onShuffleClick: (List<Track>) -> Unit,
     isTopChart: Boolean = false,
+    isLocalMusic: Boolean = false,
+    onShowDownloads: () -> Unit = {},
+    trackQuality: (Track) -> String? = { null },
+    trackFileSize: (Track) -> String? = { null },
+    trackVersionCount: (Track) -> Int = { 1 },
+    resolveTrackForMore: (Track, (Track) -> Unit) -> Unit = { track, open -> open(track) },
     showFavoritePlaylist: Boolean = false,
     favoritePlaylistCollected: Boolean = false,
     favoritePlaylistInProgress: Boolean = false,
@@ -133,6 +142,7 @@ fun PlaylistDetailPage(
 
     onNavigateToArtist: (String) -> Unit = {},
     onNavigateToAlbum: (Long) -> Unit = {},
+    onNavigateToTrackAlbum: ((Track, Long) -> Unit)? = null,
     onNavigateToComment: (String, String) -> Unit = { _, _ -> },
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
@@ -167,6 +177,7 @@ fun PlaylistDetailPage(
     }
     LaunchedEffect(pageSearch.query) { searchListState.scrollToItem(0) }
     val scope = rememberCoroutineScope()
+    val fileActions = com.hypermusic.miuix.ui.components.rememberDownloadFileActions()
     LaunchedEffect(showMoreSheet, selectedTrack?.id, selectedTrack?.source) {
         selectedQqLiked = null
         qqLikeCheckFailed = false
@@ -190,7 +201,7 @@ fun PlaylistDetailPage(
         albumArtistId = null
         val albumIdStr = selectedTrack?.albumId?.removePrefix("nealbum_")
         val albumIdNum = albumIdStr?.toLongOrNull()
-        if (selectedTrack?.source == "netease" && albumIdNum != null) {
+        if (!isLocalMusic && selectedTrack?.source == "netease" && albumIdNum != null) {
             com.hypermusic.miuix.data.api.NeteaseApi.getAlbumDetail(albumIdNum.toString()).onSuccess { (albumInfo, _) ->
                 albumArtist = albumInfo.artist.ifEmpty { null }
                 albumArtistId = albumInfo.artistId.takeIf { it > 0 }
@@ -210,18 +221,22 @@ fun PlaylistDetailPage(
             BlurredBar(backdrop = blurBackdrop) {
                 TopAppBar(
                     title = displayTitle.ifBlank { "歌单详情" },
-                    largeTitle = if (isTopChart) (playlistDetail?.info?.title ?: initialTitle) else "歌单详情",
+                    largeTitle = if (isLocalMusic) "本地音乐" else if (isTopChart) (playlistDetail?.info?.title ?: initialTitle) else "歌单详情",
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                     defaultWindowInsetsPadding = false,
                     scrollBehavior = scrollBehavior,
-                    actions = { PageContentSearchAction(pageSearch) },
+                    actions = {
+                        PageContentSearchAction(pageSearch)
+                        if (isLocalMusic) IconButton(onClick = onShowDownloads) { Icon(MiuixIcons.Download, "下载任务") }
+                        else com.hypermusic.miuix.ui.components.BatchDownloadMenu(playlistDetail?.tracks.orEmpty(), enabled = !isLoading)
+                    },
                     bottomContent = { PageContentSearchBar(pageSearch) },
                     navigationIcon = {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
                             modifier = Modifier
-                                .padding(start = 8.dp)
+                                .padding(start = pageNavigationIconInset())
                                 .size(24.dp)
                                 .clickable { if (pageSearch.active) pageSearch.close() else onBackClick() }
                         )
@@ -257,9 +272,10 @@ fun PlaylistDetailPage(
                 }
             },
             pullToRefreshState = pullToRefreshState,
+            contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding())),
             topAppBarScrollBehavior = scrollBehavior,
             refreshTexts = listOf("继续下拉以刷新", "松手后刷新", "正在刷新...", "刷新成功"),
-            modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
+            modifier = Modifier.padding(top = pageViewportTopInset(paddingValues.calculateTopPadding()))
         ) {
         LazyColumn(
             state = displayedListState,
@@ -268,7 +284,7 @@ fun PlaylistDetailPage(
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .pageLayerBackdrop(blurBackdrop),
-            contentPadding = PaddingValues(
+            contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding()),
                 start = 12.dp,
                 end = 12.dp,
                 bottom = FeedBottomPads.Standard
@@ -291,6 +307,7 @@ fun PlaylistDetailPage(
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope
                 )
+                if (isLocalMusic && playlistDetail?.tracks.isNullOrEmpty()) Text("暂无本地音乐", Modifier.padding(vertical = 12.dp), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
 
             if (isLoading) {
@@ -345,12 +362,18 @@ fun PlaylistDetailPage(
                     }
                     SharedTrackRow(
                         track = track,
+                        qualityTag = trackQuality(track),
+                        fileSizeText = trackFileSize(track),
+                        versionCount = trackVersionCount(track),
+                        showVip = !isLocalMusic,
                         rank = if (isTopChart) index + 1 else null,
                         isPlaying = track.id == currentTrack?.id,
                         onClick = { onTrackClick(track) },
                         onMoreClick = {
-                            selectedTrack = track
-                            showMoreSheet = true
+                            resolveTrackForMore(track) { resolved ->
+                                selectedTrack = resolved
+                                showMoreSheet = true
+                            }
                         }
                     )
                 }
@@ -467,7 +490,7 @@ fun PlaylistDetailPage(
                                         val albumIdStr = track.albumId.removePrefix("nealbum_")
                                         val albumId = albumIdStr.toLongOrNull()
                                         if (albumId != null) {
-                                            onNavigateToAlbum(albumId)
+                                            if (onNavigateToTrackAlbum != null) onNavigateToTrackAlbum(track, albumId) else onNavigateToAlbum(albumId)
                                         }
                                     }
                                 }
@@ -489,7 +512,7 @@ fun PlaylistDetailPage(
                 }
 
                 // 下载区域
-                item { SmallTitle("下载") }
+                item { SmallTitle(if (isLocalMusic) "文件" else "下载") }
                 item {
                     Card(
                         modifier = Modifier
@@ -499,6 +522,15 @@ fun PlaylistDetailPage(
                             color = MiuixTheme.colorScheme.secondaryContainer
                         )
                     ) {
+                        if (isLocalMusic) {
+                            val entry = selectedTrack?.let { com.hypermusic.miuix.data.download.OfflineLibrary.find(it) }
+                            ArrowPreference(title = "分享文件", startAction = { Icon(MiuixIcons.Share, null) }, enabled = entry != null, onClick = { entry?.let(fileActions.share) })
+                            ArrowPreference(title = "导出文件", startAction = { Icon(MiuixIcons.Download, null) }, enabled = entry != null, onClick = { entry?.let(fileActions.export) })
+                            ArrowPreference(title = "删除文件", startAction = { Icon(MiuixIcons.Delete, null) }, enabled = entry != null, onClick = {
+                                showMoreSheet = false
+                                entry?.let { com.hypermusic.miuix.data.download.Downloads.remove(it.id) }
+                            })
+                        } else {
                         ArrowPreference(
                             title = "下载此歌曲",
                             startAction = {
@@ -527,6 +559,7 @@ fun PlaylistDetailPage(
                                 selectedTrack?.let(onDownloadCover)
                             }
                         )
+                        }
                     }
                 }
             }
@@ -623,18 +656,8 @@ internal fun ResponsiveMediaHeader(
         }
     }
     val actions: @Composable () -> Unit = {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onPlay, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) {
-                Icon(MiuixIcons.Play, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp)); Text("播放")
-            }
-            Button(onClick = onShuffle, modifier = Modifier.size(48.dp), minWidth = 0.dp, insideMargin = PaddingValues(0.dp)) {
-                Icon(MiuixIcons.Merge, contentDescription = "随机播放", modifier = Modifier.size(24.dp))
-            }
-            if (showFavorite) Button(onClick = onFavorite, enabled = favoriteEnabled, modifier = Modifier.size(48.dp), minWidth = 0.dp, insideMargin = PaddingValues(0.dp)) {
-                Icon(if (favoriteCollected) MiuixIcons.Delete else MiuixIcons.Add, contentDescription = if (favoriteCollected) "取消收藏" else "添加到个人收藏", modifier = Modifier.size(24.dp))
-            }
-        }
+        MediaPlaybackActions(onPlay = onPlay, onShuffle = onShuffle, showFavorite = showFavorite,
+            favoriteCollected = favoriteCollected, favoriteEnabled = favoriteEnabled, onFavorite = onFavorite)
     }
     if (tablet) {
         Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.Top) {
@@ -647,7 +670,7 @@ internal fun ResponsiveMediaHeader(
             }
         }
     } else {
-        Column(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             cover(Modifier.size((LocalConfiguration.current.screenWidthDp * 0.65f).coerceIn(140f, 240f).dp))
             Spacer(Modifier.height(16.dp))
             info(true)
@@ -658,9 +681,33 @@ internal fun ResponsiveMediaHeader(
 }
 
 @Composable
-private fun SharedTrackCover(track: Track) {
+internal fun MediaPlaybackActions(onPlay: () -> Unit, onShuffle: () -> Unit, modifier: Modifier = Modifier,
+    enabled: Boolean = true, showFavorite: Boolean = false, favoriteCollected: Boolean = false,
+    favoriteEnabled: Boolean = true, onFavorite: () -> Unit = {}) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = onPlay, enabled = enabled, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) {
+            Icon(MiuixIcons.Play, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp)); Text("播放")
+        }
+        Button(onClick = onShuffle, enabled = enabled, modifier = Modifier.size(48.dp), minWidth = 0.dp, insideMargin = PaddingValues(0.dp)) {
+            Icon(MiuixIcons.Merge, contentDescription = "随机播放", modifier = Modifier.size(24.dp))
+        }
+        if (showFavorite) Button(onClick = onFavorite, enabled = favoriteEnabled, modifier = Modifier.size(48.dp), minWidth = 0.dp, insideMargin = PaddingValues(0.dp)) {
+            Icon(if (favoriteCollected) MiuixIcons.Delete else MiuixIcons.Add, contentDescription = if (favoriteCollected) "取消收藏" else "添加到个人收藏", modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun SharedTrackCover(track: Track, versionCount: Int = 1) {
+    if (versionCount > 1) {
+        top.yukonga.miuix.kmp.basic.BadgedBox(badge = {
+            top.yukonga.miuix.kmp.basic.Badge { Text(versionCount.toString()) }
+        }) { SharedTrackCover(track) }
+        return
+    }
     AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.THUMBNAIL),
-        model = track.imgUrl, contentDescription = track.title,
+        model = com.hypermusic.miuix.data.download.OfflineLibrary.cover(track, thumbnail = true) ?: track.imgUrl, contentDescription = track.title,
         modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
         contentScale = ContentScale.Crop, error = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter())
 }
@@ -672,6 +719,10 @@ internal fun SharedTrackRow(
     isPlaying: Boolean,
     onClick: () -> Unit,
     onMoreClick: () -> Unit,
+    qualityTag: String? = null,
+    fileSizeText: String? = null,
+    versionCount: Int = 1,
+    showVip: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -691,10 +742,10 @@ internal fun SharedTrackRow(
                         Text(text = rank.toString(), modifier = Modifier.widthIn(min = 20.dp), style = MiuixTheme.textStyles.body2,
                             color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         Spacer(Modifier.width(4.dp))
-                        SharedTrackCover(track)
+                        SharedTrackCover(track, versionCount)
                     }
                 } else {
-                    SharedTrackCover(track)
+                    SharedTrackCover(track, versionCount)
                 }
             },
             endActions = {
@@ -721,18 +772,21 @@ internal fun SharedTrackRow(
                 }
             }
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = track.title,
+                modifier = Modifier.weight(1f, fill = false),
                 fontSize = MiuixTheme.textStyles.headline1.fontSize,
                 fontWeight = FontWeight.Medium,
                 color = if (isPlaying) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (track.isVip) {
+                if (showVip && track.isVip) {
                     Text(
                         text = "VIP",
                         fontSize = 10.sp,
@@ -755,6 +809,7 @@ internal fun SharedTrackRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            com.hypermusic.miuix.ui.components.TrackFileDetails(qualityTag, fileSizeText)
         }
     }
 }

@@ -1,4 +1,6 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -49,10 +51,11 @@ internal fun AdditionalRecommendPage(platform: MusicPlatform, recommendations: A
             actions = { SearchPlatformActions(onSearch, showSearchAction && behavior.state.collapsedFraction > .99f) })
     } }) { padding ->
         PullToRefresh(isRefreshing = loading, onRefresh = { refreshRevision++ }, pullToRefreshState = refresh,
+            contentPadding = PaddingValues(top = pageScrollTopInset(padding.calculateTopPadding())),
             topAppBarScrollBehavior = behavior, refreshTexts = listOf("继续下拉以刷新", "松手后刷新", "正在刷新...", "刷新成功"),
-            modifier = Modifier.padding(top = padding.calculateTopPadding()).pageLayerBackdrop(backdrop)) {
+            modifier = Modifier.padding(top = pageViewportTopInset(padding.calculateTopPadding())).pageLayerBackdrop(backdrop)) {
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize().overScrollVertical()
-                .nestedScroll(behavior.nestedScrollConnection), contentPadding = PaddingValues(bottom = FeedBottomPads.More), overscrollEffect = null) {
+                .nestedScroll(behavior.nestedScrollConnection), contentPadding = PaddingValues(top = pageScrollTopInset(padding.calculateTopPadding()), bottom = FeedBottomPads.More), overscrollEffect = null) {
                 if (home == null && loading) item { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { InfiniteProgressIndicator() } }
                 home?.error?.let { message -> item { Text(message, Modifier.padding(16.dp), color = MiuixTheme.colorScheme.error) } }
                 if (!home?.large.isNullOrEmpty()) {

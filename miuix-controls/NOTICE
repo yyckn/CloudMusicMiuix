@@ -1,0 +1,35 @@
+Miuix Controls for HyperMusic
+
+Based on compose-miuix-ui/miuix-ui-android and miuix-preference-android 0.9.3.
+Copyright 2025-2026 compose-miuix-ui contributors.
+https://github.com/compose-miuix-ui/miuix
+Original sources are licensed under Apache-2.0; see LICENSE.
+
+The soft-glass optical shader, style parameters and color processing are
+adapted from HaoZai000/softglass 0.1.1, commit
+92c131b967515e7c1186f1644fb544521de85caa (Apache-2.0).
+https://github.com/HaoZai000/softglass
+
+Soft-glass integration and progressive title-bar blur reference:
+HaoZai000/NexioSchedule (AGPL-3.0).
+https://github.com/HaoZai000/NexioSchedule
+Adaptations for HyperMusic retain the application's AGPL-3.0 license.
+
+Android common/actual dynamic-color implementations are compiled together.
+The original Gaussian components remain the fallback path. HyperMusic adds
+an optional soft-glass material at shared toolbar, popup, dialog, sheet and
+tab surfaces, without changing public Miuix component signatures.
+
+The newer official miuix-glass, miuix-material and miuix-blur sources supplied
+as E:/Code/miuix-main are included under src/main/kotlin/upstream (Apache-2.0).
+GlassDropdownPreference, GlassIconDropdownMenu, GlassDropdownPopup,
+GlassTransformPopup, GlassIconButton, GlassTabRow and GlassSegmentedTabRow
+provide the soft-glass menus, controls and their motion directly.
+The newer basic TopAppBar source and CascadingPopupDefaults are also included.
+
+Compatibility adaptations isolate the newer blur package as
+top.yukonga.miuix.kmp.glass.backdrop, combine Android expect/actual sources,
+provide optional application icon/entry slots, and adapt LayerOutsets to the
+Compose version used by this application. Dialog and bottom-sheet surfaces
+retain the shared application material adapter rather than the newer official
+GlassDialog and GlassBottomSheet wrappers.

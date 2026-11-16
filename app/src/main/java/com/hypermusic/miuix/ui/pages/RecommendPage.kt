@@ -1,4 +1,6 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 
 import android.content.Context
@@ -159,6 +161,7 @@ fun RecommendPage(
             isRefreshing = isRefreshing,
             onRefresh = { isRefreshing = true },
             pullToRefreshState = pullToRefreshState,
+            contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding())),
             topAppBarScrollBehavior = scrollBehavior,
             refreshTexts = listOf(
                 "继续下拉以刷新",
@@ -167,7 +170,7 @@ fun RecommendPage(
                 "刷新成功"
             ),
             modifier = Modifier
-                .padding(top = paddingValues.calculateTopPadding())
+                .padding(top = pageViewportTopInset(paddingValues.calculateTopPadding()))
                 .pageLayerBackdrop(blurBackdrop)
         ) {
             if (recommendState.isLoading && !isRefreshing) {
@@ -183,9 +186,9 @@ fun RecommendPage(
                         .fillMaxSize()
                         .overScrollVertical()
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(top = 8.dp, bottom = FeedBottomPads.More)
+                    contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding()) + 8.dp, bottom = FeedBottomPads.More)
                 ) {
-                    item { SearchEntry(onSearchClick) }
+                    if (showSearchAction) item { SearchEntry(onSearchClick) }
                     item { SmallTitle("专属推荐") }
 
                     // 2. 播放模式（仅卡片，无标题/解释）

@@ -1,4 +1,5 @@
 package com.hypermusic.miuix.viewmodel
+import com.hypermusic.miuix.ui.theme.ThemeSettings
 
 import android.app.Application
 import android.content.ComponentName
@@ -76,9 +77,9 @@ internal data class PlatformPlaybackSnapshot(
     internal fun belongsTo(platform: MusicPlatform): Boolean {
         val source = platform.trackSource
         return (additionalRadioId == null || additionalRadioId.startsWith("extra:${platform.storageKey}:")) &&
-            (track == null || track.source == source) &&
+            (track == null || track.source == source || !track.localDownloadId.isNullOrBlank()) &&
             listOf(playlist, original, fmTracks, intelligenceTracks).all { tracks ->
-                tracks.orEmpty().all { it?.source == source }
+                tracks.orEmpty().all { it?.source == source || !it?.localDownloadId.isNullOrBlank() }
             }
     }
 }
@@ -353,6 +354,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val prefs = application.getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
 
     init {
+        com.hypermusic.miuix.data.download.Downloads.init(application)
         // 恢复FM模式或心动模式状态
         val savedMode = if (PlatformManager.current == MusicPlatform.NETEASE && !prefs.contains("playback_snapshot_netease")) prefs.getString("play_mode_type", "normal") else "normal"
         when (savedMode) {
@@ -485,7 +487,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         dataAccountIndex = prefs.getInt("data_account_index", 0)
         // 加载保存的播放模式
         playMode = prefs.getInt("play_mode", 0)
-        playbackSpeed = prefs.getFloat("playback_speed", 1.0f).coerceIn(0.1f, 5f)
+        playbackSpeed = (prefs.getFloat("playback_speed", 1.0f).coerceIn(0.5f, 3f) * 10f).roundToInt() / 10f
         com.hypermusic.miuix.data.model.PlaybackQualityPreferences.migrate(prefs)
         platformQualityIndices = MusicPlatform.entries.associateWith {
             com.hypermusic.miuix.data.model.PlaybackQualityPreferences.resolve(prefs, it)
@@ -793,7 +795,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         prefs.edit().putString("last_track", trackJson).apply()
     }
 
-    private fun trackBelongsToCurrentPlatform(track: Track): Boolean = track.source == PlatformManager.current.trackSource
+    private fun trackBelongsToCurrentPlatform(track: Track): Boolean = track.source == PlatformManager.current.trackSource ||
+        !track.localDownloadId.isNullOrBlank()
 
     private fun playbackAccountFor(track: Track): String? = when (track.source) {
         "qqmusic" -> QqMusicApi.playbackAccountId
@@ -853,6 +856,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
         val generation = playbackGeneration
         viewModelScope.launch {
+            val downloaded = com.hypermusic.miuix.data.download.OfflineLibrary.find(track)
+            if (downloaded != null) {
+                if (generation != playbackGeneration || playerState.currentTrack != track) return@launch
+                mediaPlaybackService?.let { service ->
+                    service.setPlaylist(currentPlaylist)
+                    service.restoreTrackWithUrl(track, java.io.File(downloaded.path).toURI().toString(), position, resume, "download:${downloaded.id}")
+                }
+                playerState = playerState.copy(bitrate = downloaded.bitrate, audioQuality = downloaded.quality, lyricOffsetMs = 0)
+                return@launch
+            }
+            if (!track.localDownloadId.isNullOrBlank()) return@launch
             val cacheAccount = try { playbackAccountFor(track) } catch (e: Exception) {
                 if (generation == playbackGeneration && playerState.currentTrack == track) {
                     playerState = playerState.copy(isLoading = false, error = e.message)
@@ -1494,11 +1508,23 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun shufflePlaylist(playlist: List<Track>, qqGuess: Boolean = false, fromAlbum: Boolean = false) {
         if (playlist.isEmpty()) return
+        val first = playlist.random()
+        if (com.hypermusic.miuix.data.download.OfflineLibrary.versions(first).size > 1) {
+            com.hypermusic.miuix.data.download.Downloads.requestLocalVersion(first) { chosen ->
+                val keptTrack = com.hypermusic.miuix.data.download.OfflineLibrary.localTrack(chosen)
+                startShuffledTrack(keptTrack, playlist.map { if (it.source == first.source && it.id == first.id) keptTrack else it }
+                    .distinctBy { it.source to it.id }, qqGuess, fromAlbum)
+            }
+            return
+        }
+        startShuffledTrack(first, playlist, qqGuess, fromAlbum)
+    }
+
+    private fun startShuffledTrack(first: Track, playlist: List<Track>, qqGuess: Boolean, fromAlbum: Boolean) {
         if (playMode != 1) {
             playMode = 1
             prefs.edit().putInt("play_mode", playMode).apply()
         }
-        val first = playlist.random()
         if (qqGuess) playQqGuessTrack(first, playlist) else playTrackWithMode(first, playlist, fromAlbum)
     }
 
@@ -1511,6 +1537,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playTrackWithMode(track: Track, playlist: List<Track>, fromAlbum: Boolean = false) {
+        if (com.hypermusic.miuix.data.download.OfflineLibrary.versions(track).size > 1) {
+            com.hypermusic.miuix.data.download.Downloads.requestLocalVersion(track) { chosen ->
+                val keptTrack = com.hypermusic.miuix.data.download.OfflineLibrary.localTrack(chosen)
+                playTrackWithMode(keptTrack, playlist.map { if (it.source == track.source && it.id == track.id) keptTrack else it }
+                    .distinctBy { it.source to it.id }, fromAlbum)
+            }
+            return
+        }
         additionalRadioJob?.cancel()
         additionalRadioId = null
         albumPlayback = fromAlbum
@@ -2334,8 +2368,36 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun playTrack(track: Track) {
         if (!trackBelongsToCurrentPlatform(track)) return
+        if (com.hypermusic.miuix.data.download.OfflineLibrary.versions(track).size > 1) {
+            com.hypermusic.miuix.data.download.Downloads.requestLocalVersion(track) { chosen ->
+                val keptTrack = com.hypermusic.miuix.data.download.OfflineLibrary.localTrack(chosen)
+                currentPlaylist = currentPlaylist.map { if (it.source == track.source && it.id == track.id) keptTrack else it }.distinctBy { it.source to it.id }
+                originalPlaylist = originalPlaylist.map { if (it.source == track.source && it.id == track.id) keptTrack else it }.distinctBy { it.source to it.id }
+                playTrack(keptTrack)
+            }
+            return
+        }
         val requestId = ++playTrackRequestId
         val generation = playbackGeneration
+        val downloaded = com.hypermusic.miuix.data.download.OfflineLibrary.find(track)
+        if (downloaded != null) {
+            val service = mediaPlaybackService
+            if (service == null) { _toastMessage.trySend("播放器尚未就绪"); return }
+            playerState = playerState.copy(currentTrack = track, currentPosition = 0, isPlaying = true,
+                isLoading = false, error = null, bitrate = downloaded.bitrate, audioQuality = downloaded.quality, lyricOffsetMs = 0)
+            saveLastPlayedTrack(track); saveLastPlaylist()
+            savePlatformPlayback(PlatformManager.current, positionOverride = 0)
+            service.setPlaylist(currentPlaylist)
+            service.playTrackWithUrl(track, java.io.File(downloaded.path).toURI().toString(), "download:${downloaded.id}")
+            isCurrentTrackLiked = false
+            loadLyrics()
+            return
+        }
+        if (!track.localDownloadId.isNullOrBlank()) {
+            playerState = playerState.copy(isPlaying = false, isLoading = false, error = "本地歌曲文件已删除")
+            _toastMessage.trySend("本地歌曲文件已删除")
+            return
+        }
         if (track.source in setOf("bodian", "kugou", "qishui")) {
             viewModelScope.launch {
                 if (generation != playbackGeneration || requestId != playTrackRequestId) return@launch
@@ -2489,9 +2551,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         lyricState.lyrics?.let { mediaPlaybackService?.updateLyrics(it) }
     }
 
-    /** 设置播放速度，限制在 0.1x - 5.0x，并保留最多两位小数。 */
+    /** 设置播放速度，限制在 0.5x - 3.0x，精度为 0.1x。 */
     fun updatePlaybackSpeed(speed: Float) {
-        val normalized = (speed.coerceIn(0.1f, 5f) * 100f).roundToInt() / 100f
+        val normalized = (speed.coerceIn(0.5f, 3f) * 10f).roundToInt() / 10f
         if (normalized == playbackSpeed) return
         playbackSpeed = normalized
         prefs.edit().putFloat("playback_speed", normalized).apply()
@@ -2608,8 +2670,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun loadLyrics() {
+    fun loadLyrics(preferDownload: Boolean = true) {
         val track = playerState.currentTrack ?: return
+        com.hypermusic.miuix.data.diagnostics.CrashDiagnostics.update("歌曲", "平台=${track.source}, ID=${track.id}, 本地=${!track.localDownloadId.isNullOrBlank()}, 时长=${track.duration}ms")
+        com.hypermusic.miuix.data.diagnostics.CrashDiagnostics.update("歌词", "正在加载，优先本地=$preferDownload")
         lyricsLoadJob?.cancel()
         val generation = ++lyricsLoadGeneration
         val key = track.source to track.id
@@ -2625,6 +2689,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             playerState.currentTrack?.let { it.source to it.id } == key
         fun publish(result: LyricsRepository.LyricsLoadResult) {
             if (!isCurrent()) return
+            val lines = result.lyrics.lines
+            com.hypermusic.miuix.data.diagnostics.CrashDiagnostics.update("歌词",
+                "来源=${result.source}, 行数=${lines.size}, 逐字行=${lines.count { !it.words.isNullOrEmpty() }}, " +
+                    "衬词=${lines.count { it.isBackingVocal }}, 对唱=${lines.count { it.amllAgent.isNotBlank() }}, " +
+                    "异常行时序=${lines.count { it.endAt > 0 && it.endAt < it.startAt }}, " +
+                    "匹配=${result.matchedTrack?.source}:${result.matchedTrack?.id}, 字体=${ThemeSettings.lyricFontSize}, 逐字=${ThemeSettings.wordByWordLyrics}")
             lyricState = lyricState.copy(
                 lyrics = result.lyrics, source = result.source, rawDebugText = result.rawDebugText,
                 matchedTrack = result.matchedTrack, upgraded = result.upgraded,
@@ -2633,7 +2703,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             mediaPlaybackService?.updateLyrics(result.lyrics)
         }
         lyricsLoadJob = viewModelScope.launch {
-            LyricsRepository.load(track) { provisional ->
+            LyricsRepository.load(track, preferDownload = preferDownload) { provisional ->
                 withContext(Dispatchers.Main.immediate) { publish(provisional) }
             }.fold(
                 onSuccess = { publish(it) },

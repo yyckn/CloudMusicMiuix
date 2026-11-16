@@ -1,4 +1,5 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
 
 import android.app.Activity
 import android.content.Intent
@@ -79,7 +80,7 @@ fun SoundEffectsPage(onBack: () -> Unit) {
         BlurredBar(backdrop = backdrop) {
             SmallTopAppBar(title = "音效", color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                 scrollBehavior = scroll, defaultWindowInsetsPadding = false,
-                navigationIcon = { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.padding(start = 8.dp).clickable { onBack() }) },
+                navigationIcon = { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.padding(start = pageNavigationIconInset()).clickable { onBack() }) },
                 actions = {
                     if (AudioSettings.modified) {
                         Box {

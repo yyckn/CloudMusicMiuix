@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -204,7 +207,7 @@ fun ProfilePage(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
                             modifier = Modifier
-                                .padding(start = 8.dp)
+                                .padding(start = pageNavigationIconInset())
                                 .clickable { onBackClick() }
                         )
                     },
@@ -245,6 +248,7 @@ fun ProfilePage(
             isRefreshing = isRefreshing,
             onRefresh = { isRefreshing = true },
             pullToRefreshState = pullToRefreshState,
+            contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding())),
             topAppBarScrollBehavior = scrollBehavior,
             refreshTexts = listOf(
                 "继续下拉以刷新",
@@ -253,7 +257,7 @@ fun ProfilePage(
                 "刷新成功"
             ),
             modifier = Modifier
-                .padding(top = paddingValues.calculateTopPadding())
+                .padding(top = pageViewportTopInset(paddingValues.calculateTopPadding()))
                 .pageLayerBackdrop(blurBackdrop)
         ) {
             if (isLoading) {
@@ -269,7 +273,7 @@ fun ProfilePage(
                         .fillMaxSize()
                         .overScrollVertical()
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(bottom = FeedBottomPads.None),
+                    contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding()), bottom = FeedBottomPads.None),
                     overscrollEffect = null
                 ) {
                     // 头像和昵称

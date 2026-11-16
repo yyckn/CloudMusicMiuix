@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -31,12 +34,12 @@ fun LyricUpgradeManagePage(onBackClick: () -> Unit, modifier: Modifier = Modifie
         BlurredBar(backdrop = backdrop) {
             SmallTopAppBar(title = "管理歌词匹配", color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                 scrollBehavior = scrollBehavior, defaultWindowInsetsPadding = false,
-                navigationIcon = { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.padding(start = 8.dp).clickable { onBackClick() }) })
+                navigationIcon = { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.padding(start = pageNavigationIconInset()).clickable { onBackClick() }) })
         }
     }) { padding ->
-        LazyColumn(modifier = modifier.fillMaxSize().padding(top = padding.calculateTopPadding()).overScrollVertical()
+        LazyColumn(modifier = modifier.fillMaxSize().padding(top = pageViewportTopInset(padding.calculateTopPadding())).overScrollVertical()
             .nestedScroll(scrollBehavior.nestedScrollConnection).pageLayerBackdrop(backdrop),
-            contentPadding = PaddingValues(top = 12.dp, bottom = FeedBottomPads.None)) {
+            contentPadding = PaddingValues(top = pageScrollTopInset(padding.calculateTopPadding()) + 12.dp, bottom = FeedBottomPads.None)) {
             items(LyricMatches.entries, key = { "${it.original.source}:${it.original.id}" }) { entry ->
                 LyricTrackRow(entry.original, onDelete = { LyricMatches.remove(entry.original); onEntryRemoved(entry.original.id) })
             }

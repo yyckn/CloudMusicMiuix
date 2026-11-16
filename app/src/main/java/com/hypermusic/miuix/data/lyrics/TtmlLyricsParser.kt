@@ -65,7 +65,12 @@ object TtmlLyricsParser {
         val last = timed.maxOfOrNull { it.endAt }
         val start = time(e.getAttribute("begin")) ?: first ?: fallbackStart ?: return null
         val end = time(e.getAttribute("end")) ?: last ?: fallbackEnd ?: start
-        if (first == null || last == null) return start to end
+        if (first == null || last == null) {
+            // An explicit zero/reversed paragraph clock with no usable syllable clock cannot
+            // be repaired. Do not turn a placeholder into a lyric at 0ms or guess its timing.
+            if (e.hasAttribute("end") && end <= start) return null
+            return start to end
+        }
         if (end <= start) return first to last
 
         // Do not use a partial/broken word clock to rewrite an otherwise valid paragraph interval.

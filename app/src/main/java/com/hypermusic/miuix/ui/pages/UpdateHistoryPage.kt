@@ -1,4 +1,5 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
 
 import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.clickable
@@ -53,7 +54,7 @@ fun UpdateHistoryPage(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
-                            modifier = Modifier.padding(start = 8.dp).clickable { onBackClick() }
+                            modifier = Modifier.padding(start = pageNavigationIconInset()).clickable { onBackClick() }
                         )
                     }
                 )

@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -69,6 +72,7 @@ fun DeveloperOptionsPage(
     var showRawLyrics by remember { mutableStateOf(false) }
     var showProcessedLyrics by remember { mutableStateOf(false) }
     var showHardwareInfo by remember { mutableStateOf(false) }
+    var showCrashLogs by remember { mutableStateOf(false) }
     val rawText = buildString {
         if (lyricState.rawDebugText.isNotBlank()) {
             append("【实际歌词来源】\n").append(lyricState.source ?: "未知")
@@ -114,7 +118,7 @@ fun DeveloperOptionsPage(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
                             modifier = Modifier
-                                .padding(start = 8.dp)
+                                .padding(start = pageNavigationIconInset())
                                 .clickable { onBackClick() }
                         )
                     }
@@ -125,17 +129,18 @@ fun DeveloperOptionsPage(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = paddingValues.calculateTopPadding())
+                .padding(top = pageViewportTopInset(paddingValues.calculateTopPadding()))
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .pageLayerBackdrop(blurBackdrop),
-            contentPadding = PaddingValues(bottom = FeedBottomPads.None)
+            contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding()), bottom = FeedBottomPads.None)
         ) {
             item { Spacer(modifier = Modifier.height(12.dp)) }
             item { SmallTitle("应用") }
             item {
                 Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
                     ArrowPreference(title = "OOBE", summary = "重新打开首次设置", onClick = onOpenOobe)
+                    ArrowPreference(title = "闪退日志", summary = "查看、复制或分享异常退出记录", onClick = { showCrashLogs = true })
                 }
             }
             item { SmallTitle("设备") }
@@ -170,6 +175,7 @@ fun DeveloperOptionsPage(
         }
 
         HardwareInfoSheet(showHardwareInfo) { showHardwareInfo = false }
+        com.hypermusic.miuix.ui.components.CrashLogSheet(showCrashLogs) { showCrashLogs = false }
         OverlayBottomSheet(
             show = showRawLyrics,
             title = if (showProcessedLyrics) "最终处理歌词" else "歌词原数据",

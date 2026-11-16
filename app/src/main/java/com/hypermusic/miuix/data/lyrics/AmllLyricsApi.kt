@@ -116,7 +116,7 @@ object AmllLyricsApi {
             val lyrics = runCatching { TtmlLyricsParser.parse(xml, track, showRomanization) }.getOrNull() ?: return null
             if (lyrics.lines.isEmpty() && !lyrics.isPureMusic) return null
             return PlatformLyricResult(lyrics, lyrics.lines.any { !it.words.isNullOrEmpty() }, "apple",
-                rawDebugText = formatRawLyricSections("AMLL TTML 原歌词" to xml))
+                rawDebugText = formatRawLyricSections("AMLL TTML 原歌词" to xml), rawDocument = RawLyricDocument("ttml", xml))
         }
         suspend fun mirror(path: String, id: String): String? {
             if (id.isBlank() || !id.all(Char::isLetterOrDigit)) return null

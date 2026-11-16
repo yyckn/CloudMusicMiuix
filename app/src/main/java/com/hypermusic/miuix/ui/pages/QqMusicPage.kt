@@ -1,4 +1,6 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
@@ -39,7 +41,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 fun QqMusicPage(tab: Int, viewModel: MusicPlayerViewModel, onPlaylistClick: (String, String, String) -> Unit,
                 onLoginClick: () -> Unit, onAlbumClick: (Long, String) -> Unit = { _, _ -> }, onSearchClick: () -> Unit = {}, showSearchAction: Boolean = true,
                 onTopChartClick: (QqMusicApi.TopChart) -> Unit = {},
-                onFeatureClick: (com.hypermusic.miuix.data.model.PlaylistDetail) -> Unit = {}) {
+                onFeatureClick: (com.hypermusic.miuix.data.model.PlaylistDetail) -> Unit = {},
+                onLocalMusicClick: () -> Unit = {}) {
     val context = LocalContext.current
     val scrollBehavior = MiuixScrollBehavior()
     val pullToRefreshState = rememberPullToRefreshState()
@@ -66,16 +69,18 @@ fun QqMusicPage(tab: Int, viewModel: MusicPlayerViewModel, onPlaylistClick: (Str
             isRefreshing = loading,
             onRefresh = { if (tab == 0) viewModel.loadQqHome(force = true) else { viewModel.loadQqFavorites(force = true); viewModel.loadQqFavoriteAlbums(force = true) } },
             pullToRefreshState = pullToRefreshState,
+            contentPadding = PaddingValues(top = pageScrollTopInset(padding.calculateTopPadding())),
             topAppBarScrollBehavior = scrollBehavior,
             refreshTexts = listOf("继续下拉以刷新", "松手后刷新", "正在刷新...", "刷新成功"),
-            modifier = Modifier.padding(top = padding.calculateTopPadding()).pageLayerBackdrop(blurBackdrop)
+            modifier = Modifier.padding(top = pageViewportTopInset(padding.calculateTopPadding())).pageLayerBackdrop(blurBackdrop)
         ) {
         LazyColumn(modifier = Modifier.fillMaxSize().overScrollVertical().nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = if (tab == 0) PaddingValues(top = 8.dp, bottom = FeedBottomPads.More)
-                else PaddingValues(bottom = FeedBottomPads.More),
+            contentPadding = if (tab == 0) PaddingValues(top = pageScrollTopInset(padding.calculateTopPadding()) + 8.dp, bottom = FeedBottomPads.More)
+                else PaddingValues(top = pageScrollTopInset(padding.calculateTopPadding()) + 12.dp, bottom = FeedBottomPads.More),
             overscrollEffect = null) {
+            if (tab == 1) item { com.hypermusic.miuix.ui.components.LocalMusicCard(onLocalMusicClick) }
             if (tab == 0) {
-                item { SearchEntry(onSearchClick) }
+                if (showSearchAction) item { SearchEntry(onSearchClick) }
                 item { SmallTitle("专属推荐") }
                 item {
                     LazyRow(modifier = Modifier.padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -145,7 +150,6 @@ fun QqMusicPage(tab: Int, viewModel: MusicPlayerViewModel, onPlaylistClick: (Str
                     playlist.copy(title = com.hypermusic.miuix.data.model.displayQqLikedPlaylistTitle(playlist.title, QqMusicApi.accountName))
                 }
                 val others = playlists.filterNot { it.isPersonalCollection }
-                item { Spacer(Modifier.height(12.dp)) }
                 item { SmallTitle("个人收藏") }
                 if (personal.isEmpty() && !loading) {
                     item { Text("暂无收藏的音乐", modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
@@ -294,9 +298,9 @@ fun QqCommentPage(songId: Long, title: String, onBack: () -> Unit, modifier: Mod
                 Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             } })
     } }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()).pageLayerBackdrop(blurBackdrop)
+        LazyColumn(Modifier.fillMaxSize().padding(top = pageViewportTopInset(padding.calculateTopPadding())).pageLayerBackdrop(blurBackdrop)
             .overScrollVertical().nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = FeedBottomPads.Standard),
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = pageScrollTopInset(padding.calculateTopPadding()) + 8.dp, bottom = FeedBottomPads.Standard),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (loading) item { Text("正在加载评论…") }
             error?.let { item { Text(it, modifier = Modifier.padding(16.dp)) } }
@@ -322,8 +326,8 @@ fun QqArtistPage(artistMid: String, viewModel: MusicPlayerViewModel, onBack: () 
     Scaffold(topBar = { SmallTopAppBar(title = if (albumId != null) "QQ音乐专辑" else "QQ音乐歌手", navigationIcon = {
         Text("返回", modifier = Modifier.clickable { onBack() }.padding(12.dp))
     }) }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 140.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(top = pageViewportTopInset(padding.calculateTopPadding())),
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = pageScrollTopInset(padding.calculateTopPadding()), bottom = 140.dp)) {
             if (loading) item { Text("正在加载…", modifier = Modifier.padding(16.dp)) }
             error?.let { item { Text(it, modifier = Modifier.padding(16.dp)) } }
             if (!loading && error == null && songs.isEmpty()) item { Text("暂无歌曲", modifier = Modifier.padding(16.dp)) }

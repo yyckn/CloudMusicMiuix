@@ -22,7 +22,8 @@ data class PlatformLyricResult(
     val hasWordLines: Boolean,
     val platform: String,
     val rawDebugText: String = "",
-    val matchedTrack: Track? = null
+    val matchedTrack: Track? = null,
+    val rawDocument: RawLyricDocument? = null
 )
 
 /**
@@ -195,6 +196,7 @@ object QqMusicLyricsApi {
             lyrics = lyrics,
             hasWordLines = lyrics.lines.any { !it.words.isNullOrEmpty() },
             platform = "qq",
+            rawDocument = RawLyricDocument(if (isQrcContent(encryptedText)) "qrc" else "lrc", encryptedText, translation, romanization = rawRomanization),
             rawDebugText = formatRawLyricSections("QQ 歌曲 ID" to ref.id, "QQ 歌曲 MID" to ref.mid,
                 "QQ 原歌词 / QRC（解密后）" to encryptedText, "翻译" to translation, "罗马音" to rawRomanization)
         )
@@ -250,6 +252,7 @@ object QqMusicLyricsApi {
             lyrics = lyrics,
             hasWordLines = false,
             platform = "qq",
+            rawDocument = RawLyricDocument("lrc", lyric, translation, romanization = decryptMaybePlain(root.str("roma"))),
             rawDebugText = formatRawLyricSections("QQ 歌曲 MID" to mid, "QQ 原歌词 / LRC" to lyric,
                 "翻译" to translation, "罗马音" to decryptMaybePlain(root.str("roma")))
         )

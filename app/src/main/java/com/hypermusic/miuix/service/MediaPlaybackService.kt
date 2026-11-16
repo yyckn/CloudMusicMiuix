@@ -229,6 +229,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
 
     override fun onCreate() {
         super.onCreate()
+        com.hypermusic.miuix.data.download.Downloads.init(this)
         ThemeSettings.init(this)
         AudioSettings.init(this)
         com.hypermusic.miuix.data.lyrics.LyricMatches.init(this)
@@ -435,9 +436,11 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
             "qqmusic" -> dataSourceFactory.setDefaultRequestProperties(mapOf("Referer" to "https://y.qq.com/"))
             "netease" -> dataSourceFactory.setDefaultRequestProperties(mapOf("Referer" to "https://music.163.com"))
         }
-        val cachedDataSource = if (currentIsPreview) null else runCatching {
+        val sourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(this, dataSourceFactory)
+        val localFile = android.net.Uri.parse(currentUrl).scheme in setOf("file", "content")
+        val cachedDataSource = if (currentIsPreview || localFile) null else runCatching {
             CacheDataSource.Factory().setCache(AudioCache.get(applicationContext))
-                .setUpstreamDataSourceFactory(dataSourceFactory)
+                .setUpstreamDataSourceFactory(sourceFactory)
                 .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         }.getOrNull()
         val soundProcessor = SoundAudioProcessor().also { it.albumPlayback = albumPlayback }
@@ -451,7 +454,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                     .build()
         }
         return ExoPlayer.Builder(this, renderers)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(cachedDataSource ?: dataSourceFactory))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(cachedDataSource ?: sourceFactory))
             .build()
             .apply {
                 setAudioAttributes(media3AudioAttributes, false)
@@ -514,7 +517,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
 
     /** 设置播放速度（ExoPlayer 支持 0.1x - 5.0x）。 */
     fun setPlaybackSpeed(speed: Float) {
-        playbackSpeed = speed.coerceIn(0.1f, 5f)
+        playbackSpeed = speed.coerceIn(0.5f, 3f)
         player?.setPlaybackSpeed(playbackSpeed)
         updatePlaybackState(
             if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
@@ -922,6 +925,8 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     private fun loadAlbumArtAndShowNotification(track: Track) {
         serviceScope.launch(Dispatchers.IO) {
             val bitmap = try {
+                val local = com.hypermusic.miuix.data.download.OfflineLibrary.cover(track)
+                if (local != null) BitmapFactory.decodeFile(local.absolutePath) else {
                 val connection = URL(track.imgUrl).openConnection() as HttpURLConnection
                 try {
                     connection.doInput = true
@@ -929,6 +934,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                     connection.inputStream.use { BitmapFactory.decodeStream(it) }
                 } finally {
                     connection.disconnect()
+                }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load album art", e)

@@ -55,7 +55,8 @@ internal fun AsyncImage(
     filterQuality: FilterQuality = FilterQuality.Low, clipToBounds: Boolean = true
 ) {
     val failed = rememberMusicImageFallbackPainter()
-    coil.compose.AsyncImage(model = model, contentDescription = contentDescription, modifier = modifier,
+    val localModel = (model as? String)?.let { com.hypermusic.miuix.data.download.OfflineLibrary.coverForUrl(it) }
+    coil.compose.AsyncImage(model = localModel ?: model, contentDescription = contentDescription, modifier = modifier,
         imageLoader = imageLoader, placeholder = placeholder, error = error ?: failed, fallback = fallback ?: error ?: failed,
         onLoading = onLoading, onSuccess = onSuccess, onError = onError,
         alignment = alignment, contentScale = contentScale, alpha = alpha, colorFilter = colorFilter,

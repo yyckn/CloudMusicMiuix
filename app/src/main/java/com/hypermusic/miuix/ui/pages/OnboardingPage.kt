@@ -1,4 +1,5 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
 
 import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -241,7 +242,7 @@ private fun OnboardingWelcome(completed: Boolean, onClick: () -> Unit, onBack: (
     Scaffold(containerColor = Color.Transparent, topBar = {
         if (completed) SmallTopAppBar(title = "", color = Color.Transparent, navigationIcon = {
             Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回",
-                tint = Color.White, modifier = Modifier.padding(start = 8.dp).clickable { onBack() })
+                tint = Color.White, modifier = Modifier.padding(start = pageNavigationIconInset()).clickable { onBack() })
         })
     }, bottomBar = {
         Surface(color = Color.Transparent) {
@@ -343,7 +344,7 @@ private fun OnboardingScaffold(
     Scaffold(topBar = {
         SmallTopAppBar(title = "", navigationIcon = {
             Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回",
-                modifier = Modifier.padding(start = 8.dp).clickable { onBack() })
+                modifier = Modifier.padding(start = pageNavigationIconInset()).clickable { onBack() })
         })
     }, bottomBar = {
         Surface(color = MiuixTheme.colorScheme.surface) {

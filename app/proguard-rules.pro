@@ -64,4 +64,6 @@
 -dontwarn java.awt.image.**
 -dontwarn javax.imageio.**
 -keep class com.hypermusic.miuix.data.download.DownloadEntry { *; }
+-keep class com.hypermusic.miuix.data.download.OfflineLibrary$SavedLyrics { *; }
+-keep class com.hypermusic.miuix.data.lyrics.RawLyricDocument { *; }
 -keep class com.hypermusic.miuix.data.cache.AudioCache$CachedAudio { *; }

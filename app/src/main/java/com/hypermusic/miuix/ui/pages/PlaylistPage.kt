@@ -1,4 +1,6 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,6 +69,7 @@ fun PlaylistPage(
     onNavigateToAlbum: (Long, String) -> Unit = { _, _ -> },
     onSearchClick: () -> Unit = {},
     showSearchAction: Boolean = true,
+    onLocalMusicClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -117,24 +120,27 @@ fun PlaylistPage(
         }
     ) { paddingValues ->
         if (!isLoggedIn) {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = paddingValues.calculateTopPadding())
-                    .pageLayerBackdrop(blurBackdrop),
-                contentAlignment = Alignment.Center
+                    .padding(top = paddingValues.calculateTopPadding() + 12.dp)
+                    .pageLayerBackdrop(blurBackdrop)
             ) {
+                com.hypermusic.miuix.ui.components.LocalMusicCard(onLocalMusicClick)
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 Text(
                     text = "登录后即可查看我的收藏",
                     fontSize = 16.sp,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                 )
+                }
             }
         } else {
             PullToRefresh(
                 isRefreshing = isRefreshing,
                 onRefresh = { isRefreshing = true },
                 pullToRefreshState = pullToRefreshState,
+                contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding())),
                 topAppBarScrollBehavior = scrollBehavior,
                 refreshTexts = listOf(
                     "继续下拉以刷新",
@@ -143,7 +149,7 @@ fun PlaylistPage(
                     "刷新成功"
                 ),
                 modifier = Modifier
-                    .padding(top = paddingValues.calculateTopPadding())
+                    .padding(top = pageViewportTopInset(paddingValues.calculateTopPadding()))
                     .pageLayerBackdrop(blurBackdrop)
             ) {
                 LazyColumn(
@@ -152,10 +158,10 @@ fun PlaylistPage(
                         .overScrollVertical()
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
                     // 更多垫高：迷你播放器 + 底部导航
-                    contentPadding = PaddingValues(bottom = FeedBottomPads.More),
+                    contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding()) + 12.dp, bottom = FeedBottomPads.More),
                     overscrollEffect = null
                 ) {
-                    item { Spacer(modifier = Modifier.size(12.dp)) }
+                    item { com.hypermusic.miuix.ui.components.LocalMusicCard(onLocalMusicClick) }
 
                     // 个人收藏
                     item { SmallTitle("个人收藏") }

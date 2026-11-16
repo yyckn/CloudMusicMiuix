@@ -78,62 +78,7 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             com.hypermusic.miuix.data.lyrics.KugouLyricsApi.init(applicationContext)
             com.hypermusic.miuix.data.lyrics.QishuiLyricsApi.init(applicationContext)
             com.hypermusic.miuix.data.lyrics.LyricExclusionRules.init(applicationContext)
-            val (url, extension, quality) = if (track.source == "bodian") {
-                val client = com.hypermusic.miuix.data.api.BodianClient(applicationContext, playback = true)
-                val auth = com.hypermusic.miuix.data.api.BodianAuth(applicationContext, client)
-                val revision = auth.sessionRevision()
-                check(auth.currentAccount(playback = true)?.uid == entry.accountId) { "下载账号已移除或已切换，请重新下载" }
-                val requested = when (entry.qualityIndex) {
-                    0 -> com.hypermusic.miuix.data.api.BodianPlayback.Quality.LOSSLESS
-                    1 -> com.hypermusic.miuix.data.api.BodianPlayback.Quality.HIGH
-                    else -> com.hypermusic.miuix.data.api.BodianPlayback.Quality.STANDARD
-                }
-                val audio = com.hypermusic.miuix.data.api.BodianPlayback(client).resolve(track, requested)
-                check(audio.preview == null) { "该歌曲只提供试听片段，不能下载完整歌曲" }
-                check(auth.sessionRevision() == revision && auth.currentAccount(playback = true)?.uid == entry.accountId) { "下载账号已切换，请重新下载" }
-                Triple(audio.url, requested.format, "未知音质")
-            } else if (track.source == "qishui") {
-                val api = com.hypermusic.miuix.data.api.QishuiClient(applicationContext, playback = true)
-                val auth = com.hypermusic.miuix.data.api.QishuiAuth(applicationContext, api)
-                val revision = auth.sessionGeneration()
-                check(auth.account(playback = true)?.userId == entry.accountId) { "下载账号已切换，请重新下载" }
-                val requested = when (entry.qualityIndex) {
-                    0 -> com.hypermusic.miuix.data.api.QishuiPlayback.Quality.HIRES
-                    1 -> com.hypermusic.miuix.data.api.QishuiPlayback.Quality.LOSSLESS
-                    2 -> com.hypermusic.miuix.data.api.QishuiPlayback.Quality.HIGH
-                    else -> com.hypermusic.miuix.data.api.QishuiPlayback.Quality.STANDARD
-                }
-                val detail = com.hypermusic.miuix.data.api.QishuiCatalog(api).songDetail(track.id.removePrefix("qishui_"))
-                val audio = com.hypermusic.miuix.data.api.QishuiPlayback(api).resolve(detail, requested)
-                check(!audio.preview) { "该歌曲只提供试听片段，不能下载完整歌曲" }
-                check(auth.sessionGeneration() == revision && auth.account(playback = true)?.userId == entry.accountId) { "下载账号已切换，请重新下载" }
-                Triple(audio.url, "bin", audio.qualityLabel())
-            } else if (track.source == "kugou") {
-                val api = com.hypermusic.miuix.data.api.KugouClient(applicationContext)
-                val auth = com.hypermusic.miuix.data.api.KugouAuth(applicationContext, api)
-                val revision = auth.sessionGeneration()
-                check(auth.account(playback = true)?.userId == entry.accountId) { "下载账号已切换，请重新下载" }
-                val requested = when (entry.qualityIndex) {
-                    0 -> com.hypermusic.miuix.data.api.KugouPlayback.Quality.HIRES
-                    1 -> com.hypermusic.miuix.data.api.KugouPlayback.Quality.LOSSLESS
-                    2 -> com.hypermusic.miuix.data.api.KugouPlayback.Quality.HIGH
-                    else -> com.hypermusic.miuix.data.api.KugouPlayback.Quality.STANDARD
-                }
-                val audio = com.hypermusic.miuix.data.api.KugouPlayback(api, auth).resolve(track, requested)
-                check(!audio.preview) { "该歌曲只提供试听片段，不能下载完整歌曲" }
-                check(auth.sessionGeneration() == revision && auth.account(playback = true)?.userId == entry.accountId) { "下载账号已切换，请重新下载" }
-                val suffix = audio.extension ?: runCatching { java.net.URI(audio.url).path.substringAfterLast('.', "").lowercase() }.getOrDefault("")
-                    .takeIf { it in setOf("mp3", "flac", "m4a", "aac", "ogg", "wav") } ?: "bin"
-                Triple(audio.url, suffix, audio.qualityLabel())
-            } else if (track.source == "qqmusic") {
-                if (entry.accountId != null) check(QqMusicApi.accounts.any { it.credential.musicId == entry.accountId }) { "下载账号已移除，请重新下载" }
-                val audio = QqMusicApi.getSongAudio(track.id, track.qqMediaMid, entry.qualityIndex, entry.accountId).getOrThrow()
-                Triple(audio.url, audio.extension, audio.quality)
-            } else if (track.source == "netease") {
-                val cookie = entry.accountId?.let { NeteaseApi.getAccountCookie(it) ?: error("下载账号已移除，请重新下载") }
-                val (url, bitrate, type) = NeteaseApi.getSongUrl(track.id, AudioQuality.neteaseBitrate(entry.qualityIndex), accountCookie = cookie).getOrThrow()
-                Triple(url, type.ifBlank { "mp3" }, AudioQuality.neteaseActual(bitrate, type))
-            } else error("暂不支持该音乐平台的下载")
+            val (url, extension, quality) = DownloadAudioResolver.resolve(applicationContext, entry)
             require(url.isNotBlank()) { "未获得歌曲地址" }
             val request = Request.Builder().url(url).apply {
                 when (track.source) {
@@ -167,7 +112,8 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
                     }
                 } }
                 check(count > 0 && (total < 0 || count == total)) { "歌曲文件下载不完整" }
-                Downloads.update(id) { it.copy(bytes = count, total = total, state = "tagging") }
+                // Retain the untagged audio size, including transfers without Content-Length.
+                Downloads.update(id) { it.copy(bytes = count, total = count, state = "tagging") }
             }
             coroutineContext.ensureActive()
             check(Downloads.entries.any { it.id == id }) { "任务已删除" }
@@ -175,11 +121,13 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             val header = part.inputStream().use { input -> ByteArray(512).let { bytes -> bytes.copyOf(input.read(bytes).coerceAtLeast(0)) } }
             check(!AudioFileFormat.looksLikeErrorDocument(header)) { "服务器没有返回音频文件" }
             val ext = AudioFileFormat.detect(header) ?: requestedExt
+            Downloads.update(id) { it.copy(format = ext) }
             val finalFile = folder.resolve("$id.$ext")
             savedFile = finalFile
             check(part.renameTo(finalFile)) { "无法保存歌曲" }
             val warnings = mutableListOf<String>()
-            val lyric = LyricsRepository.load(track).getOrNull()?.lyrics?.let(::formatEmbeddedLyrics).orEmpty()
+            val lyricResult = LyricsRepository.load(track, preferDownload = false).getOrNull()
+            val lyric = lyricResult?.lyrics?.let(::formatEmbeddedLyrics).orEmpty()
             if (lyric.isBlank()) warnings += "歌词不可用"
             val cover = if (track.imgUrl.isNotBlank()) runCatching {
                 client.newCall(Request.Builder().url(track.imgUrl).build()).execute().use { response ->
@@ -187,11 +135,14 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
                 }
             }.getOrNull() else null
             if (cover == null) warnings += "封面不可用"
+            runCatching { OfflineLibrary.save(entry, cover, lyricResult) }
+                .onSuccess { warnings += it }.onFailure { warnings += "离线资料未完整保存：${it.message}" }
             val staging = folder.resolve("$id-tag.$ext")
             try {
                 finalFile.copyTo(staging, overwrite = true)
                 org.jaudiotagger.tag.TagOptionSingleton.getInstance().isAndroid = true
                 val audio = AudioFileIO.read(staging)
+                Downloads.update(id) { it.copy(bitrate = (audio.audioHeader.bitRateAsNumber.coerceIn(0L, Int.MAX_VALUE.toLong() / 1000) * 1000).toInt()) }
                 if (track.source == "bodian") {
                     val rate = audio.audioHeader.bitRateAsNumber.coerceIn(0L, Int.MAX_VALUE.toLong() / 1000).toInt() * 1000
                     val actual = com.hypermusic.miuix.data.model.bodianActualQuality(ext == "flac", rate)
@@ -232,11 +183,12 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             coroutineContext.ensureActive()
             if (!Downloads.finish(id, finalFile.absolutePath, finalFile.length(), warnings.joinToString("；"))) {
                 finalFile.delete()
+                OfflineLibrary.remove(id)
                 return@withContext Result.failure()
             }
             Result.success()
         } catch (e: kotlinx.coroutines.CancellationException) {
-            part.delete(); savedFile?.delete(); throw e
+            part.delete(); savedFile?.delete(); OfflineLibrary.remove(id); throw e
         } catch (e: NetworkConfirmationNeeded) {
             part.delete(); savedFile?.delete()
             Downloads.requireNetworkDecision(id)
@@ -247,6 +199,7 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             Result.retry()
         } catch (e: Exception) {
             part.delete(); savedFile?.delete()
+            OfflineLibrary.remove(id)
             Downloads.update(id) { it.copy(state = "failed", message = e.message ?: "下载失败") }
             Result.failure()
         }

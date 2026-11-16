@@ -1,4 +1,6 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -229,6 +231,7 @@ fun SettingsPage(
             isRefreshing = isRefreshing,
             onRefresh = { isRefreshing = true },
             pullToRefreshState = pullToRefreshState,
+            contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding())),
             topAppBarScrollBehavior = scrollBehavior,
             refreshTexts = listOf(
                 "继续下拉以刷新",
@@ -237,7 +240,7 @@ fun SettingsPage(
                 "刷新成功"
             ),
             modifier = Modifier
-                .padding(top = paddingValues.calculateTopPadding())
+                .padding(top = pageViewportTopInset(paddingValues.calculateTopPadding()))
                 .pageLayerBackdrop(blurBackdrop)
         ) {
             LazyColumn(
@@ -245,7 +248,7 @@ fun SettingsPage(
                     .fillMaxSize()
                     .overScrollVertical()
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = FeedBottomPads.More),
+                contentPadding = PaddingValues(top = pageScrollTopInset(paddingValues.calculateTopPadding()), bottom = FeedBottomPads.More),
                 overscrollEffect = null
             ) {
                 item { Spacer(modifier = Modifier.size(12.dp)) }

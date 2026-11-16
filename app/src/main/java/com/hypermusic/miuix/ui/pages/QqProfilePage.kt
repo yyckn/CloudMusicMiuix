@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.pageViewportTopInset
+import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -93,7 +96,7 @@ fun QqProfilePage(onBackClick: () -> Unit, onLogout: () -> Unit, selectedAccount
                 defaultWindowInsetsPadding = false,
                 navigationIcon = {
                     Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回",
-                        modifier = Modifier.padding(start = 8.dp).clickable { onBackClick() })
+                        modifier = Modifier.padding(start = pageNavigationIconInset()).clickable { onBackClick() })
                 },
                 actions = {
                     OverlayIconDropdownMenu(entry = DropdownEntry(items = listOf(
@@ -105,11 +108,12 @@ fun QqProfilePage(onBackClick: () -> Unit, onLogout: () -> Unit, selectedAccount
         }
     }) { padding ->
         PullToRefresh(isRefreshing = refreshing, onRefresh = { refreshing = true }, pullToRefreshState = refreshState,
+            contentPadding = PaddingValues(top = pageScrollTopInset(padding.calculateTopPadding())),
             topAppBarScrollBehavior = scrollBehavior,
             refreshTexts = listOf("继续下拉以刷新", "松手后刷新", "正在刷新...", "刷新成功"),
-            modifier = Modifier.padding(top = padding.calculateTopPadding()).pageLayerBackdrop(backdrop)) {
+            modifier = Modifier.padding(top = pageViewportTopInset(padding.calculateTopPadding())).pageLayerBackdrop(backdrop)) {
             LazyColumn(modifier = Modifier.fillMaxSize().overScrollVertical().nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = FeedBottomPads.None), overscrollEffect = null) {
+                contentPadding = PaddingValues(top = pageScrollTopInset(padding.calculateTopPadding()), bottom = FeedBottomPads.None), overscrollEffect = null) {
                 item {
                     Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         AsyncImage(model = profile?.avatarUrl ?: account?.avatarUrl, contentDescription = "头像",

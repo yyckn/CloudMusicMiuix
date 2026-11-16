@@ -24,6 +24,7 @@ object ThemeSettings {
     private const val KEY_AUTO_COLLAPSE_FLOATING_PLAYER = "auto_collapse_floating_player"
     private const val KEY_LIQUID_GLASS_EFFECT = "liquid_glass_effect"
     private const val KEY_DEFAULT_HOME_PAGE = "default_home_page"
+    private const val KEY_CONTROL_STYLE = "control_style"
     private const val KEY_FOLLOW_MONET = "follow_monet"
     private const val KEY_LYRIC_FONT_SIZE = "lyric_font_size"
     private const val KEY_LYRIC_TRANSLATION_RATIO = "lyric_translation_ratio"
@@ -46,7 +47,7 @@ object ThemeSettings {
     var themeModeIndex by mutableIntStateOf(2)
         private set
 
-    var useFloatingBar by mutableStateOf(false)
+    var useFloatingBar by mutableStateOf(true)
         private set
 
     var gaussianBlurEnabled by mutableStateOf(true)
@@ -57,7 +58,7 @@ object ThemeSettings {
         private set
     var floatingBarAlignmentRevision by mutableIntStateOf(0)
         private set
-    var autoCollapseFloatingPlayer by mutableStateOf(true)
+    var autoCollapseFloatingPlayer by mutableStateOf(false)
         private set
 
     // 液态玻璃效果: 0=通透(0.4), 1=中等(0.6), 2=厚重(0.8)
@@ -71,7 +72,7 @@ object ThemeSettings {
             else -> 0.4f
         }
 
-    var accentIndex by mutableIntStateOf(0)
+    var accentIndex by mutableIntStateOf(SOURCE_ACCENT_INDEX)
         private set
     var paletteStyleIndex by mutableIntStateOf(4)
         private set
@@ -81,13 +82,17 @@ object ThemeSettings {
     var defaultHomePageIndex by mutableIntStateOf(0)
         private set
 
+    // 0=柔光玻璃，1=高斯模糊；默认使用柔光玻璃。
+    var controlStyleIndex by mutableIntStateOf(0)
+        private set
+
     var predictiveBackEnabled by mutableStateOf(true)
         private set
     var pageScale by mutableStateOf(1f)
         private set
 
     // 跟随系统莫奈取色
-    var followMonet by mutableStateOf(false)
+    var followMonet by mutableStateOf(true)
         private set
 
     var lyricFontSize by mutableIntStateOf(32)
@@ -159,16 +164,17 @@ object ThemeSettings {
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         themeModeIndex = prefs?.getInt(KEY_THEME_MODE, 2) ?: 2
-        useFloatingBar = prefs?.getBoolean(KEY_USE_FLOATING_BAR, false) ?: false
+        useFloatingBar = prefs?.getBoolean(KEY_USE_FLOATING_BAR, true) ?: true
         gaussianBlurEnabled = prefs?.getBoolean(KEY_GAUSSIAN_BLUR, true) ?: true
         floatingBarAlignmentIndex = prefs?.getInt(KEY_FLOATING_BAR_ALIGNMENT, 1) ?: 1
-        autoCollapseFloatingPlayer = prefs?.getBoolean(KEY_AUTO_COLLAPSE_FLOATING_PLAYER, true) ?: true
+        autoCollapseFloatingPlayer = prefs?.getBoolean(KEY_AUTO_COLLAPSE_FLOATING_PLAYER, false) ?: false
         liquidGlassEffectIndex = prefs?.getInt(KEY_LIQUID_GLASS_EFFECT, 1) ?: 1
-        followMonet = prefs?.getBoolean(KEY_FOLLOW_MONET, false) ?: false
-        accentIndex = (prefs?.getInt("accent_index", 0) ?: 0).coerceIn(0, SOURCE_ACCENT_INDEX)
+        followMonet = prefs?.getBoolean(KEY_FOLLOW_MONET, true) ?: true
+        accentIndex = (prefs?.getInt("accent_index", SOURCE_ACCENT_INDEX) ?: SOURCE_ACCENT_INDEX).coerceIn(0, SOURCE_ACCENT_INDEX)
         paletteStyleIndex = (prefs?.getInt("palette_style_index", 4) ?: 4).coerceIn(0, 8)
         colorSpecIndex = (prefs?.getInt("color_spec_index", 1) ?: 1).coerceIn(0, 1)
         defaultHomePageIndex = (prefs?.getInt(KEY_DEFAULT_HOME_PAGE, 0) ?: 0).coerceIn(0, 1)
+        controlStyleIndex = (prefs?.getInt(KEY_CONTROL_STYLE, 0) ?: 0).takeIf { it in 0..1 } ?: 0
         predictiveBackEnabled = prefs?.getBoolean("predictive_back", true) ?: true
         pageScale = (prefs?.getFloat("page_scale", 1f) ?: 1f).coerceIn(0.8f, 1.1f)
         lyricFontSize = prefs?.getInt(KEY_LYRIC_FONT_SIZE, 32) ?: 32
@@ -195,6 +201,10 @@ object ThemeSettings {
     fun updateDefaultHomePage(index: Int) {
         defaultHomePageIndex = index.coerceIn(0, 1)
         prefs?.edit()?.putInt(KEY_DEFAULT_HOME_PAGE, defaultHomePageIndex)?.apply()
+    }
+    fun updateControlStyle(index: Int) {
+        controlStyleIndex = index.coerceIn(0, 1)
+        prefs?.edit()?.putInt(KEY_CONTROL_STYLE, controlStyleIndex)?.apply()
     }
     fun updatePredictiveBack(value: Boolean) { predictiveBackEnabled = value; prefs?.edit()?.putBoolean("predictive_back", value)?.apply() }
     fun updatePageScale(value: Float) { pageScale = value.coerceIn(0.8f, 1.1f); prefs?.edit()?.putFloat("page_scale", pageScale)?.apply() }

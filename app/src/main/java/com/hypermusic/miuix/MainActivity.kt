@@ -158,6 +158,7 @@ import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 sealed class Screen {
     object Main : Screen()
     object Search : Screen()
+    object LocalMusic : Screen()
     data class PlaylistDetail(
         val coverUrl: String = "",
         val title: String = "",
@@ -667,14 +668,14 @@ fun MainScreen(
                                 ) { tab ->
                                     if (com.hypermusic.miuix.data.api.PlatformManager.current in setOf(com.hypermusic.miuix.data.api.MusicPlatform.BODIAN, com.hypermusic.miuix.data.api.MusicPlatform.KUGOU, com.hypermusic.miuix.data.api.MusicPlatform.QISHUI) && tab in 0..1) {
                                         com.hypermusic.miuix.ui.pages.AdditionalPlatformPage(com.hypermusic.miuix.data.api.PlatformManager.current, tab,
-                                            recommendations = viewModel.additionalRecommendations,
+                                            recommendations = viewModel.additionalRecommendations, onLocalMusicClick = { navigateTo(Screen.LocalMusic) },
                                             onRadio = { id -> viewModel.enterAdditionalRadio(id) { showPlayerPage = true } },
                                             onLogin = { navigateTo(Screen.QrLogin) }, onSearch = openSearch, showSearchAction = false,
                                             onPlaylist = { id, cover, title -> viewModel.loadPlaylistDetail(id); navigateTo(Screen.PlaylistDetail(cover, title, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey(id))) },
                                             onAlbum = { id, cover -> navigateTo(Screen.Album(id, initialCoverUrl = cover, sharedCoverKey = com.hypermusic.miuix.ui.components.albumCoverKey(id, false))) },
                                             cache = additionalLibraryCaches.getOrPut(com.hypermusic.miuix.data.api.PlatformManager.current) { com.hypermusic.miuix.ui.pages.AdditionalLibraryCache() })
                                     } else if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ && (tab == 0 || tab == 1)) {
-                                        com.hypermusic.miuix.ui.pages.QqMusicPage(tab, viewModel,
+                                        com.hypermusic.miuix.ui.pages.QqMusicPage(tab, viewModel, onLocalMusicClick = { navigateTo(Screen.LocalMusic) },
                                             onPlaylistClick = { id, cover, title -> viewModel.loadPlaylistDetail(id); navigateTo(Screen.PlaylistDetail(cover, title, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey(id))) },
                                             onLoginClick = { navigateTo(Screen.QrLogin) }, onAlbumClick = { id, cover -> navigateTo(Screen.Album(id, true, cover, com.hypermusic.miuix.ui.components.albumCoverKey(id, true))) }, onSearchClick = openSearch, showSearchAction = false,
                                             onTopChartClick = { chart ->
@@ -706,7 +707,7 @@ fun MainScreen(
                                         onAlbumClick = { albumId -> navigateTo(Screen.Album(albumId)) },
                                         modifier = Modifier.padding(padding)
                                     )
-                                1 -> PlaylistPage(
+                                1 -> PlaylistPage(onLocalMusicClick = { navigateTo(Screen.LocalMusic) },
                                     recommendState = viewModel.recommendState,
                                     onPlaylistClick = { playlistId, coverUrl, title ->
                                         viewModel.loadPlaylistDetail(playlistId)
@@ -994,7 +995,7 @@ fun MainScreen(
                                     Column {
                                         playerBar(Modifier, false, 12.dp, false, true, false)
                                         // 普通底栏（半透明模糊）
-                                        BlurredBar(backdrop = blurBackdrop) {
+                                        BlurredBar(backdrop = blurBackdrop, isTopBar = false) {
                                             NavigationBar(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 color = if (blurBackdrop != null) {
@@ -1143,14 +1144,14 @@ fun MainScreen(
                             ) { tab ->
                                 if (com.hypermusic.miuix.data.api.PlatformManager.current in setOf(com.hypermusic.miuix.data.api.MusicPlatform.BODIAN, com.hypermusic.miuix.data.api.MusicPlatform.KUGOU, com.hypermusic.miuix.data.api.MusicPlatform.QISHUI) && tab in 0..1) {
                                         com.hypermusic.miuix.ui.pages.AdditionalPlatformPage(com.hypermusic.miuix.data.api.PlatformManager.current, tab,
-                                            recommendations = viewModel.additionalRecommendations,
+                                            recommendations = viewModel.additionalRecommendations, onLocalMusicClick = { navigateTo(Screen.LocalMusic) },
                                             onRadio = { id -> viewModel.enterAdditionalRadio(id) { showPlayerPage = true } },
                                             onLogin = { navigateTo(Screen.QrLogin) }, onSearch = openSearch, showSearchAction = true,
                                             onPlaylist = { id, cover, title -> viewModel.loadPlaylistDetail(id); navigateTo(Screen.PlaylistDetail(cover, title, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey(id))) },
                                             onAlbum = { id, cover -> navigateTo(Screen.Album(id, initialCoverUrl = cover, sharedCoverKey = com.hypermusic.miuix.ui.components.albumCoverKey(id, false))) },
                                             cache = additionalLibraryCaches.getOrPut(com.hypermusic.miuix.data.api.PlatformManager.current) { com.hypermusic.miuix.ui.pages.AdditionalLibraryCache() })
                                     } else if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ && (tab == 0 || tab == 1)) {
-                                        com.hypermusic.miuix.ui.pages.QqMusicPage(tab, viewModel,
+                                        com.hypermusic.miuix.ui.pages.QqMusicPage(tab, viewModel, onLocalMusicClick = { navigateTo(Screen.LocalMusic) },
                                             onPlaylistClick = { id, cover, title -> viewModel.loadPlaylistDetail(id); navigateTo(Screen.PlaylistDetail(cover, title, sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey(id))) },
                                             onLoginClick = { navigateTo(Screen.QrLogin) }, onAlbumClick = { id, cover -> navigateTo(Screen.Album(id, true, cover, com.hypermusic.miuix.ui.components.albumCoverKey(id, true))) }, onSearchClick = openSearch,
                                             onTopChartClick = { chart ->
@@ -1179,7 +1180,7 @@ fun MainScreen(
                                     },
                                     modifier = Modifier.padding(padding)
                                 )
-                                1 -> PlaylistPage(
+                                1 -> PlaylistPage(onLocalMusicClick = { navigateTo(Screen.LocalMusic) },
                                     recommendState = viewModel.recommendState,
                                     onPlaylistClick = { playlistId, coverUrl, title ->
                                         viewModel.loadPlaylistDetail(playlistId)
@@ -1240,7 +1241,7 @@ fun MainScreen(
                     }
                     }
                 }
-                is Screen.Search -> {
+                is Screen.Search, is Screen.LocalMusic -> {
                     Scaffold(
                         bottomBar = {
                             Box(
@@ -1371,7 +1372,15 @@ fun MainScreen(
                                 }
                             }
                         }
-                        com.hypermusic.miuix.ui.pages.SearchPage(viewModel, session = searchSession, listState = searchListState, onBack = {
+                        if (screen is Screen.LocalMusic) com.hypermusic.miuix.ui.pages.LocalMusicPage(
+                            viewModel = viewModel, onBack = { if (!navigateBack()) currentScreen = Screen.Main },
+                            onArtist = { navigateTo(Screen.Artist(it)) },
+                            onAlbum = { id, qq -> navigateTo(Screen.Album(id, qq)) },
+                            onComment = { track -> navigateTo(Screen.Comment(track.id, track.title, track.qqSongId.takeIf { track.source == "qqmusic" && it > 0 })) },
+                            sharedTransitionScope = this@SharedTransitionLayout,
+                            animatedVisibilityScope = this@AnimatedContent,
+                            modifier = Modifier.then(secondaryLayerModifier)
+                        ) else com.hypermusic.miuix.ui.pages.SearchPage(viewModel, session = searchSession, listState = searchListState, onBack = {
                             if (!navigateBack()) currentScreen = Screen.Main
                         }, onPlaylist = { id, cover, title ->
                             viewModel.loadPlaylistDetail(id)
