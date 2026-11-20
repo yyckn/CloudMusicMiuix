@@ -17,7 +17,8 @@ internal class BodianApiException(val code: Int?, message: String) : Exception(m
 /** 波点桌面接口传输层；账号及设备标识独立于其他平台。 */
 internal class BodianClient(context: Context, private val client: OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(com.hypermusic.miuix.data.lyrics.LyricRequests)
-    .connectTimeout(15, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build(), private val playback: Boolean = false) {
+    .connectTimeout(15, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build(), private val playback: Boolean = false,
+    private val playbackAccountIdOverride: String? = null) {
     private val appContext = context.applicationContext
     private val prefs = context.applicationContext.getSharedPreferences("bodian_prefs", Context.MODE_PRIVATE)
     internal val deviceId = synchronized(deviceLock) {
@@ -30,7 +31,11 @@ internal class BodianClient(context: Context, private val client: OkHttpClient =
              body: String? = null, method: String = "GET", lyric: Boolean = false): JsonObject {
         require(path.startsWith('/') && !path.contains(".."))
         require(method == "GET" || method == "POST")
-        val selected = if (playback && !anonymous) AdditionalAccounts(appContext, MusicPlatform.BODIAN).playbackAccount() else null
+        val selected = if (playback && !anonymous) {
+            val accounts = AdditionalAccounts(appContext, MusicPlatform.BODIAN)
+            if (playbackAccountIdOverride != null) accounts.accounts().firstOrNull { it.id == playbackAccountIdOverride }
+                ?: error("播放账号已移除，请重新选择") else accounts.playbackAccount()
+        } else null
         val uid = if (anonymous) "-1" else if (playback) selected?.id ?: "-1" else prefs.getString("uid", "-1").orEmpty()
         val token = if (anonymous) "" else if (playback) selected?.values?.get("token").orEmpty() else prefs.getString("token", "").orEmpty()
         val query = LinkedHashMap(parameters).apply { put("uid", uid); put("token", token) }

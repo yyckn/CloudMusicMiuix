@@ -126,7 +126,7 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             savedFile = finalFile
             check(part.renameTo(finalFile)) { "无法保存歌曲" }
             val warnings = mutableListOf<String>()
-            val lyricResult = LyricsRepository.load(track, preferDownload = false).getOrNull()
+            val lyricResult = LyricsRepository.load(entry.originalTrack ?: track, preferDownload = false).getOrNull()
             val lyric = lyricResult?.lyrics?.let(::formatEmbeddedLyrics).orEmpty()
             if (lyric.isBlank()) warnings += "歌词不可用"
             val cover = if (track.imgUrl.isNotBlank()) runCatching {

@@ -68,6 +68,8 @@ fun ManageAccountsPage(
     dataAccountIndex: Int = 0,
     onPlaybackAccountChange: (Int) -> Unit = {},
     onDataAccountChange: (Int) -> Unit = {},
+    playbackOptions: List<String>? = null,
+    playbackInterop: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -178,7 +180,7 @@ fun ManageAccountsPage(
             }
             
             // 账号切换（仅在2个以上账号时显示）
-            if (accounts.size >= 2) {
+            if (maxOf(accounts.size, playbackOptions?.size ?: 0) >= 2) {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                     SmallTitle("账号切换")
@@ -193,11 +195,11 @@ fun ManageAccountsPage(
                         WindowDropdownPreference(
                             title = "播放歌曲",
                             summary = "需登录带有VIP账号后才能播放部分版权歌曲",
-                            items = accountOptions,
+                            items = playbackOptions ?: accountOptions,
                             selectedIndex = playbackAccountIndex,
                             onSelectedIndexChange = onPlaybackAccountChange
                         )
-                        WindowDropdownPreference(
+                        if (accounts.isNotEmpty()) WindowDropdownPreference(
                             title = "获取数据",
                             summary = "个人歌单、每日推荐、收藏等",
                             items = accountOptions,
@@ -205,6 +207,12 @@ fun ManageAccountsPage(
                             onSelectedIndexChange = onDataAccountChange
                         )
                     }
+                }
+                if (playbackInterop) item {
+                    Text("*QQ音乐和波点音乐支持播放歌曲账号互通",
+                        style = MiuixTheme.textStyles.footnote1,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp))
                 }
             }
         }

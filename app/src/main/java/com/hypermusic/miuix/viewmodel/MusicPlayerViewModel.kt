@@ -19,6 +19,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hypermusic.miuix.data.api.NeteaseApi
 import com.hypermusic.miuix.data.api.QqMusicApi
+import com.hypermusic.miuix.data.api.SharedPlaybackAccounts
 import com.hypermusic.miuix.data.api.PlatformManager
 import com.hypermusic.miuix.data.api.MusicPlatform
 import com.hypermusic.miuix.data.model.Playlist
@@ -433,28 +434,33 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 playerState = playerState.copy(isPlaying = isPlaying)
             }
             mediaPlaybackService?.onAudioFormatChanged = { track, format, cacheFormat ->
-                if (track.source == "bodian" && playerState.currentTrack?.id == track.id && playerState.currentTrack?.source == track.source) {
+                val audioTrack = mediaPlaybackService?.currentAudioTrack ?: track
+                if (audioTrack.source == "bodian" && playerState.currentTrack?.id == track.id && playerState.currentTrack?.source == track.source) {
                     val bitrate = format.averageBitrate.takeIf { it > 0 } ?: format.peakBitrate.takeIf { it > 0 } ?: 0
                     val quality = com.hypermusic.miuix.data.model.bodianActualQuality(format.sampleMimeType == "audio/flac", bitrate)
                     if (quality != "未知音质") {
                         playerState = playerState.copy(bitrate = bitrate, audioQuality = quality)
                         viewModelScope.launch(Dispatchers.IO) {
-                            com.hypermusic.miuix.data.cache.AudioCache.updateActual(getApplication(), track, cacheFormat, bitrate, quality)
+                            com.hypermusic.miuix.data.cache.AudioCache.updateActual(getApplication(), audioTrack, cacheFormat, bitrate, quality)
                         }
                     }
                 }
             }
             mediaPlaybackService?.onCachedPlaybackError = { track, position, resume, format ->
                 viewModelScope.launch {
+                    if (playerState.currentTrack != track) return@launch
+                    val audioTrack = mediaPlaybackService?.currentAudioTrack ?: track
                     val account = try { playbackAccountFor(track) } catch (e: Exception) {
                         _toastMessage.trySend(e.message ?: "无法读取账号信息")
                         return@launch
                     }
-                    com.hypermusic.miuix.data.cache.AudioCache.forget(getApplication(), track, account, requestedQualityFor(track))
+                    val route = activeCrossPlayback
+                    com.hypermusic.miuix.data.cache.AudioCache.forget(getApplication(), audioTrack,
+                        route?.account?.id ?: account, route?.qualityIndex ?: requestedQualityFor(track))
                     withContext(Dispatchers.IO) {
                         runCatching {
                             val cache = com.hypermusic.miuix.data.cache.AudioCache.get(getApplication())
-                            cache.removeResource(com.hypermusic.miuix.data.cache.AudioCache.key(track.source, track.id, format))
+                            cache.removeResource(com.hypermusic.miuix.data.cache.AudioCache.key(audioTrack.source, audioTrack.id, format))
                         }
                     }
                     if (playerState.currentTrack == track) prepareTrack(track, position, resume)
@@ -864,6 +870,44 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         else -> error("不支持该音乐平台")
     }
 
+    private var activeCrossPlayback: SharedPlaybackAccounts.Route? = null
+
+    private fun prepareCrossPlayback(track: Track, position: Long, resume: Boolean, restore: Boolean) {
+        val generation = playbackGeneration
+        val requestId = playTrackRequestId
+        viewModelScope.launch {
+            fun stillCurrent() = generation == playbackGeneration && requestId == playTrackRequestId && playerState.currentTrack == track
+            try {
+                val route = SharedPlaybackAccounts.route(getApplication(), track, requestedQualityFor(track))
+                    ?: error("播放账号已切换，请重试")
+                if (!stillCurrent()) return@launch
+                activeCrossPlayback = route
+                val downloaded = com.hypermusic.miuix.data.download.OfflineLibrary.find(route.track)
+                val cached = if (downloaded == null) completeCachedAudio(route.track, route.account.id, route.qualityIndex) else null
+                val audio = if (cached == null && downloaded == null) SharedPlaybackAccounts.audio(getApplication(), route) else null
+                if (!stillCurrent() || SharedPlaybackAccounts.selected(getApplication(), track.source) != route.account) return@launch
+                val service = mediaPlaybackService ?: error("播放器尚未就绪")
+                service.setPlaylist(currentPlaylist)
+                val format = downloaded?.let { "download:${it.id}" } ?: cached?.format
+                    ?: "${route.account.id}:${route.qualityIndex}:${audio!!.quality}:${audio.bitrate}:${audio.extension}"
+                if (audio != null && !audio.preview) rememberCachedFormat(route.track, route.account.id, route.qualityIndex,
+                    format, audio.bitrate, audio.quality)
+                val url = downloaded?.let { java.io.File(it.path).toURI().toString() } ?: audio?.url ?: "https://127.0.0.1/cached"
+                if (restore) service.restoreTrackWithUrl(track, url, position, resume, format, audio?.preview == true, route.track)
+                else service.playTrackWithUrl(track, url, format, audio?.preview == true, route.track)
+                playerState = playerState.copy(isLoading = false, isPlaying = resume, error = null,
+                    bitrate = downloaded?.bitrate ?: cached?.bitrate ?: audio!!.bitrate,
+                    audioQuality = downloaded?.quality ?: cached?.quality ?: audio!!.quality, lyricOffsetMs = 0L)
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) {
+                if (stillCurrent()) {
+                    playerState = playerState.copy(isLoading = false, isPlaying = false, error = e.message)
+                    _toastMessage.trySend(e.message ?: "跨平台播放失败")
+                }
+            }
+        }
+    }
+
     private fun prepareTrack(track: Track, position: Long = 0L, resume: Boolean = false) {
         if (!isBound) {
             pendingTrack = track
@@ -873,7 +917,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
         val generation = playbackGeneration
         viewModelScope.launch {
-            val downloaded = com.hypermusic.miuix.data.download.OfflineLibrary.find(track)
+            val downloaded = if (SharedPlaybackAccounts.isCrossPlatform(getApplication(), track)) null
+                else com.hypermusic.miuix.data.download.OfflineLibrary.find(track)
             if (downloaded != null) {
                 if (generation != playbackGeneration || playerState.currentTrack != track) return@launch
                 mediaPlaybackService?.let { service ->
@@ -884,6 +929,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 return@launch
             }
             if (!track.localDownloadId.isNullOrBlank()) return@launch
+            activeCrossPlayback = null
+            if (SharedPlaybackAccounts.isCrossPlatform(getApplication(), track)) {
+                prepareCrossPlayback(track, position, resume, restore = true)
+                return@launch
+            }
             val cacheAccount = try { playbackAccountFor(track) } catch (e: Exception) {
                 if (generation == playbackGeneration && playerState.currentTrack == track) {
                     playerState = playerState.copy(isLoading = false, error = e.message)
@@ -2406,9 +2456,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
             return
         }
+        activeCrossPlayback = null
         val requestId = ++playTrackRequestId
         val generation = playbackGeneration
-        val downloaded = com.hypermusic.miuix.data.download.OfflineLibrary.find(track)
+        val downloaded = if (SharedPlaybackAccounts.isCrossPlatform(getApplication(), track)) null
+            else com.hypermusic.miuix.data.download.OfflineLibrary.find(track)
         if (downloaded != null) {
             val service = mediaPlaybackService
             if (service == null) { _toastMessage.trySend("播放器尚未就绪"); return }
@@ -2425,6 +2477,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         if (!track.localDownloadId.isNullOrBlank()) {
             playerState = playerState.copy(isPlaying = false, isLoading = false, error = "本地歌曲文件已删除")
             _toastMessage.trySend("本地歌曲文件已删除")
+            return
+        }
+        if (SharedPlaybackAccounts.isCrossPlatform(getApplication(), track)) {
+            if (mediaPlaybackService?.isPlaying() == true) mediaPlaybackService?.togglePlayPause()
+            playerState = playerState.copy(isLoading = true, isPlaying = false, error = null, currentTrack = track,
+                currentPosition = 0, bitrate = 0, audioQuality = "", lyricOffsetMs = 0)
+            saveLastPlayedTrack(track); saveLastPlaylist()
+            savePlatformPlayback(PlatformManager.current, positionOverride = 0)
+            isCurrentTrackLiked = false
+            loadLyrics(); checkIfCurrentTrackLiked()
+            prepareCrossPlayback(track, 0L, resume = true, restore = false)
             return
         }
         if (track.source in setOf("bodian", "kugou", "qishui")) {
@@ -2666,8 +2729,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             val index = if (track.isCloudDisk) dataAccountIndex else playbackAccountIndex
             NeteaseApi.getAccounts().getOrNull(index)?.userId
         }
-        try { com.hypermusic.miuix.data.download.Downloads.enqueue(getApplication(), track, accountId) }
-        catch (e: Exception) { _toastMessage.trySend(e.message ?: "无法创建下载任务") }
+        viewModelScope.launch {
+            try { com.hypermusic.miuix.data.download.Downloads.enqueue(getApplication(), track, accountId) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { _toastMessage.trySend(e.message ?: "无法创建下载任务") }
+        }
     }
 
     fun downloadCover(track: Track?) {

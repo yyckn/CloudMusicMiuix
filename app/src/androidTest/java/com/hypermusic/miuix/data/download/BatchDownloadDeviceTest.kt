@@ -25,7 +25,7 @@ class BatchDownloadDeviceTest {
         assumeTrue(context.packageName.endsWith(".glasstest"))
         instrumentation.uiAutomation.executeShellCommand("am start -W -n ${context.packageName}/androidx.activity.ComponentActivity")
             .use { java.io.FileInputStream(it.fileDescriptor).readBytes() }
-        val activity = instrumentation.startActivitySync(Intent(context, ComponentActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as ComponentActivity
+        val activity = instrumentation.startActivitySync(Intent(context, ComponentActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)) as ComponentActivity
         val prefix = "batch-${UUID.randomUUID()}"
         val tracks = (1..3).map { Track("$prefix-$it", "批量测试$it", "歌手", "", "专辑", "", source = "offline-test", sourceUrl = "", imgUrl = "", duration = 1000) }
         val folder = context.filesDir.resolve("downloads").apply { mkdirs() }
@@ -65,13 +65,18 @@ class BatchDownloadDeviceTest {
             assertTrue(requireNotNull(target).config[SemanticsActions.OnClick].action!!.invoke())
         }
         fun clickText(text: String) { instrumentation.runOnMainSync {
-            click(nodes().first { it.config.getOrNull(SemanticsProperties.Text)?.any { t -> t.text == text } == true })
+            click(nodes().first { it.config.getOrNull(SemanticsProperties.Text)?.any { t ->
+                if (text.startsWith("开始下载")) t.text.startsWith("$text（") else t.text == text } == true })
         }; Thread.sleep(500) }
         fun hasText(text: String): Boolean {
             var result = false
-            instrumentation.runOnMainSync { result = nodes().any { it.config.getOrNull(SemanticsProperties.Text)?.any { t -> t.text == text } == true } }
+            instrumentation.runOnMainSync { result = nodes().any { it.config.getOrNull(SemanticsProperties.Text)?.any { t ->
+                if (text.startsWith("开始下载")) t.text.startsWith("$text（") else t.text == text } == true } }
             return result
         }
+        // Toolbar semantics are not guaranteed to precede the list after recomposition.
+        fun selectAllCheckbox() = nodes().filter { it.config.getOrNull(SemanticsProperties.ToggleableState) != null }
+            .minBy { it.boundsInWindow.top }
         try {
             instrumentation.runOnMainSync { activity.setContent {
                 top.yukonga.miuix.kmp.theme.MiuixTheme {
@@ -85,16 +90,17 @@ class BatchDownloadDeviceTest {
             }; BatchDownloads.open(tracks) }
             Thread.sleep(1200)
             assertTrue(hasText("开始下载3首歌曲"))
-            instrumentation.runOnMainSync { click(nodes().first { it.config.getOrNull(SemanticsProperties.ToggleableState) != null }) }
+            instrumentation.runOnMainSync { click(selectAllCheckbox()) }
             Thread.sleep(300)
             assertTrue(hasText("开始下载0首歌曲"))
-            instrumentation.runOnMainSync { click(nodes().first { it.config.getOrNull(SemanticsProperties.ToggleableState) != null }) }
+            instrumentation.runOnMainSync { click(selectAllCheckbox()) }
             Thread.sleep(300)
+            assertTrue(hasText("开始下载3首歌曲"))
             clickText("批量测试1")
             assertTrue(hasText("开始下载2首歌曲"))
             instrumentation.runOnMainSync {
                 assertTrue(nodes().any { it.config.getOrNull(SemanticsProperties.ToggleableState) == androidx.compose.ui.state.ToggleableState.Indeterminate })
-                click(nodes().first { it.config.getOrNull(SemanticsProperties.ToggleableState) != null })
+                click(selectAllCheckbox())
             }
             Thread.sleep(300)
             clickText("开始下载3首歌曲")
@@ -110,19 +116,19 @@ class BatchDownloadDeviceTest {
             assertTrue(fixtures.all { java.io.File(it.path).isFile })
             assertTrue(Downloads.entries.any { it.track.id == tracks[1].id && it.id !in fixtures.map { f -> f.id } })
             assertFalse(Downloads.entries.any { it.track.id == tracks[0].id && it.id !in fixtures.map { f -> f.id } })
-            instrumentation.runOnMainSync { BatchDownloads.start(context, listOf(tracks.first())) }
+            instrumentation.runOnMainSync { kotlinx.coroutines.runBlocking { BatchDownloads.start(context, listOf(tracks.first())) } }
             Thread.sleep(500)
             assertNotNull(Downloads.duplicateConfirmation)
             clickText("取消")
             assertNull(Downloads.duplicateConfirmation)
             assertTrue(fixtures.all { java.io.File(it.path).isFile })
             val beforeCancel = Downloads.entries.map { it.id }.toSet()
-            instrumentation.runOnMainSync { BatchDownloads.start(context, tracks.take(2)) }
+            instrumentation.runOnMainSync { kotlinx.coroutines.runBlocking { BatchDownloads.start(context, tracks.take(2)) } }
             Thread.sleep(500)
             clickText("全部取消下载")
             assertNull(BatchDownloads.conflicts)
             assertEquals(beforeCancel, Downloads.entries.map { it.id }.toSet())
-            instrumentation.runOnMainSync { BatchDownloads.start(context, tracks.take(2)) }
+            instrumentation.runOnMainSync { kotlinx.coroutines.runBlocking { BatchDownloads.start(context, tracks.take(2)) } }
             Thread.sleep(500)
             clickText("全部重新下载")
             assertNull(BatchDownloads.conflicts)

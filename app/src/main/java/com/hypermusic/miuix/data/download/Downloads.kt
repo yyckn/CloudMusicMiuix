@@ -21,7 +21,8 @@ data class DownloadEntry(
     val state: String = "queued", val bytes: Long = 0, val total: Long = -1,
     val path: String = "", val quality: String = "", val message: String = "",
     val allowMobile: Boolean = false, val waitForWifi: Boolean = false,
-    val bitrate: Int = 0, val format: String = "", val replaces: List<String> = emptyList()
+    val bitrate: Int = 0, val format: String = "", val replaces: List<String> = emptyList(),
+    val originalTrack: Track? = null
 )
 
 data class DuplicateDownloadRequest(val proposed: DownloadEntry)
@@ -66,10 +67,10 @@ object Downloads {
         entry.replaces.orEmpty().filter { it != id }.forEach(::remove)
         return true
     }
-    fun enqueue(ctx: Context, track: Track, accountId: String?) {
+    suspend fun enqueue(ctx: Context, track: Track, accountId: String?) {
         submitPrepared(prepare(ctx, track, accountId))
     }
-    fun prepare(ctx: Context, track: Track, accountId: String?): DownloadEntry {
+    suspend fun prepare(ctx: Context, track: Track, accountId: String?): DownloadEntry {
         init(ctx)
         val key = when (track.source) { "qqmusic" -> "quality_qq"; "bodian" -> "quality_bodian"; "kugou" -> "quality_kugou"; "qishui" -> "quality_qishui"; else -> "quality_netease" }
         val configured = prefs.getInt(key, -1)
@@ -87,9 +88,12 @@ object Downloads {
             val client = com.hypermusic.miuix.data.api.QishuiClient(context)
             com.hypermusic.miuix.data.api.QishuiAuth(context, client).account(playback = true)?.userId
         } else accountId
-        return DownloadEntry(UUID.randomUUID().toString(), track, resolveDownloadQuality(configured, playbackQuality), actualAccountId)
+        val entry = DownloadEntry(UUID.randomUUID().toString(), track, resolveDownloadQuality(configured, playbackQuality), actualAccountId)
+        val route = com.hypermusic.miuix.data.api.SharedPlaybackAccounts.route(ctx, track, entry.qualityIndex)
+        return if (route != null) entry.copy(track = route.track, accountId = route.account.id,
+            qualityIndex = route.qualityIndex, originalTrack = track.copy(url = null)) else entry
     }
-    fun prepare(ctx: Context, track: Track): DownloadEntry {
+    suspend fun prepare(ctx: Context, track: Track): DownloadEntry {
         val playbackPrefs = ctx.getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
         val accountId = if (track.source == "qqmusic") com.hypermusic.miuix.data.api.QqMusicApi.playbackAccountId else {
             val index = playbackPrefs.getInt(if (track.isCloudDisk) "data_account_index" else "playback_account_index", 0)

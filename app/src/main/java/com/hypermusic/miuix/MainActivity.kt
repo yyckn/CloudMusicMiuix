@@ -1792,10 +1792,15 @@ fun MainScreen(
                 if (com.hypermusic.miuix.data.api.PlatformManager.current in setOf(com.hypermusic.miuix.data.api.MusicPlatform.BODIAN, com.hypermusic.miuix.data.api.MusicPlatform.KUGOU, com.hypermusic.miuix.data.api.MusicPlatform.QISHUI)) {
                     com.hypermusic.miuix.ui.pages.AdditionalAccountsPage(com.hypermusic.miuix.data.api.PlatformManager.current,
                         onBack = { if (!navigateBack()) currentScreen = Screen.Main },
-                        onLogin = { navigateTo(Screen.QrLogin) }, onChanged = { viewModel.checkIfCurrentTrackLiked() })
+                        onLogin = { navigateTo(Screen.QrLogin) }, onChanged = { viewModel.checkIfCurrentTrackLiked() },
+                        onProfile = { navigateTo(Screen.Profile(it)) })
                 } else if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ) {
                     val qq = com.hypermusic.miuix.data.api.QqMusicApi
+                    val context = LocalContext.current
                     val accounts = qq.accounts
+                    val routingRevision = com.hypermusic.miuix.data.api.SharedPlaybackAccounts.revision.intValue
+                    val sharedPlayback = com.hypermusic.miuix.data.api.SharedPlaybackAccounts.options(context, "qqmusic")
+                    val playbackSelection = com.hypermusic.miuix.data.api.SharedPlaybackAccounts.current(context, "qqmusic")
                     ManageAccountsPage(
                         accounts = accounts.map { AccountInfo(it.credential.musicId, it.name, it.avatarUrl,
                             if (it.credential.loginType == 1) "微信登录" else "QQ登录") },
@@ -1805,9 +1810,13 @@ fun MainScreen(
                         },
                         onLoginNewAccount = { navigateTo(Screen.QrLogin) },
                         activeAccountId = qq.dataAccountId,
-                        playbackAccountIndex = accounts.indexOfFirst { it.credential.musicId == qq.playbackAccountId }.coerceAtLeast(0),
+                        playbackAccountIndex = sharedPlayback.indexOfFirst { it.selection == playbackSelection }.coerceAtLeast(0),
                         dataAccountIndex = accounts.indexOfFirst { it.credential.musicId == qq.dataAccountId }.coerceAtLeast(0),
-                        onPlaybackAccountChange = { index -> accounts.getOrNull(index)?.let { qq.switchPlaybackAccount(it.credential.musicId) } },
+                        playbackOptions = sharedPlayback.map { it.label }, playbackInterop = true,
+                        onPlaybackAccountChange = { index -> sharedPlayback.getOrNull(index)?.let {
+                            runCatching { com.hypermusic.miuix.data.api.SharedPlaybackAccounts.select(context, "qqmusic", it.selection) }
+                                .onFailure { error -> android.widget.Toast.makeText(context, error.message ?: "切换账号失败", android.widget.Toast.LENGTH_SHORT).show() }
+                        } },
                         onDataAccountChange = { index ->
                             accounts.getOrNull(index)?.let {
                                 qq.switchDataAccount(it.credential.musicId)
@@ -1850,7 +1859,13 @@ fun MainScreen(
                 }
             }
             is Screen.Profile -> {
-                if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ) {
+                if (com.hypermusic.miuix.data.api.PlatformManager.current in setOf(com.hypermusic.miuix.data.api.MusicPlatform.BODIAN,
+                        com.hypermusic.miuix.data.api.MusicPlatform.KUGOU, com.hypermusic.miuix.data.api.MusicPlatform.QISHUI)) {
+                    com.hypermusic.miuix.ui.pages.AdditionalProfilePage(
+                        platform = com.hypermusic.miuix.data.api.PlatformManager.current, selectedAccountId = screen.accountId,
+                        onBack = { if (!navigateBack()) currentScreen = Screen.Main },
+                        onRemoved = { viewModel.checkIfCurrentTrackLiked(); if (!navigateBack()) currentScreen = Screen.Main })
+                } else if (com.hypermusic.miuix.data.api.PlatformManager.current == com.hypermusic.miuix.data.api.MusicPlatform.QQ) {
                     com.hypermusic.miuix.ui.pages.QqProfilePage(
                         selectedAccountId = screen.accountId,
                         onBackClick = { if (!navigateBack()) currentScreen = Screen.Main },

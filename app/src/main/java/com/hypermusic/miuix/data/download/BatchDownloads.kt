@@ -24,7 +24,7 @@ object BatchDownloads {
         selection = BatchDownloadSelection(UUID.randomUUID().toString(), distinctDownloadTracks(tracks), loadAll)
     }
     fun closeSelection() { selection = null }
-    fun start(context: Context, tracks: List<Track>) {
+    suspend fun start(context: Context, tracks: List<Track>) {
         val proposals = distinctDownloadTracks(tracks).map { Downloads.prepare(context, it) }
         val (duplicates, fresh) = partitionDownloadConflicts(proposals, Downloads.entries)
         selection = null

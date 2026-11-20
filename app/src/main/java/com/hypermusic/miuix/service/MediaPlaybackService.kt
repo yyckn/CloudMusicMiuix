@@ -323,6 +323,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     fun playTrack(track: Track) {
+        currentAudioTrack = track
         currentTrack = track
         serviceScope.launch {
             try {
@@ -336,7 +337,11 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
-    fun playTrackWithUrl(track: Track, url: String, cacheFormat: String = "unknown", isPreview: Boolean = false) {
+    var currentAudioTrack: Track? = null
+        private set
+
+    fun playTrackWithUrl(track: Track, url: String, cacheFormat: String = "unknown", isPreview: Boolean = false, audioTrack: Track = track) {
+        currentAudioTrack = audioTrack
         currentCacheFormat = cacheFormat
         currentIsPreview = isPreview
         currentTrack = track
@@ -357,7 +362,8 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
-    fun restoreTrackWithUrl(track: Track, url: String, position: Long, resume: Boolean, cacheFormat: String = "unknown", isPreview: Boolean = false) {
+    fun restoreTrackWithUrl(track: Track, url: String, position: Long, resume: Boolean, cacheFormat: String = "unknown", isPreview: Boolean = false, audioTrack: Track = track) {
+        currentAudioTrack = audioTrack
         currentCacheFormat = cacheFormat
         currentIsPreview = isPreview
         currentTrack = track
@@ -374,6 +380,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     fun prepareTrackWithUrl(track: Track, url: String) {
+        currentAudioTrack = track
         currentIsPreview = false
         currentTrack = track
         errorRetryCount = 0
@@ -416,8 +423,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
             else PlaybackStateCompat.STATE_PAUSED
         )
 
+        val audioTrack = currentAudioTrack ?: track
         val mediaItem = MediaItem.Builder().setUri(url)
-            .setCustomCacheKey(AudioCache.key(track.source, track.id, currentCacheFormat)).build()
+            .setCustomCacheKey(AudioCache.key(audioTrack.source, audioTrack.id, currentCacheFormat)).build()
         newPlayer.setMediaItem(mediaItem)
         if (startPosition > 0L) {
             newPlayer.seekTo(startPosition)
@@ -432,7 +440,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
 
     private fun createPlayer(track: Track): ExoPlayer {
         val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient).setUserAgent(USER_AGENT)
-        when (track.source) {
+        when ((currentAudioTrack ?: track).source) {
             "qqmusic" -> dataSourceFactory.setDefaultRequestProperties(mapOf("Referer" to "https://y.qq.com/"))
             "netease" -> dataSourceFactory.setDefaultRequestProperties(mapOf("Referer" to "https://music.163.com"))
         }
@@ -679,6 +687,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         favoriteTrack = null
         favorite = false
         currentTrack = null
+        currentAudioTrack = null
         currentUrl = null
         currentIsPreview = false
         currentLyrics = null

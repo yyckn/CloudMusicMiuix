@@ -46,6 +46,7 @@ internal fun BatchDownloadMenu(tracks: List<Track>, enabled: Boolean = true, loa
 @Composable
 internal fun BatchDownloadSheets() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val request = BatchDownloads.selection
     var tracks by remember(request?.id) { mutableStateOf(request?.tracks.orEmpty()) }
     var selected by remember(request?.id) { mutableStateOf(request?.tracks.orEmpty().map { it.downloadSongKey() }.toSet()) }
@@ -90,17 +91,22 @@ internal fun BatchDownloadSheets() {
         selectedEntries.any { previews[it.id]?.size == null } -> "大小未知"
         else -> Formatter.formatShortFileSize(context, selectedEntries.sumOf { previews[it.id]?.size ?: 0L })
     }
-    val checkState = when {
-        selected.isEmpty() -> ToggleableState.Off
-        selected.size == tracks.size -> ToggleableState.On
-        else -> ToggleableState.Indeterminate
-    }
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     OverlayBottomSheet(show = request != null, title = "批量下载", insideMargin = DpSize(12.dp, 0.dp),
         onDismissRequest = { if (!submitting) BatchDownloads.closeSelection() },
-        startAction = { Checkbox(checkState, enabled = !loading && !submitting && error == null, onClick = {
-            selected = if (checkState == ToggleableState.On) emptySet() else tracks.map { it.downloadSongKey() }.toSet()
-        }) },
+        startAction = {
+            // Read state inside the root overlay's composition, rather than capturing the
+            // header's initial value while the sheet is opening.
+            val checkState = when {
+                selected.isEmpty() -> ToggleableState.Off
+                selected.size == tracks.size -> ToggleableState.On
+                else -> ToggleableState.Indeterminate
+            }
+            Checkbox(checkState, enabled = !loading && !submitting && error == null, onClick = {
+                selected = if (selected.isNotEmpty() && selected.size == tracks.size) emptySet()
+                    else tracks.map { it.downloadSongKey() }.toSet()
+            })
+        },
         endAction = { IconButton(onClick = { if (!submitting) BatchDownloads.closeSelection() }) { Icon(MiuixIcons.Close, "关闭") } }) {
         Column(Modifier.fillMaxWidth().heightIn(max = 600.dp)) {
             if (loading) Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { InfiniteProgressIndicator() }
@@ -120,8 +126,11 @@ internal fun BatchDownloadSheets() {
                 .padding(top = 12.dp, bottom = 12.dp + bottomInset), colors = ButtonDefaults.textButtonColorsPrimary(),
                 enabled = selected.isNotEmpty() && !loading && !submitting && error == null, onClick = {
                     submitting = true
-                    try { BatchDownloads.start(context, tracks.filter { it.downloadSongKey() in selected }) }
-                    catch (e: Exception) { error = e.message ?: "无法创建下载任务"; submitting = false }
+                    scope.launch {
+                        try { BatchDownloads.start(context, tracks.filter { it.downloadSongKey() in selected }) }
+                        catch (e: CancellationException) { throw e }
+                        catch (e: Exception) { error = e.message ?: "无法创建下载任务"; submitting = false }
+                    }
                 })
         }
     }

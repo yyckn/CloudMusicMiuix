@@ -15,10 +15,9 @@ object DownloadAudioResolver {
         if (QqMusicApi.accounts.isEmpty()) QqMusicApi.init(context)
         if (NeteaseApi.getAccounts().isEmpty()) NeteaseApi.init(context)
             return@withContext if (track.source == "bodian") {
-                val client = com.hypermusic.miuix.data.api.BodianClient(context, playback = true)
-                val auth = com.hypermusic.miuix.data.api.BodianAuth(context, client)
-                val revision = auth.sessionRevision()
-                check(auth.currentAccount(playback = true)?.uid == entry.accountId) { "下载账号已移除或已切换，请重新下载" }
+                val client = com.hypermusic.miuix.data.api.BodianClient(context, playback = true, playbackAccountIdOverride = entry.accountId)
+                check(com.hypermusic.miuix.data.api.AdditionalAccounts(context, com.hypermusic.miuix.data.api.MusicPlatform.BODIAN)
+                    .accounts().any { it.id == entry.accountId }) { "下载账号已移除，请重新下载" }
                 val requested = when (entry.qualityIndex) {
                     0 -> com.hypermusic.miuix.data.api.BodianPlayback.Quality.LOSSLESS
                     1 -> com.hypermusic.miuix.data.api.BodianPlayback.Quality.HIGH
@@ -26,7 +25,8 @@ object DownloadAudioResolver {
                 }
                 val audio = com.hypermusic.miuix.data.api.BodianPlayback(client).resolve(track, requested)
                 check(audio.preview == null) { "该歌曲只提供试听片段，不能下载完整歌曲" }
-                check(auth.sessionRevision() == revision && auth.currentAccount(playback = true)?.uid == entry.accountId) { "下载账号已切换，请重新下载" }
+                check(com.hypermusic.miuix.data.api.AdditionalAccounts(context, com.hypermusic.miuix.data.api.MusicPlatform.BODIAN)
+                    .accounts().any { it.id == entry.accountId }) { "下载账号已移除，请重新下载" }
                 Triple(audio.url, requested.format, "未知音质")
             } else if (track.source == "qishui") {
                 val api = com.hypermusic.miuix.data.api.QishuiClient(context, playback = true)

@@ -106,7 +106,7 @@ class DownloadDedupDeviceTest {
             assertEquals(2, groupLocalDownloads(OfflineLibrary.available().filter { it.track.id == songId }).size)
             screenshot("grouped-list")
             val before = Downloads.entries.size
-            instrumentation.runOnMainSync { Downloads.enqueue(context, track, null) }
+            instrumentation.runOnMainSync { kotlinx.coroutines.runBlocking { Downloads.enqueue(context, track, null) } }
             Thread.sleep(600)
             assertNotNull(Downloads.duplicateConfirmation)
             assertEquals(before, Downloads.entries.size)
@@ -139,7 +139,7 @@ class DownloadDedupDeviceTest {
             assertEquals(1, OfflineLibrary.versions(track).size)
             back()
             // Re-download failure must preserve the retained complete file.
-            instrumentation.runOnMainSync { Downloads.showSheet = false; Downloads.enqueue(context, track, null) }
+            instrumentation.runOnMainSync { Downloads.showSheet = false; kotlinx.coroutines.runBlocking { Downloads.enqueue(context, track, null) } }
             Thread.sleep(300)
             val proposed = requireNotNull(Downloads.duplicateConfirmation).proposed
             instrumentation.runOnMainSync { Downloads.confirmDuplicateDownload() }

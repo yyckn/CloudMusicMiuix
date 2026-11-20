@@ -102,12 +102,10 @@ fun SettingsPage(
     val qqName = com.hypermusic.miuix.data.api.QqMusicApi.accountName
     val scrollBehavior = MiuixScrollBehavior()
     val context = LocalContext.current
-    var extraAccountRevision by remember { mutableIntStateOf(0) }
-    var showExtraLogout by remember { mutableStateOf(false) }
     val additionalRevision = com.hypermusic.miuix.data.api.AdditionalAccounts.revision.intValue
     val extraStore = remember(platform) { if (platform in setOf(com.hypermusic.miuix.data.api.MusicPlatform.BODIAN, com.hypermusic.miuix.data.api.MusicPlatform.KUGOU, com.hypermusic.miuix.data.api.MusicPlatform.QISHUI)) com.hypermusic.miuix.data.api.AdditionalAccounts(context, platform) else null }
     val extraMultiEnabled = remember(platform, additionalRevision) { extraStore?.enabled == true }
-    val extraAccount = remember(platform, profileVersion, extraAccountRevision, additionalRevision) {
+    val extraAccount = remember(platform, profileVersion, additionalRevision) {
         runCatching {
             when (platform) {
                 com.hypermusic.miuix.data.api.MusicPlatform.BODIAN -> {
@@ -266,7 +264,7 @@ fun SettingsPage(
                                         Spacer(modifier = Modifier.width(16.dp))
                                     }
                                 },
-                                onClick = { if (account == null && extraAccount.isSuccess) onLoginClick() else if (account != null) showExtraLogout = true }
+                                onClick = { if (account == null && extraAccount.isSuccess) onLoginClick() else if (account != null) onProfileClick() }
                             )
                             if (account != null || extraMultiEnabled) {
                                 SwitchPreference(checked = extraMultiEnabled, title = "多账号切换",
@@ -468,21 +466,6 @@ fun SettingsPage(
         summary = "当前账号数量大于1，需要删除部分账号才能关闭多账号功能。",
         onDismissRequest = { showAccountLimitDialog = false }) {
         TextButton(text = "确定", onClick = { showAccountLimitDialog = false }, modifier = Modifier.fillMaxWidth())
-    }
-    OverlayDialog(show = showExtraLogout, title = "退出账号", summary = "确定退出当前账号吗？",
-        onDismissRequest = { showExtraLogout = false }) {
-        TextButton(text = "取消", onClick = { showExtraLogout = false }, modifier = Modifier.fillMaxWidth())
-        TextButton(text = "退出账号", onClick = {
-            runCatching {
-                when (platform) {
-                    com.hypermusic.miuix.data.api.MusicPlatform.BODIAN -> { val api = com.hypermusic.miuix.data.api.BodianClient(context); com.hypermusic.miuix.data.api.BodianAuth(context, api).logout() }
-                    com.hypermusic.miuix.data.api.MusicPlatform.KUGOU -> { val api = com.hypermusic.miuix.data.api.KugouClient(context); com.hypermusic.miuix.data.api.KugouAuth(context, api).logout() }
-                    com.hypermusic.miuix.data.api.MusicPlatform.QISHUI -> { val api = com.hypermusic.miuix.data.api.QishuiClient(context); com.hypermusic.miuix.data.api.QishuiAuth(context, api).logout() }
-                    else -> Unit
-                }
-            }.onSuccess { extraAccountRevision++; onExtraAccountChanged() }.onFailure { android.widget.Toast.makeText(context, it.message ?: "退出账号失败", android.widget.Toast.LENGTH_SHORT).show() }
-            showExtraLogout = false
-        }, modifier = Modifier.fillMaxWidth())
     }
 
 }

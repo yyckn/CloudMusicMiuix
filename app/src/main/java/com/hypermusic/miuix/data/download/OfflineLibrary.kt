@@ -15,7 +15,7 @@ object OfflineLibrary {
     private val gson = Gson()
     private val repairMutex = kotlinx.coroutines.sync.Mutex()
     data class SavedLyrics(val raw: RawLyricDocument, val source: String?, val matchedTrack: Track?,
-        val upgraded: Boolean, val debugText: String, val selectionKey: String = "")
+        val upgraded: Boolean, val debugText: String, val selectionKey: String = "", val originalSelectionKey: String? = null)
     fun init(ctx: Context) { context = ctx.applicationContext }
     private fun folder(id: String): File {
         require(id.matches(Regex("[a-fA-F0-9-]{36}")))
@@ -27,14 +27,16 @@ object OfflineLibrary {
     }
     fun available() = Downloads.entries.filter { it.state == "complete" && File(it.path).isFile }
     fun latest(entries: List<DownloadEntry> = available()): DownloadEntry? = entries.maxByOrNull { File(it.path).lastModified() }
-    fun versions(track: Track) = available().filter { sameDownloadSong(it.track, track) }
+    fun versions(track: Track) = available().filter { sameDownloadSong(it.track, track) ||
+        it.originalTrack?.let { original -> sameDownloadSong(original, track) } == true }
     fun localTrack(entry: DownloadEntry) = entry.track.withStorageDefaults().copy(localDownloadId = entry.id, url = null)
     fun cover(entry: DownloadEntry, thumbnail: Boolean = false): File? {
         if (!::context.isInitialized) return null
         return runCatching { folder(entry.id).resolve(if (thumbnail) "thumbnail.jpg" else "cover.original").takeIf(File::isFile) }.getOrNull()
     }
     fun cover(track: Track, thumbnail: Boolean = false) = find(track)?.let { cover(it, thumbnail) }
-    fun coverForUrl(url: String): File? = Downloads.entries.firstOrNull { it.state == "complete" && it.track.imgUrl == url }?.let { cover(it) }
+    fun coverForUrl(url: String): File? = Downloads.entries.firstOrNull { it.state == "complete" &&
+        (it.track.imgUrl == url || it.originalTrack?.imgUrl == url) }?.let { cover(it) }
     private fun write(file: File, text: String) {
         file.parentFile?.mkdirs()
         val tmp = File(file.parentFile, "${file.name}.tmp")
@@ -58,7 +60,7 @@ object OfflineLibrary {
     private fun writeLyrics(entry: DownloadEntry, result: LyricsRepository.LyricsLoadResult) {
         val raw = result.rawDocument ?: return
         write(folder(entry.id).resolve("lyrics.json"), gson.toJson(SavedLyrics(raw, result.source,
-            result.matchedTrack, result.upgraded, result.rawDebugText, selectionKey(entry.track))))
+            result.matchedTrack, result.upgraded, result.rawDebugText, selectionKey(entry.track), entry.originalTrack?.let(::selectionKey))))
     }
     fun save(entry: DownloadEntry, coverBytes: ByteArray?, lyrics: LyricsRepository.LyricsLoadResult?): List<String> {
         val warnings = mutableListOf<String>()
@@ -88,7 +90,9 @@ object OfflineLibrary {
             val file = folder(entry.id).resolve("lyrics.json")
             if (!file.isFile) return null
             val saved = gson.fromJson(file.readText(), SavedLyrics::class.java)
-            if (saved.selectionKey != selectionKey(track) && hasNetwork()) return null
+            val savedKey = if (entry.originalTrack?.let { sameDownloadSong(it, track) } == true)
+                saved.originalSelectionKey ?: saved.selectionKey else saved.selectionKey
+            if (savedKey != selectionKey(track) && hasNetwork()) return null
             LyricsRepository.LyricsLoadResult(saved.raw.parse(track), saved.source, saved.upgraded,
                 saved.debugText, saved.matchedTrack, saved.raw)
         }.getOrNull()
@@ -129,7 +133,7 @@ object OfflineLibrary {
                 }
             }.getOrNull() else null
             val lyricsFile = dir.resolve("lyrics.json")
-            val lyrics = if (!lyricsFile.isFile && allowNetwork && hasNetwork()) LyricsRepository.load(track, preferDownload = false).getOrNull() else null
+            val lyrics = if (!lyricsFile.isFile && allowNetwork && hasNetwork()) LyricsRepository.load(current.originalTrack ?: track, preferDownload = false).getOrNull() else null
             if (Downloads.entries.none { it.id == current.id }) return@withContext
             val warnings = save(repaired, coverBytes, lyrics).toMutableList()
             if (lyricsFile.isFile) warnings.remove("原始歌词不可用，离线时无法显示歌词")

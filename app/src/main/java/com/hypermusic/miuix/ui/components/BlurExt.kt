@@ -89,7 +89,7 @@ fun BlurredBar(
         modifier = if (blurActive && backdrop != null && !isTopBar) {
             Modifier.continuousBottomBlur(
                 backdrop = backdrop,
-                tint = MiuixTheme.colorScheme.surfaceVariant.copy(0.72f),
+                tint = MiuixTheme.colorScheme.surface.copy(0.87f),
             )
         } else if (blurActive && backdrop != null) {
             Modifier.textureBlur(
