@@ -173,14 +173,7 @@ fun RecommendPage(
                 .padding(top = pageViewportTopInset(paddingValues.calculateTopPadding()))
                 .pageLayerBackdrop(blurBackdrop)
         ) {
-            if (recommendState.isLoading && !isRefreshing) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    InfiniteProgressIndicator()
-                }
-            } else {
+            run {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -240,8 +233,9 @@ fun RecommendPage(
                         item {
                             val sectionTitle = "专属歌单"
                             HomeSection(title = sectionTitle, lastCardTitle = recommendState.playlists.lastOrNull()?.title) {
-                                items(recommendState.playlists) { playlist ->
+                                items(recommendState.playlists, key = { it.id }) { playlist ->
                                     CoverCard(
+                                        modifier = Modifier.animateItem(),
                                         coverUrl = playlist.coverImgUrl,
                                         sharedCoverKey = playlistCoverKey(playlist.id),
                                         title = playlist.title,
@@ -260,7 +254,7 @@ fun RecommendPage(
                                 title = "雷达歌单",
                                 lastCardTitle = recommendState.radarPlaylists.lastOrNull()?.title?.substringAfterLast("|")?.trim()
                             ) {
-                                items(recommendState.radarPlaylists) { playlist ->
+                                items(recommendState.radarPlaylists, key = { it.id }) { playlist ->
                                     // 「私人雷达」等个性化歌单：首页只显示基础名称（如「私人雷达」），点进去再看完整歌单
                                     val displayTitle = if (playlist.title.contains("|")) {
                                         playlist.title.substringAfterLast("|").trim()
@@ -286,8 +280,9 @@ fun RecommendPage(
                                 title = "新碟上架",
                                 lastCardTitle = recommendState.newAlbums.lastOrNull()?.name
                             ) {
-                                items(recommendState.newAlbums) { album ->
+                                items(recommendState.newAlbums, key = { it.id }) { album ->
                                     AlbumCard(
+                                        modifier = Modifier.animateItem(),
                                         album = album,
                                         onClick = { if (album.id > 0) onAlbumClick(album.id) }
                                     )
@@ -598,7 +593,8 @@ private fun PlayModeRow(
                 subtitle = "每天为你精选",
                 gradientColor = dailyColor,
                 onClick = onDailyRecommendClick,
-                backgroundCoverUrl = dailyCover
+                backgroundCoverUrl = dailyCover,
+                plainLoadingBackground = true
             ) {
                 if (!dailyCover.isNullOrEmpty()) {
                     AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.COVER), model = dailyCover,
@@ -607,10 +603,7 @@ private fun PlayModeRow(
                         contentScale = ContentScale.Crop
                     )
                 } else {
-                    GradientCover(
-                        brush = Brush.verticalGradient(listOf(Color(0xFFFFB74D), Color(0xFFF57C00))),
-                        emoji = "📅"
-                    )
+                    Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.background))
                 }
             }
         }
@@ -660,18 +653,21 @@ internal fun PlayModeCard(
     fanGradientBackground: Boolean = false,
     curveGradientBackground: Boolean = false,
     randomBackgroundActive: Boolean = true,
+    plainLoadingBackground: Boolean = false,
     cover: @Composable () -> Unit
 ) {
-    val onColor = Color.White
+    var coverReady by remember(backgroundCoverUrl) { mutableStateOf(false) }
+    val plainPlaceholder = plainLoadingBackground && !coverReady
+    val onColor = if (plainPlaceholder) MiuixTheme.colorScheme.onBackground else Color.White
     Card(
         modifier = modifier.width(210.dp),
         pressFeedbackType = PressFeedbackType.Tilt,
         showIndication = true,
         onClick = onClick
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxWidth().background(if (plainPlaceholder) MiuixTheme.colorScheme.background else Color.Transparent)) {
             // 每日推荐：用封面放大裁切、模糊、压暗作为整张卡片背景
-            val useBlurredCover = blurCover || !backgroundCoverUrl.isNullOrEmpty()
+            val useBlurredCover = plainLoadingBackground || blurCover || !backgroundCoverUrl.isNullOrEmpty()
             val useAnimatedBackground = randomGradientBackground || fanGradientBackground || curveGradientBackground
             if (useAnimatedBackground) {
                 if (curveGradientBackground) {
@@ -698,12 +694,15 @@ internal fun PlayModeCard(
                 Box(Modifier.matchParentSize().blur(40.dp)) {
                     if (!backgroundCoverUrl.isNullOrEmpty()) {
                         AsyncImage(imageLoader = com.hypermusic.miuix.data.cache.ImageCaches.get(androidx.compose.ui.platform.LocalContext.current, com.hypermusic.miuix.data.cache.ImageCaches.Kind.COVER), model = backgroundCoverUrl, contentDescription = null,
+                            onSuccess = { coverReady = true }, onError = { coverReady = false },
+                            placeholder = androidx.compose.ui.graphics.painter.ColorPainter(MiuixTheme.colorScheme.background),
+                            error = androidx.compose.ui.graphics.painter.ColorPainter(MiuixTheme.colorScheme.background),
                             modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                    } else {
+                    } else if (!plainPlaceholder) {
                         cover()
                     }
                 }
-                Box(
+                if (!plainPlaceholder) Box(
                     modifier = Modifier
                         .matchParentSize()
                         .background(
@@ -740,6 +739,7 @@ internal fun PlayModeCard(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .graphicsLayer { alpha = if (plainPlaceholder) 0f else 1f }
                                 .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
                                 .drawWithContent {
                                     drawContent()

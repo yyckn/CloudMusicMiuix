@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import com.hypermusic.miuix.data.download.*
 import com.hypermusic.miuix.data.model.Track
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import top.yukonga.miuix.kmp.basic.*
@@ -63,6 +65,31 @@ internal fun BatchDownloadSheets() {
     }
     val limiter = remember { Semaphore(3) }
     val previews = remember(request?.id) { mutableStateMapOf<String, DownloadComparison>() }
+    // Resolve offscreen rows too: a LazyColumn only composes the visible songs, while the
+    // download button must include the entire selection. Keep requests bounded and reuse
+    // these previews when the selection changes or a row scrolls into view.
+    LaunchedEffect(proposals) {
+        val entries = proposals.values.toList()
+        coroutineScope {
+            repeat(minOf(3, entries.size)) { worker ->
+                launch {
+                    for (index in worker until entries.size step 3) {
+                        val entry = entries[index]
+                        if (entry.id !in previews) previews[entry.id] = limiter.withPermit {
+                            loadDownloadPreview(context, entry)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    val selectedEntries = selected.mapNotNull { proposals[it] }
+    val selectedSize = when {
+        selected.isEmpty() -> Formatter.formatShortFileSize(context, 0)
+        selectedEntries.size != selected.size || selectedEntries.any { it.id !in previews } -> "计算中…"
+        selectedEntries.any { previews[it.id]?.size == null } -> "大小未知"
+        else -> Formatter.formatShortFileSize(context, selectedEntries.sumOf { previews[it.id]?.size ?: 0L })
+    }
     val checkState = when {
         selected.isEmpty() -> ToggleableState.Off
         selected.size == tracks.size -> ToggleableState.On
@@ -81,7 +108,6 @@ internal fun BatchDownloadSheets() {
             if (!loading && error == null) LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false), contentPadding = PaddingValues(vertical = 8.dp)) {
                 items(tracks, key = { "${it.source}:${it.id}" }) { track ->
                     val entry = proposals[track.downloadSongKey()]
-                    PreviewDownload(entry, previews, limiter)
                     val preview = entry?.let { previews[it.id] }
                     Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
                         BatchSongInformation(track, checked = track.downloadSongKey() in selected,
@@ -90,7 +116,7 @@ internal fun BatchDownloadSheets() {
                     }
                 }
             }
-            TextButton("开始下载${selected.size}首歌曲", modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+            TextButton("开始下载${selected.size}首歌曲（${selectedSize}）", modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)
                 .padding(top = 12.dp, bottom = 12.dp + bottomInset), colors = ButtonDefaults.textButtonColorsPrimary(),
                 enabled = selected.isNotEmpty() && !loading && !submitting && error == null, onClick = {
                     submitting = true
@@ -170,13 +196,16 @@ private fun PreviewDownload(entry: DownloadEntry?, results: MutableMap<String, D
     LaunchedEffect(entry?.id) {
         if (entry == null || results.containsKey(entry.id)) return@LaunchedEffect
         val result = limiter.withPermit {
-            try { inspectDownload(context, entry) }
-            catch (e: CancellationException) { throw e }
-            catch (e: Exception) { DownloadComparison(entry.qualityLabel(), null, e.message) }
+            loadDownloadPreview(context, entry)
         }
         results[entry.id] = result
     }
 }
+
+private suspend fun loadDownloadPreview(context: android.content.Context, entry: DownloadEntry): DownloadComparison =
+    try { inspectDownload(context, entry) }
+    catch (e: CancellationException) { throw e }
+    catch (e: Exception) { DownloadComparison(entry.qualityLabel(), null, e.message) }
 
 @Composable
 private fun BatchSongInformation(track: Track, checked: Boolean? = null, onToggle: (() -> Unit)? = null,

@@ -14,14 +14,13 @@ internal object PresetLyricRules {
 
     // 1. 开头、后面有冒号
     val startWithColon = listOf(
-        Entry("default-colon-1", "母带"),
+        Entry("default-colon-1", "母带(?:处理|工作室)?"),
         Entry("default-colon-2", "OP"),
         Entry("default-colon-3", "SP"),
         Entry("default-colon-4", "出品"),
         Entry("default-colon-5", "贡献者"),
         Entry("default-colon-6", "调教"),
         Entry("default-colon-7", "编写"),
-        Entry("default-colon-9", "和声"),
         Entry("default-colon-11", "鼓.*"),
         Entry("default-colon-13", "剪辑"),
         Entry("default-colon-14", "MV"),
@@ -32,7 +31,6 @@ internal object PresetLyricRules {
         Entry("default-colon-20", "监制.*"),
         Entry("default-colon-22", "平面视觉"),
         Entry("default-colon-23", "感谢"),
-        Entry("default-colon-34", "导演"),
         Entry("default-colon-36", "妆发"),
         Entry("default-colon-37", "文案.*"),
         Entry("default-colon-38", "企划"),
@@ -59,9 +57,7 @@ internal object PresetLyricRules {
         Entry("default-colon-64", "Program"),
         Entry("default-colon-65", "合音"),
         Entry("default-colon-66", "合唱.*"),
-        Entry("default-colon-67", "演唱"),
         Entry("default-colon-68", "乐谱"),
-        Entry("default-colon-69", "提琴"),
         Entry("default-colon-70", "和音"),
         Entry("default-colon-72", "运营"),
         Entry("default-colon-73", "执行"),
@@ -107,7 +103,6 @@ internal object PresetLyricRules {
         Entry("default-colon-117", "主唱"),
         Entry("default-colon-118", "封面"),
         Entry("default-colon-119", "A&R"),
-        Entry("default-colon-120", "乐队"),
         Entry("default-colon-121", "队长"),
         Entry("default-colon-122", "女生"),
         Entry("default-colon-123", "项目支持"),
@@ -126,7 +121,7 @@ internal object PresetLyricRules {
         Entry("default-colon-136", "旋律创作"),
         Entry("default-colon-137", "陶笛"),
         Entry("default-colon-138", "冬不拉"),
-        Entry("default-colon-139", "扬琴"),
+        Entry("default-colon-139", "[扬杨]琴.*"),
         Entry("default-colon-140", "卡龙"),
         Entry("default-colon-141", "小号"),
         Entry("default-colon-142", "中号"),
@@ -149,7 +144,6 @@ internal object PresetLyricRules {
         Entry("default-colon-166", "箱琴"),
         Entry("default-colon-167", "收件人"),
         Entry("default-colon-168", "特别派送"),
-        Entry("default-colon-171", "和声编写.*"),
         Entry("default-colon-172", "人声配唱"),
         Entry("default-colon-176", "OP/SP"),
         Entry("default-colon-180", "营销推广"),
@@ -161,7 +155,8 @@ internal object PresetLyricRules {
         Entry("default-colon-195", "配唱制作"),
         Entry("default-colon-196", "版权方"),
         Entry("default-extra-8", "制作人 Producer"),
-        Entry("default-extra-11", "和声 Backing Vocal"),
+        Entry("default-prefix-short-video-platform", "短视频平台.*"),
+        Entry("default-prefix-hand-drum", "手鼓.*"),
     )
 
     // 2. 开头（不要求冒号）
@@ -174,6 +169,11 @@ internal object PresetLyricRules {
 
     // 3. 任意位置、后面有冒号
     val anywhereWithColon = listOf(
+        Entry("default-colon-9", "和声.*"),
+        Entry("default-colon-34", "导演.*"),
+        Entry("default-colon-67", "演唱.*"),
+        Entry("default-colon-69", "提琴"),
+        Entry("default-colon-120", "乐队.*"),
         Entry("default-colon-8", "改编.*"),
         Entry("default-colon-10", "吉他.*"),
         Entry("default-colon-12", "混音.*"),
@@ -238,11 +238,15 @@ internal object PresetLyricRules {
         Entry("default-plain-26", "录制 "),
         Entry("default-plain-27", "音序工坊"),
         Entry("default-plain-28", "⌈π⌋ 计划"),
-        Entry("default-plain-29", "酷狗音乐人·星曜计划"),
+        Entry("default-plain-29", "酷狗音乐"),
         Entry("default-plain-31", "网易音乐人"),
         Entry("default-plain-32", "流量扶持"),
         Entry("default-studio-suffix", "录音棚"),
         Entry("default-copyright-owned", "版权所有"),
+        Entry("default-copyright-prosecution", "违者必究"),
+        Entry("default-tencent-music", "腾讯音乐"),
+        Entry("default-cover-license", "翻唱授权"),
+        Entry("default-authorized-cover", "授权翻唱"),
     )
 
     // 6. 带时长限制的关键词（maxDurationMs 单位为毫秒，包含上限）

@@ -85,7 +85,7 @@ internal fun DownloadDeduplicationDialogs() {
 private fun DownloadVersionRow(entry: DownloadEntry, quality: String = entry.qualityLabel(), size: Long? = entry.comparisonSize(),
     showSize: Boolean = true, selected: Boolean? = null, onSelect: (() -> Unit)? = null) {
     val context = LocalContext.current
-    Card(Modifier.fillMaxWidth().padding(bottom = 8.dp), colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer)) {
+    Card(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         BasicComponent(onClick = onSelect, startAction = {
             AsyncImage(OfflineLibrary.cover(entry, thumbnail = true) ?: entry.track.imgUrl, null,
                 modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)))

@@ -1,4 +1,5 @@
 package com.hypermusic.miuix.viewmodel
+import com.hypermusic.miuix.data.cache.*
 import com.hypermusic.miuix.ui.theme.ThemeSettings
 
 import android.app.Application
@@ -135,6 +136,9 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     var playerState by mutableStateOf(PlayerState())
         private set
 
+    private var neteaseHomeScope: String? = null
+    private var neteaseHomeGeneration = 0
+    private val neteaseHomePartRevisions = mutableMapOf<String, Int>()
     var recommendState by mutableStateOf(RecommendState())
         private set
 
@@ -239,7 +243,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             qqHomeError = null
         }
         qqHomeLoading = true
+        val pageKey = PageCache.key(getApplication(), MusicPlatform.QQ, "home")
         qqHomeJob = viewModelScope.launch {
+            (if (accountChanged) PageCache.read<CachedQqHome>(getApplication(), pageKey) else null)?.let { cached ->
+                if (generation == qqHomeGeneration) {
+                    qqHomePlaylists = cached.playlists
+                    qqHomeCharts = cached.charts.ifEmpty { QqMusicApi.featuredTopCharts }
+                    qqHomeFeatures = cached.features.mapNotNull { (name, detail) -> QqMusicApi.HomeFeature.entries.firstOrNull { it.name == name }?.let { it to Result.success(detail) } }.toMap()
+                }
+            }
             try {
                 coroutineScope {
                     launch {
@@ -256,13 +268,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         launch {
                             val result = QqMusicApi.getHomeFeature(feature)
                             if (generation == qqHomeGeneration && featureRevision == (qqFeatureRevisions[feature] ?: 0)) {
-                                qqHomeFeatures = qqHomeFeatures + (feature to result)
+                                if (result.isSuccess || qqHomeFeatures[feature]?.isSuccess != true)
+                                    qqHomeFeatures = qqHomeFeatures + (feature to result)
                             }
                         }
                     }
                 }
             } finally {
-                if (generation == qqHomeGeneration) qqHomeLoading = false
+                if (generation == qqHomeGeneration) {
+                    qqHomeLoading = false
+                    PageCache.write(getApplication(), pageKey, CachedQqHome(qqHomePlaylists, qqHomeCharts,
+                        qqHomeFeatures.mapNotNull { (feature, result) -> result.getOrNull()?.let { feature.name to it } }.toMap()))
+                }
             }
         }
     }
@@ -973,70 +990,52 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun loadRecommendPlaylists(showLoading: Boolean = true) {
+        loadNeteaseHomePart<List<RecommendPlaylist>>("playlists", apply = {
+            recommendState = recommendState.copy(playlists = it, isLoading = false, error = null)
+        }, fetch = {
+            val result = if (NeteaseApi.isLoggedIn()) NeteaseApi.getRecommendResource() else NeteaseApi.getRecommendPlaylists()
+            if (result.isSuccess) result else NeteaseApi.getRecommendPlaylists()
+        }, failed = { recommendState = recommendState.copy(isLoading = false, error = it.message) })
+    }
+
+    private fun prepareNeteaseHomeScope() {
+        val scope = PageCache.key(getApplication(), MusicPlatform.NETEASE, "home")
+        if (neteaseHomeScope != scope) { neteaseHomeScope = scope; neteaseHomeGeneration++; recommendState = RecommendState(); neteaseHomePartRevisions.clear() }
+    }
+    private inline fun <reified T> loadNeteaseHomePart(part: String, crossinline apply: (T) -> Unit,
+        crossinline fetch: suspend () -> Result<T>, crossinline failed: (Throwable) -> Unit = {}) {
+        prepareNeteaseHomeScope()
+        val key = PageCache.key(getApplication(), MusicPlatform.NETEASE, "home", part)
+        val scopeGeneration = neteaseHomeGeneration
+        val revision = (neteaseHomePartRevisions[part] ?: 0) + 1
+        neteaseHomePartRevisions[part] = revision
         viewModelScope.launch {
-            // 下拉刷新时不显示全屏加载态，避免整页被刷新
-            if (showLoading) {
-                recommendState = recommendState.copy(isLoading = true, error = null)
-            }
-            // 已登录取「专属歌单」，未登录取通用推荐
-            val result = if (NeteaseApi.isLoggedIn()) {
-                NeteaseApi.getRecommendResource()
-            } else {
-                NeteaseApi.getRecommendPlaylists()
-            }
-            result.fold(
-                onSuccess = { playlists ->
-                    recommendState = recommendState.copy(
-                        playlists = playlists,
-                        isLoading = false
-                    )
-                },
-                onFailure = { e ->
-                    // 回退到通用推荐
-                    NeteaseApi.getRecommendPlaylists().fold(
-                        onSuccess = { playlists ->
-                            recommendState = recommendState.copy(playlists = playlists, isLoading = false)
-                        },
-                        onFailure = { e2 ->
-                            recommendState = recommendState.copy(isLoading = false, error = e2.message)
-                        }
-                    )
-                }
-            )
+            val current = { scopeGeneration == neteaseHomeGeneration && revision == neteaseHomePartRevisions[part] && key == PageCache.key(getApplication(), MusicPlatform.NETEASE, "home", part) }
+            (if (revision == 1) PageCache.read<T>(getApplication(), key) else null)?.let { if (current()) apply(it) }
+            if (!current()) return@launch
+            val result = fetch()
+            if (!current()) return@launch
+            result.fold(onSuccess = { apply(it) }, onFailure = { failed(it) })
+            result.getOrNull()?.let { PageCache.write(getApplication(), key, it as Any) }
         }
     }
 
 
     /** 雷达歌单：固定歌单 id 逐个取详情 */
     fun loadRadarPlaylists() {
-        viewModelScope.launch {
-            val ids = radarPlaylistIds
-            val playlists = coroutineScope {
-                ids.map { id ->
-                    async { NeteaseApi.getPlaylistSummary(id).getOrNull() }
-                }.awaitAll().filterNotNull()
-            }
-            recommendState = recommendState.copy(radarPlaylists = playlists)
-        }
+        loadNeteaseHomePart<List<RecommendPlaylist>>("radar", apply = { recommendState = recommendState.copy(radarPlaylists = it) }, fetch = {
+            val playlists = coroutineScope { radarPlaylistIds.map { id -> async { NeteaseApi.getPlaylistSummary(id).getOrNull() } }.awaitAll().filterNotNull() }
+            if (playlists.isEmpty()) Result.failure(IllegalStateException("雷达歌单加载失败")) else Result.success(playlists)
+        })
     }
 
     /** 歌手推荐（热门歌手） */
     fun loadTopArtists() {
-        viewModelScope.launch {
-            NeteaseApi.getTopArtists(12).fold(
-                onSuccess = { artists ->
-                    recommendState = if (artists.isNotEmpty()) {
-                        recommendState.copy(recommendArtists = artists)
-                    } else {
-                        recommendState.copy(recommendArtists = deriveArtistsFromDaily())
-                    }
-                },
-                onFailure = { e ->
-                    Log.e("MusicPlayerViewModel", "loadTopArtists error: ${e.message}")
-                    recommendState = recommendState.copy(recommendArtists = deriveArtistsFromDaily())
-                }
-            )
-        }
+        loadNeteaseHomePart<List<com.hypermusic.miuix.data.model.ArtistInfo>>("artists", apply = { recommendState = recommendState.copy(recommendArtists = it) }, fetch = {
+            val result = NeteaseApi.getTopArtists(12)
+            val artists = result.getOrNull().orEmpty().ifEmpty { deriveArtistsFromDaily() }
+            if (artists.isNotEmpty()) Result.success(artists) else result
+        })
     }
 
     /** 从每日推荐歌曲中提炼歌手作为兜底推荐 */
@@ -1060,16 +1059,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     /** 新碟上架 */
     fun loadNewAlbums() {
-        viewModelScope.launch {
-            NeteaseApi.getNewAlbums(12).fold(
-                onSuccess = { albums ->
-                    recommendState = recommendState.copy(newAlbums = albums)
-                },
-                onFailure = { e ->
-                    Log.e("MusicPlayerViewModel", "loadNewAlbums error: ${e.message}")
-                }
-            )
-        }
+        loadNeteaseHomePart<List<com.hypermusic.miuix.data.model.AlbumInfo>>("albums", apply = { recommendState = recommendState.copy(newAlbums = it) },
+            fetch = { NeteaseApi.getNewAlbums(12) })
     }
 
     fun openUpdateLog(info: com.hypermusic.miuix.data.model.UpdateInfo) {
@@ -1082,13 +1073,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun loadDailyRecommendSongs() {
+        prepareNeteaseHomeScope()
         val requestUserId = NeteaseApi.getCurrentUserId()
         val revision = ++neteaseDailyRevision
+        val key = PageCache.key(getApplication(), MusicPlatform.NETEASE, "home", "daily")
         viewModelScope.launch {
+            (if (recommendState.dailySongs.isEmpty()) PageCache.read<List<Track>>(getApplication(), key) else null)?.let {
+                if (NeteaseApi.getCurrentUserId() == requestUserId && revision == neteaseDailyRevision) recommendState = recommendState.copy(dailySongs = it)
+            }
             NeteaseApi.getDailyRecommendSongs().fold(
                 onSuccess = { songs ->
                     if (NeteaseApi.getCurrentUserId() != requestUserId || revision != neteaseDailyRevision) return@fold
                     recommendState = recommendState.copy(dailySongs = songs)
+                    viewModelScope.launch { PageCache.write(getApplication(), key, songs) }
                     // 若热门歌手接口未返回，兜底从每日推荐提炼歌手
                     if (recommendState.recommendArtists.isEmpty()) {
                         val derived = deriveArtistsFromDaily()
@@ -1926,10 +1923,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private var currentPlaylistDetailId: String? = null
+    private var playlistPageJob: Job? = null
+    private var playlistPageGeneration = 0
+    private var playlistPageKey: String? = null
 
     fun showQqHomeFeature(detail: PlaylistDetail) {
+        playlistPageGeneration++
+        playlistPageJob?.cancel()
+        playlistPageKey = PageCache.key(getApplication(), MusicPlatform.QQ, "playlist", detail.info.id)
         currentPlaylistDetailId = detail.info.id
         playlistDetailState = PlaylistDetailState(detail = detail)
+        val key = requireNotNull(playlistPageKey)
+        viewModelScope.launch { PageCache.write(getApplication(), key, detail) }
     }
 
     suspend fun refreshPlaylistDetail() {
@@ -1937,7 +1942,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun loadPlaylistDetail(playlistId: String, refresh: Boolean = false): Job {
+        val pageKey = PageCache.key(getApplication(), PlatformManager.current, "playlist", playlistId)
+        val previousDetail = if (playlistPageKey == pageKey) playlistDetailState.detail else null
+        playlistPageKey = pageKey
+        val pageGeneration = ++playlistPageGeneration
+        playlistPageJob?.cancel()
         currentPlaylistDetailId = playlistId
+        playlistDetailState = PlaylistDetailState(detail = previousDetail, isLoading = true)
         val requestedPlatform = PlatformManager.current
         val qqAccount = QqMusicApi.dataAccountId
         val neteaseAccount = NeteaseApi.getCurrentUserId()
@@ -1948,7 +1959,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         } else null
         val dailyRevision = if (refresh && requestedPlatform == MusicPlatform.NETEASE && playlistId == "daily_recommend") ++neteaseDailyRevision else null
         return viewModelScope.launch {
-            playlistDetailState = PlaylistDetailState(isLoading = true)
+            val cached = previousDetail ?: PageCache.read<PlaylistDetail>(getApplication(), pageKey)
+            if (pageGeneration != playlistPageGeneration) return@launch
+            playlistDetailState = PlaylistDetailState(detail = cached, isLoading = true)
+            try {
             if (playlistId.startsWith("extra:")) {
                 val stamp = additionalRecommendations.accountStamp(requestedPlatform)
                 try {
@@ -2094,7 +2108,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
             // 每日推荐歌单特殊处理
             if (playlistId == "daily_recommend") {
-                val dailyResult = if (refresh) NeteaseApi.getDailyRecommendSongs() else Result.success(recommendState.dailySongs)
+                val dailyResult = NeteaseApi.getDailyRecommendSongs()
                 if (PlatformManager.current != requestedPlatform || NeteaseApi.getCurrentUserId() != neteaseAccount ||
                     currentPlaylistDetailId != playlistId || (dailyRevision != null && dailyRevision != neteaseDailyRevision)) return@launch
                 if (dailyResult.isFailure) {
@@ -2181,7 +2195,22 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 )
             }
-        }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { playlistDetailState = playlistDetailState.copy(isLoading = false, error = e.message) }
+            finally {
+                if (pageGeneration == playlistPageGeneration && pageKey == PageCache.key(getApplication(), requestedPlatform, "playlist", playlistId)) {
+                    val fresh = playlistDetailState.detail
+                    val shown = fresh?.copy(tracks = reconcilePageItems(cached?.tracks.orEmpty(), fresh.tracks) { it.source to it.id }) ?: cached
+                    playlistDetailState = playlistDetailState.copy(detail = shown, isLoading = false)
+                    if (fresh != null && playlistDetailState.error == null) PageCache.write(getApplication(), pageKey, fresh)
+                    if (refresh && requestedPlatform == MusicPlatform.NETEASE && playlistId == "daily_recommend" && shown != null && playlistDetailState.error == null)
+                        PageCache.write(getApplication(), PageCache.key(getApplication(), requestedPlatform, "home", "daily"), shown.tracks)
+                    if (refresh && feature != null && playlistDetailState.error == null)
+                        PageCache.write(getApplication(), PageCache.key(getApplication(), MusicPlatform.QQ, "home"), CachedQqHome(qqHomePlaylists, qqHomeCharts,
+                            qqHomeFeatures.mapNotNull { (name, result) -> result.getOrNull()?.let { name.name to it } }.toMap()))
+                }
+            }
+        }.also { playlistPageJob = it }
     }
 
     // 云盘分段加载相关变量

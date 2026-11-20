@@ -66,8 +66,9 @@ internal fun AdditionalPlatformPage(platform: MusicPlatform, tab: Int, onLogin: 
     var error by cache::error
     var collections by cache::collections
     val libraryRevision = AdditionalLibraryChanges.revision(platform)
-    LaunchedEffect(platform, tab, revision, libraryRevision) {
-        if (tab != 1) return@LaunchedEffect
+    val tabActive = com.hypermusic.miuix.ui.components.LocalMainTabActive.current
+    LaunchedEffect(platform, tab, revision, libraryRevision, tabActive) {
+        if (tab != 1 || !tabActive) return@LaunchedEffect
         val accountRevision = when (platform) {
             MusicPlatform.BODIAN -> BodianAuth(context, BodianClient(context)).sessionRevision()
             MusicPlatform.KUGOU -> KugouAuth(context, KugouClient(context)).sessionGeneration()

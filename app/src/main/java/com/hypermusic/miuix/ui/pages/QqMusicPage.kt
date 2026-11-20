@@ -47,11 +47,12 @@ fun QqMusicPage(tab: Int, viewModel: MusicPlayerViewModel, onPlaylistClick: (Str
     val scrollBehavior = MiuixScrollBehavior()
     val pullToRefreshState = rememberPullToRefreshState()
     val blurBackdrop = rememberPageBlurBackdrop()
-    LaunchedEffect(tab, QqMusicApi.dataAccountId) {
-        if (tab == 0) viewModel.loadQqHome()
+    val tabActive = com.hypermusic.miuix.ui.components.LocalMainTabActive.current
+    LaunchedEffect(tab, QqMusicApi.dataAccountId, tabActive) {
+        if (tabActive && tab == 0) viewModel.loadQqHome()
     }
-    LaunchedEffect(tab, QqMusicApi.dataAccountId) {
-        if (tab != 0) { viewModel.loadQqFavorites(); viewModel.loadQqFavoriteAlbums() }
+    LaunchedEffect(tab, QqMusicApi.dataAccountId, tabActive) {
+        if (tabActive && tab != 0) { viewModel.loadQqFavorites(); viewModel.loadQqFavoriteAlbums() }
     }
     val playlists = if (tab == 0) viewModel.qqHomePlaylists else viewModel.qqFavoritePlaylists
     val features = viewModel.qqHomeFeatures
@@ -102,6 +103,7 @@ fun QqMusicPage(tab: Int, viewModel: MusicPlayerViewModel, onPlaylistClick: (Str
                                 },
                                 gradientColor = Color(0xFF52666A),
                                 backgroundCoverUrl = cover,
+                                plainLoadingBackground = true,
                                 onClick = {
                                     if (detail != null) onFeatureClick(detail)
                                     else if (result == null) android.widget.Toast.makeText(context, "正在加载${feature.title}", android.widget.Toast.LENGTH_SHORT).show()
@@ -121,8 +123,8 @@ fun QqMusicPage(tab: Int, viewModel: MusicPlayerViewModel, onPlaylistClick: (Str
                 }
                 item {
                     HomeSection(title = "热榜", lastCardTitle = viewModel.qqHomeCharts.lastOrNull()?.title) {
-                        items(viewModel.qqHomeCharts) { chart ->
-                            CoverCard(coverUrl = chart.cover, title = chart.title,
+                        items(viewModel.qqHomeCharts, key = { it.id }) { chart ->
+                            CoverCard(modifier = Modifier.animateItem(), coverUrl = chart.cover, title = chart.title,
                                 sharedCoverKey = playlistCoverKey("qqtop:${chart.id}"),
                                 subtitle = chart.updateDate, onClick = { onTopChartClick(chart) })
                         }
@@ -131,8 +133,8 @@ fun QqMusicPage(tab: Int, viewModel: MusicPlayerViewModel, onPlaylistClick: (Str
                 if (playlists.isNotEmpty()) {
                     item {
                         HomeSection(title = "大家都在听", lastCardTitle = playlists.lastOrNull()?.title) {
-                            items(playlists) { playlist ->
-                                CoverCard(coverUrl = playlist.coverImgUrl, title = playlist.title,
+                            items(playlists, key = { it.id }) { playlist ->
+                                CoverCard(modifier = Modifier.animateItem(), coverUrl = playlist.coverImgUrl, title = playlist.title,
                                     sharedCoverKey = playlistCoverKey(playlist.id),
                                     subtitle = if (playlist.playCount > 0) formatRecommendPlayCount(playlist.playCount) else "",
                                     onClick = { onPlaylistClick(playlist.id, playlist.coverImgUrl, playlist.title) })

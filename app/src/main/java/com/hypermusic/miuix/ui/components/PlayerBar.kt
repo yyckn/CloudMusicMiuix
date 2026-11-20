@@ -55,15 +55,12 @@ import top.yukonga.miuix.kmp.basic.ProgressIndicatorDefaults
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.blur.Backdrop
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.BlurColors
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.blur
 import top.yukonga.miuix.kmp.blur.drawBackdrop
-import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ListView
+import top.yukonga.miuix.kmp.icon.extended.Playlist
 import top.yukonga.miuix.kmp.icon.extended.Pause
 import top.yukonga.miuix.kmp.icon.extended.Play
 import kotlin.math.abs
@@ -138,15 +135,10 @@ fun PlayerBar(
             Modifier
         }
         val blurModifier = if (blurBackdrop != null) {
-            Modifier.textureBlur(
+            Modifier.continuousBottomBlur(
                 backdrop = blurBackdrop,
                 shape = surfaceShape,
-                blurRadius = 25f,
-                colors = BlurColors(
-                    blendColors = listOf(
-                        BlendColorEntry(color = MiuixTheme.colorScheme.surfaceVariant.copy(0.72f)),
-                    ),
-                ),
+                tint = translucentBarColor,
             )
         } else {
             Modifier
@@ -348,7 +340,7 @@ fun PlayerBar(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = MiuixIcons.ListView,
+                                        imageVector = MiuixIcons.Playlist,
                                         contentDescription = "播放列表",
                                         tint = MiuixTheme.colorScheme.onSurface,
                                         modifier = Modifier.size(24.dp)
@@ -361,19 +353,14 @@ fun PlayerBar(
                 }
             }
 
-            // 底部导航栏区域的背景蒙版
+            // Keep the inset outside the shared element, but use the same full-resolution
+            // Gaussian sampling and tint as the moving player surface above it.
             if (!isFloatingStyle && navBarBottomPadding > 0.dp) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(navBarBottomPadding)
-                        .then(
-                            if (blurBackdrop != null) {
-                                blurModifier
-                            } else {
-                                Modifier.background(translucentBarColor)
-                            }
-                        )
+                        .then(if (blurBackdrop != null) blurModifier else Modifier.background(translucentBarColor))
                 )
             }
         }

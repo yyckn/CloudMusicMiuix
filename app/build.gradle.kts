@@ -11,8 +11,8 @@ android {
         applicationId = "com.hypermusic.miuix"
         minSdk = 33
         targetSdk = 36
-        versionCode = 70
-        versionName = "2.1.0"
+        versionCode = 71
+        versionName = "2.1.1"
 
         ndk {
             abiFilters += "arm64-v8a"

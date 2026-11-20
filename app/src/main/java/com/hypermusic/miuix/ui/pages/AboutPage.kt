@@ -71,6 +71,7 @@ import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
@@ -482,6 +483,7 @@ private fun AboutContent(
                     }
 
                     // 开源项目引用
+                    SmallTitle("开源项目引用")
                     Card(
                         modifier = Modifier
                             .padding(horizontal = 12.dp)
@@ -580,20 +582,6 @@ private fun OpenSourceEntries(context: android.content.Context) {
         summary = "提供响度平衡和音效功能",
         onClick = {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/chthollyphile/folia-major")))
-        }
-    )
-    ArrowPreference(
-        title = "NexioSchedule",
-        summary = "参考了柔光玻璃控件和渐进模糊标题栏样式",
-        onClick = {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/HaoZai000/NexioSchedule")))
-        }
-    )
-    ArrowPreference(
-        title = "Softglass",
-        summary = "提供柔光玻璃着色器和材质参数",
-        onClick = {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/HaoZai000/softglass")))
         }
     )
 }

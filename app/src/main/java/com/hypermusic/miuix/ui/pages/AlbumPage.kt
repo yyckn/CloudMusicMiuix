@@ -1,4 +1,7 @@
 package com.hypermusic.miuix.ui.pages
+import androidx.compose.material.icons.rounded.MyLocation
+import com.hypermusic.miuix.data.cache.*
+import com.hypermusic.miuix.data.api.MusicPlatform
 import com.hypermusic.miuix.ui.components.pageNavigationIconInset
 import com.hypermusic.miuix.ui.components.pageViewportTopInset
 import com.hypermusic.miuix.ui.components.pageScrollTopInset
@@ -81,7 +84,6 @@ import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.FavoritesFill
-import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.icon.extended.Share
@@ -133,6 +135,7 @@ fun AlbumPage(
     val visibleSongs = remember(albumSongs, pageSearch.query) {
         albumSongs.filter { matchesPageQuery(pageSearch.query, it.title, it.artist, it.album) }
     }
+    val songKeys = remember(visibleSongs) { stablePageItemKeys(visibleSongs) { "${it.source}:${it.id}" } }
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var showMoreSheet by remember { mutableStateOf(false) }
@@ -258,12 +261,17 @@ fun AlbumPage(
         if (pageSearch.active) pageSearch.close() else onBackClick()
     }
 
+    val cachePlatform = when { isQishui -> MusicPlatform.QISHUI; isKugou -> MusicPlatform.KUGOU; isBodian -> MusicPlatform.BODIAN; isQq -> MusicPlatform.QQ; else -> MusicPlatform.NETEASE }
+    val pageCacheKey = PageCache.key(context, cachePlatform, "album", albumId.toString())
+    var displayedCacheKey by remember { mutableStateOf<String?>(null) }
     var refreshGeneration by remember(albumId, isQq) { mutableStateOf(0) }
-    LaunchedEffect(albumId, isQq, isBodian, isKugou, isQishui, refreshGeneration) {
+    LaunchedEffect(pageCacheKey, refreshGeneration) {
         isLoading = true
         loadError = null
-        albumInfo = null
-        albumSongs = emptyList()
+        if (displayedCacheKey != pageCacheKey) {
+            albumInfo = null; albumSongs = emptyList(); displayedCacheKey = pageCacheKey
+            PageCache.read<CachedAlbum>(context, pageCacheKey)?.let { albumInfo = it.info; albumSongs = it.tracks }
+        }
         val result = if (isQishui) try {
             Result.success(com.hypermusic.miuix.data.api.QishuiShareAlbum.load(albumId))
         } catch (e: kotlinx.coroutines.CancellationException) { throw e }
@@ -289,7 +297,8 @@ fun AlbumPage(
         result.fold(
             onSuccess = { (info, songs) ->
                 albumInfo = info
-                albumSongs = songs
+                albumSongs = reconcilePageItems(albumSongs, songs) { it.source to it.id }
+                PageCache.write(context, pageCacheKey, CachedAlbum(info, albumSongs))
             },
             onFailure = { loadError = it.message ?: "专辑加载失败" }
         )
@@ -336,7 +345,7 @@ fun AlbumPage(
                     modifier = Modifier.padding(bottom = 80.dp)
                 ) {
                     Icon(
-                        imageVector = MiuixIcons.Location,
+                        imageVector = Icons.Rounded.MyLocation,
                         contentDescription = "定位到当前歌曲",
                         tint = MiuixTheme.colorScheme.onPrimary
                     )
@@ -388,7 +397,7 @@ fun AlbumPage(
                 }
             }
 
-            if (isLoading) {
+            if (isLoading && albumSongs.isEmpty()) {
                 item {
                     Box(
                         modifier = Modifier
@@ -402,7 +411,7 @@ fun AlbumPage(
                         )
                     }
                 }
-            } else if (loadError != null || visibleSongs.isEmpty()) {
+            } else if ((loadError != null && albumSongs.isEmpty()) || visibleSongs.isEmpty()) {
                 item {
                     Box(
                         modifier = Modifier
@@ -417,8 +426,9 @@ fun AlbumPage(
                     }
                 }
             } else {
-                itemsIndexed(visibleSongs) { index, track ->
+                itemsIndexed(visibleSongs, key = { index, _ -> songKeys[index] }) { index, track ->
                     SharedTrackRow(
+                        modifier = Modifier.animateItem(),
                         track = track,
                         isPlaying = track.id == currentTrack?.id && track.source == currentTrack.source,
                         onClick = { onTrackClick(track, albumSongs) },
@@ -474,7 +484,7 @@ fun AlbumPage(
                             .padding(horizontal = 12.dp)
                             .padding(bottom = 12.dp),
                         colors = CardDefaults.defaultColors(
-                            color = MiuixTheme.colorScheme.secondaryContainer
+                            color = MiuixTheme.colorScheme.surfaceContainer
                         )
                     ) {
                         selectedTrack?.let { track ->
@@ -528,7 +538,7 @@ fun AlbumPage(
                             .padding(horizontal = 12.dp)
                             .padding(bottom = 12.dp),
                         colors = CardDefaults.defaultColors(
-                            color = MiuixTheme.colorScheme.secondaryContainer
+                            color = MiuixTheme.colorScheme.surfaceContainer
                         )
                     ) {
                         ArrowPreference(

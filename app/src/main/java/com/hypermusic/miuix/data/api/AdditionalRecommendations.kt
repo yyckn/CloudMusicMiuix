@@ -51,10 +51,16 @@ internal class AdditionalRecommendations(context: Context) {
 
     suspend fun loadHome(platform: MusicPlatform, force: Boolean = false) = locks.getValue(platform).withLock {
         val stamp = accountStamp(platform)
+        val pageKey = com.hypermusic.miuix.data.cache.PageCache.key(context, platform, "home")
         if (!force && homes.containsKey(platform) && stamps[platform] == stamp) return@withLock
         if (stamps[platform] != stamp) {
             homes.remove(platform)
             collections.keys.removeAll { it.startsWith("extra:${platform.storageKey}:") }
+            homes[platform] = placeholderHome(platform)
+            val cached = com.hypermusic.miuix.data.cache.PageCache.read<AdditionalHome>(context, pageKey)
+            if (stamp != accountStamp(platform)) return@withLock
+            if (cached != null) homes[platform] = cached
+            homes[platform]?.let { (it.large + it.sections.flatMap { it.cards }).forEach { card -> collections[card.id] = card } }
         }
         loading[platform] = true
         try {
@@ -66,10 +72,17 @@ internal class AdditionalRecommendations(context: Context) {
             }
             currentCoroutineContext().ensureActive()
             if (stamp != accountStamp(platform)) return@withLock
-            homes[platform] = home
+            val previous = homes[platform]
+            val slots = placeholderHome(platform).large
+            val merged = home.copy(sections = if (home.error != null) home.sections + previous?.sections.orEmpty()
+                .filter { old -> home.sections.none { it.title == old.title } } else home.sections,
+                large = slots.map { slot -> home.large.firstOrNull { it.title == slot.title }
+                ?: previous?.large?.firstOrNull { it.title == slot.title } ?: slot } + home.large.filter { row -> slots.none { it.title == row.title } })
+            homes[platform] = merged
             stamps[platform] = stamp
             collections.keys.removeAll { it.startsWith("extra:${platform.storageKey}:") }
-            (home.large + home.sections.flatMap { it.cards }).forEach { collections[it.id] = it }
+            (merged.large + merged.sections.flatMap { it.cards }).forEach { collections[it.id] = it }
+            com.hypermusic.miuix.data.cache.PageCache.write(context, pageKey, merged.copy(error = null))
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             if (stamp == accountStamp(platform)) homes[platform] = (homes[platform] ?: AdditionalHome()).copy(error = e.message ?: "推荐加载失败")
@@ -95,10 +108,18 @@ internal class AdditionalRecommendations(context: Context) {
         homes[platform]?.let { home -> homes[platform] = home.copy(
             large = home.large.map { if (it.id == id) card.copy(background = it.background) else it },
             sections = home.sections.map { it.copy(cards = it.cards.map { old -> if (old.id == id) card else old }) }) }
+        homes[platform]?.let { com.hypermusic.miuix.data.cache.PageCache.write(context,
+            com.hypermusic.miuix.data.cache.PageCache.key(context, platform, "home"), it.copy(error = null)) }
         return card
     }
 
     suspend fun radio(id: String, first: Boolean): List<Track> = withContext(Dispatchers.IO) {
+        if (id == "extra:qishui:focus") {
+            loadHome(MusicPlatform.QISHUI)
+            val focus = homes[MusicPlatform.QISHUI]?.large?.firstOrNull { it.title == "专注模式" && it.id != id }
+                ?: error("暂时无法获取专注模式，请稍后重试")
+            return@withContext radio(focus.id, first)
+        }
         val p = id.split(':')
         require(p.size >= 3 && p[0] == "extra") { "电台标识无效" }
         val platform = MusicPlatform.fromStorageKey(p[1]) ?: error("电台平台无效")
@@ -215,6 +236,20 @@ internal class AdditionalRecommendations(context: Context) {
     }
 
     companion object {
+        internal fun placeholderHome(platform: MusicPlatform): AdditionalHome = AdditionalHome(large = when (platform) {
+            MusicPlatform.BODIAN -> listOf(
+                RecommendationCard("extra:bodian:fm", "私人FM", subtitle = "边听边推荐", radio = true, background = "fm"),
+                RecommendationCard("extra:bodian:discover:0", "潮趣日推"), RecommendationCard("extra:bodian:discover:1", "新歌打赏"))
+            MusicPlatform.KUGOU -> listOf(
+                RecommendationCard("extra:kugou:daily:0", "每日推荐"),
+                RecommendationCard("extra:kugou:fm", "私人FM", subtitle = "边听边推荐", radio = true, background = "fm"),
+                RecommendationCard("extra:kugou:card:3006", "VIP专属推荐", background = "random"),
+                RecommendationCard("extra:kugou:card:3001", "私人专属好歌", background = "heart"))
+            MusicPlatform.QISHUI -> listOf(
+                RecommendationCard("extra:qishui:fm", "私人FM", subtitle = "边听边推荐", radio = true, background = "fm"),
+                RecommendationCard("extra:qishui:focus", "专注模式", radio = true, background = "heart"))
+            else -> emptyList()
+        })
         private val kugouCardTitles = linkedMapOf(3006 to "VIP专属推荐", 3001 to "私人专属好歌", 3004 to "小众宝藏佳作",
             3014 to "喜欢这首歌的TA也喜欢", 3101 to "概念er新推", 3005 to "潮流尝鲜")
 

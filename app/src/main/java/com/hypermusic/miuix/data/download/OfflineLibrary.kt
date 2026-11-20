@@ -26,6 +26,7 @@ object OfflineLibrary {
         return candidates.firstOrNull { it.id == track.localDownloadId } ?: candidates.firstOrNull()
     }
     fun available() = Downloads.entries.filter { it.state == "complete" && File(it.path).isFile }
+    fun latest(entries: List<DownloadEntry> = available()): DownloadEntry? = entries.maxByOrNull { File(it.path).lastModified() }
     fun versions(track: Track) = available().filter { sameDownloadSong(it.track, track) }
     fun localTrack(entry: DownloadEntry) = entry.track.withStorageDefaults().copy(localDownloadId = entry.id, url = null)
     fun cover(entry: DownloadEntry, thumbnail: Boolean = false): File? {

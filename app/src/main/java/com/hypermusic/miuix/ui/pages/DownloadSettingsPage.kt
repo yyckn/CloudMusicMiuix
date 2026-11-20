@@ -123,7 +123,7 @@ private fun DownloadRow(entry: com.hypermusic.miuix.data.download.DownloadEntry,
     val options = if (done) listOf(DropdownItem("分享文件", onClick = onShare), DropdownItem("导出文件", onClick = onExport), DropdownItem(if (done) "删除文件" else "删除任务", onClick = { Downloads.remove(entry.id) }))
         else listOf(DropdownItem("重新下载", onClick = { Downloads.retry(entry.id) }), DropdownItem(if (done) "删除文件" else "删除任务", onClick = { Downloads.remove(entry.id) }))
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp),
-        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer)) {
+        colors = CardDefaults.defaultColors()) {
         BasicComponent(
             startAction = {
                 AsyncImage(model = com.hypermusic.miuix.data.download.OfflineLibrary.cover(entry, thumbnail = true) ?: entry.track.imgUrl, contentDescription = null,

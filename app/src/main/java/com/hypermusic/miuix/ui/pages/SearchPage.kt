@@ -430,7 +430,7 @@ fun SearchPage(
                             .padding(horizontal = 12.dp)
                             .padding(bottom = 12.dp),
                         colors = CardDefaults.defaultColors(
-                            color = MiuixTheme.colorScheme.secondaryContainer
+                            color = MiuixTheme.colorScheme.surfaceContainer
                         )
                     ) {
                         selectedTrack?.let { track ->
@@ -502,7 +502,7 @@ fun SearchPage(
                             .padding(horizontal = 12.dp)
                             .padding(bottom = 12.dp),
                         colors = CardDefaults.defaultColors(
-                            color = MiuixTheme.colorScheme.secondaryContainer
+                            color = MiuixTheme.colorScheme.surfaceContainer
                         )
                     ) {
                         ArrowPreference(
@@ -555,7 +555,7 @@ private fun SearchResultRow(title: String, summary: String, image: String, round
                             isPlaying: Boolean = false, onClick: () -> Unit, trailing: @Composable (() -> Unit)? = null) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer),
+        colors = CardDefaults.defaultColors(color = com.hypermusic.miuix.ui.components.songRowBackground(isPlaying)),
         pressFeedbackType = PressFeedbackType.Sink,
         showIndication = true,
         onClick = onClick

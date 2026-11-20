@@ -23,10 +23,12 @@ internal fun LocalMusicPage(viewModel: MusicPlayerViewModel, onBack: () -> Unit,
     val groups = groupLocalDownloads(entries).associateBy { it.first().track.downloadSongKey() }
     val context = androidx.compose.ui.platform.LocalContext.current
     val tracks = groups.values.map { OfflineLibrary.localTrack(it.first()) }
-    val cover = tracks.firstOrNull()?.let { OfflineLibrary.cover(it)?.absolutePath ?: it.imgUrl }.orEmpty()
+    val latest = remember(entries) { OfflineLibrary.latest(entries) }
+    val cover = latest?.let { OfflineLibrary.cover(it)?.absolutePath ?: it.track.imgUrl }.orEmpty()
     val detail = PlaylistDetail(Playlist("local_downloads", "本地音乐", cover, "", tracks.size), tracks)
     PlaylistDetailPage(playlistDetail = detail, isLoading = false, error = null,
         currentTrack = viewModel.playerState.currentTrack, initialTitle = "本地音乐", isLocalMusic = true,
+        sharedCoverKey = com.hypermusic.miuix.ui.components.playlistCoverKey("local_downloads"),
         onShowDownloads = { Downloads.showSheet = true }, onBackClick = onBack,
         trackQuality = { groups[it.downloadSongKey()]?.firstOrNull()?.qualityLabel() },
         trackFileSize = { track -> groups[track.downloadSongKey()]?.firstOrNull()?.comparisonSize()?.let {

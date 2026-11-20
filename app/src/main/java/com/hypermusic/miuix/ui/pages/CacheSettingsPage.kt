@@ -34,6 +34,7 @@ fun CacheSettingsPage(onBack: () -> Unit) {
     val sizes = listOf(1, 2, 5, 10, 20, 50, 100)
     var selected by remember { mutableIntStateOf(sizes.indexOf(prefs.getInt("audio_gb", 10)).coerceAtLeast(0)) }
     var size by remember { mutableLongStateOf(0L) }
+    var pageSize by remember { mutableLongStateOf(0L) }
     val imageSizes = listOf(256, 512, 1024, 2048, 5120, 10240)
     var imageSelected by remember { mutableIntStateOf(imageSizes.indexOf(prefs.getInt("images_mb", 1024).coerceAtLeast(256)).let { if (it < 0) imageSizes.indexOf(1024) else it }) }
     var imageUsage by remember { mutableStateOf<Map<ImageCaches.Kind, Long>>(emptyMap()) }
@@ -47,12 +48,18 @@ fun CacheSettingsPage(onBack: () -> Unit) {
     LaunchedEffect(Unit) {
         size = withContext(Dispatchers.IO) { runCatching { AudioCache.get(context).cacheSpace }.getOrDefault(0) }
         imageUsage = readImageUsage()
+        pageSize = com.hypermusic.miuix.data.cache.PageCache.size(context)
     }
     com.hypermusic.miuix.ui.navigation.BackHandler(enabled = pendingClear == null, onBack = onBack)
     Scaffold(topBar = { SmallTopAppBar(title = "缓存设置", navigationIcon = {
         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", modifier = Modifier.padding(start = pageNavigationIconInset()).clickable(onClick = onBack))
     }) }) { padding ->
         Column(Modifier.verticalScroll(rememberScrollState()).padding(padding)) {
+            SmallTitle("页面缓存")
+            Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                ArrowPreference(title = "清空页面缓存", summary = android.text.format.Formatter.formatShortFileSize(context, pageSize),
+                    onClick = { if (!busy) pendingClear = "页面" to null })
+            }
             SmallTitle("图片缓存")
             Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
                 WindowDropdownPreference(title = "图片缓存容量", summary = "更改后重启应用生效", items = imageSizes.map { if (it >= 1024) "${it / 1024} GB" else "$it MB" }, selectedIndex = imageSelected,
@@ -84,11 +91,13 @@ fun CacheSettingsPage(onBack: () -> Unit) {
                         busy = true
                         val result = withContext(Dispatchers.IO) { runCatching {
                             val kind = selectedCache.second
-                            if (kind != null) { val loader = ImageCaches.get(context, kind); loader.memoryCache?.clear(); loader.diskCache?.clear() }
+                            if (selectedCache.first == "页面") com.hypermusic.miuix.data.cache.PageCache.clear(context)
+                            else if (kind != null) { val loader = ImageCaches.get(context, kind); loader.memoryCache?.clear(); loader.diskCache?.clear() }
                             else { val cache = AudioCache.get(context); cache.keys.toList().forEach(cache::removeResource); context.getSharedPreferences("audio_cache_index", Context.MODE_PRIVATE).edit().clear().apply() }
                         } }
                         size = withContext(Dispatchers.IO) { runCatching { AudioCache.get(context).cacheSpace }.getOrDefault(0) }
                         imageUsage = readImageUsage()
+                        pageSize = com.hypermusic.miuix.data.cache.PageCache.size(context)
                         busy = false
                         pendingClear = null
                         result.onFailure { android.widget.Toast.makeText(context, "清空缓存失败：${it.message}", android.widget.Toast.LENGTH_SHORT).show() }

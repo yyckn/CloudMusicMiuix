@@ -4,9 +4,6 @@
 package top.yukonga.miuix.kmp.layout
 
 import top.yukonga.miuix.kmp.material.GlassToolbarContent
-import top.yukonga.miuix.kmp.material.GlassSurface
-import top.yukonga.miuix.kmp.material.LocalSoftGlassEnabled
-import top.yukonga.miuix.kmp.material.glassSurface
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animate
@@ -632,16 +629,14 @@ private fun BottomSheetColumn(
                 }
                 .then(if (defaultWindowInsetsPadding) Modifier.imePadding() else Modifier)
                 .padding(horizontal = outsideMargin.width)
-                .then(if (LocalSoftGlassEnabled.current) {
-                    Modifier.glassSurface(backgroundColor, cornerRadius, GlassSurface.Dialog,
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = cornerRadius, topEnd = cornerRadius))
-                } else { Modifier.squircleSurface(
+                // Keep the sheet opaque in both styles; descendants retain their glass theme.
+                .squircleSurface(
                     color = backgroundColor,
                     topStart = cornerRadius,
                     topEnd = cornerRadius,
                     bottomEnd = 0.dp,
                     bottomStart = 0.dp,
-                ) })
+                )
                 .padding(horizontal = insideMargin.width)
                 .padding(bottom = insideMargin.height),
         ) {

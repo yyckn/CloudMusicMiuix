@@ -46,7 +46,7 @@ private val lyricPlatformNames = listOf("网易云音乐", "QQ音乐", "酷狗�
 @Composable
 internal fun LyricTrackRow(track: Track, selected: Boolean = false, onClick: () -> Unit = {}, onDelete: (() -> Unit)? = null, supportingText: String? = null, features: LyricFeatures? = null) {
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer), onClick = onClick) {
+        colors = CardDefaults.defaultColors(), onClick = onClick) {
         BasicComponent(startAction = {
             AsyncImage(imageLoader = ImageCaches.get(LocalContext.current, ImageCaches.Kind.THUMBNAIL), model = track.imgUrl,
                 contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),

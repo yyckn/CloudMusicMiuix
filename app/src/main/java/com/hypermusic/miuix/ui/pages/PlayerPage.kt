@@ -1,4 +1,5 @@
 package com.hypermusic.miuix.ui.pages
+import androidx.compose.material.icons.rounded.MyLocation
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.isActive
 
@@ -154,7 +155,6 @@ import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.FavoritesFill
 import top.yukonga.miuix.kmp.icon.extended.Playlist
-import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.icon.extended.Merge
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Music
@@ -2033,7 +2033,7 @@ fun PlayerPage(
                                         .fillMaxWidth()
                                         .padding(vertical = 4.dp),
                                     colors = CardDefaults.defaultColors(
-                                        color = MiuixTheme.colorScheme.secondaryContainer
+                                        color = com.hypermusic.miuix.ui.components.songRowBackground(track.id == playerState.currentTrack?.id && track.source == playerState.currentTrack?.source)
                                     ),
                                     pressFeedbackType = PressFeedbackType.Tilt,
                                     showIndication = true,
@@ -2044,7 +2044,7 @@ fun PlayerPage(
                                 ) {
                                     TrackItem(
                                         track = track,
-                                        isPlaying = track.id == playerState.currentTrack?.id,
+                                        isPlaying = track.id == playerState.currentTrack?.id && track.source == playerState.currentTrack?.source,
                                         onClick = {
                                             onPlayTrack(track)
                                             showPlaylistSheet = false
@@ -2063,7 +2063,7 @@ fun PlayerPage(
                             .padding(end = 16.dp, bottom = 24.dp)
                     ) {
                         Icon(
-                            imageVector = MiuixIcons.Location,
+                            imageVector = Icons.Rounded.MyLocation,
                             contentDescription = "定位到当前歌曲",
                             tint = MiuixTheme.colorScheme.onPrimary
                         )
@@ -2112,7 +2112,7 @@ fun PlayerPage(
                                 .padding(horizontal = 12.dp)
                                 .padding(bottom = 12.dp),
                             colors = CardDefaults.defaultColors(
-                                color = MiuixTheme.colorScheme.secondaryContainer
+                                color = MiuixTheme.colorScheme.surfaceContainer
                             )
                         ) {
                             if (!isLocalTrack) WindowDropdownPreference(
@@ -2165,7 +2165,7 @@ fun PlayerPage(
                     if (!isLocalTrack && playerState.currentTrack?.source in setOf("bodian", "kugou", "qishui")) {
                         item {
                             Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
-                                colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer)) {
+                                colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer)) {
                                 ArrowPreference(title = "添加到个人歌单", onClick = { showAddTrackSheet = true })
                             }
                         }
@@ -2173,7 +2173,7 @@ fun PlayerPage(
                     item { SmallTitle("歌词") }
                     item {
                         Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
-                            colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer)) {
+                            colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer)) {
                             ArrowPreference(title = "匹配歌词", onClick = { showLyricUpgradeSheet = true })
                         }
                     }
@@ -2187,7 +2187,7 @@ fun PlayerPage(
                                     .padding(horizontal = 12.dp)
                                     .padding(bottom = 12.dp),
                                 colors = CardDefaults.defaultColors(
-                                    color = MiuixTheme.colorScheme.secondaryContainer
+                                    color = MiuixTheme.colorScheme.surfaceContainer
                                 )
                             ) {
                                 // 显示所有歌手
@@ -2256,7 +2256,7 @@ fun PlayerPage(
                                     .padding(horizontal = 12.dp)
                                     .padding(bottom = 12.dp),
                                 colors = CardDefaults.defaultColors(
-                                    color = MiuixTheme.colorScheme.secondaryContainer
+                                    color = MiuixTheme.colorScheme.surfaceContainer
                                 )
                             ) {
                                 ArrowPreference(

@@ -1,4 +1,5 @@
 package com.hypermusic.miuix.ui.pages
+import androidx.compose.material.icons.rounded.MyLocation
 import com.hypermusic.miuix.ui.components.pageNavigationIconInset
 import com.hypermusic.miuix.ui.components.pageViewportTopInset
 import com.hypermusic.miuix.ui.components.pageScrollTopInset
@@ -83,7 +84,6 @@ import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.FavoritesFill
-import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.icon.extended.Merge
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.Add
@@ -160,6 +160,7 @@ fun PlaylistDetailPage(
             matchesPageQuery(pageSearch.query, it.value.title, it.value.artist, it.value.album)
         }
     }
+    val trackKeys = remember(visibleTracks) { com.hypermusic.miuix.data.cache.stablePageItemKeys(visibleTracks) { "${it.value.source}:${it.value.id}" } }
     val pullToRefreshState = rememberPullToRefreshState()
     var isRefreshing by remember { mutableStateOf(false) }
     var showMoreSheet by remember { mutableStateOf(false) }
@@ -253,7 +254,7 @@ fun PlaylistDetailPage(
                     modifier = Modifier.padding(bottom = 80.dp)
                 ) {
                     Icon(
-                        imageVector = MiuixIcons.Location,
+                        imageVector = Icons.Rounded.MyLocation,
                         contentDescription = "定位到当前歌曲",
                         tint = MiuixTheme.colorScheme.onPrimary
                     )
@@ -310,7 +311,7 @@ fun PlaylistDetailPage(
                 if (isLocalMusic && playlistDetail?.tracks.isNullOrEmpty()) Text("暂无本地音乐", Modifier.padding(vertical = 12.dp), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
 
-            if (isLoading) {
+            if (isLoading && playlistDetail == null) {
                 item {
                     Box(
                         modifier = Modifier
@@ -321,7 +322,7 @@ fun PlaylistDetailPage(
                         InfiniteProgressIndicator()
                     }
                 }
-            } else if (error != null) {
+            } else if (error != null && playlistDetail == null) {
                 item {
                     Box(
                         modifier = Modifier
@@ -351,7 +352,7 @@ fun PlaylistDetailPage(
                     Text("没有找到匹配的歌曲", modifier = Modifier.padding(16.dp),
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 }
-                itemsIndexed(visibleTracks) { _, (index, track) ->
+                itemsIndexed(visibleTracks, key = { index, _ -> trackKeys[index] }) { _, (index, track) ->
                     // 当滚动到接近底部时触发加载更多（云盘兜底；主路径已在 ViewModel 后台自动拉完）
                     if (isCloudDisk && !isLoadingMore && playlistDetail.tracks.isNotEmpty() &&
                         index >= playlistDetail.tracks.size - 3
@@ -361,13 +362,14 @@ fun PlaylistDetailPage(
                         }
                     }
                     SharedTrackRow(
+                        modifier = Modifier.animateItem(),
                         track = track,
                         qualityTag = trackQuality(track),
                         fileSizeText = trackFileSize(track),
                         versionCount = trackVersionCount(track),
                         showVip = !isLocalMusic,
                         rank = if (isTopChart) index + 1 else null,
-                        isPlaying = track.id == currentTrack?.id,
+                        isPlaying = track.id == currentTrack?.id && track.source == currentTrack?.source,
                         onClick = { onTrackClick(track) },
                         onMoreClick = {
                             resolveTrackForMore(track) { resolved ->
@@ -446,7 +448,7 @@ fun PlaylistDetailPage(
                             .padding(horizontal = 12.dp)
                             .padding(bottom = 12.dp),
                         colors = CardDefaults.defaultColors(
-                            color = MiuixTheme.colorScheme.secondaryContainer
+                            color = MiuixTheme.colorScheme.surfaceContainer
                         )
                     ) {
                         selectedTrack?.let { track ->
@@ -519,7 +521,7 @@ fun PlaylistDetailPage(
                             .padding(horizontal = 12.dp)
                             .padding(bottom = 12.dp),
                         colors = CardDefaults.defaultColors(
-                            color = MiuixTheme.colorScheme.secondaryContainer
+                            color = MiuixTheme.colorScheme.surfaceContainer
                         )
                     ) {
                         if (isLocalMusic) {
@@ -729,7 +731,7 @@ internal fun SharedTrackRow(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer),
+        colors = CardDefaults.defaultColors(color = com.hypermusic.miuix.ui.components.songRowBackground(isPlaying)),
         pressFeedbackType = PressFeedbackType.Sink,
         showIndication = true,
         onClick = onClick

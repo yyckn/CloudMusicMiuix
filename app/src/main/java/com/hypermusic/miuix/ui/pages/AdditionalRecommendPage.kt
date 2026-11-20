@@ -36,9 +36,11 @@ internal fun AdditionalRecommendPage(platform: MusicPlatform, recommendations: A
     var handledRefreshRevision by remember(platform) { mutableIntStateOf(0) }
     val accountRevision = AdditionalAccounts.revision.intValue
     val loading = recommendations.loading[platform] == true
-    val home = recommendations.homes[platform]
-    val active = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
-    LaunchedEffect(platform, accountRevision, refreshRevision) {
+    val home = recommendations.homes[platform] ?: AdditionalRecommendations.placeholderHome(platform)
+    val tabActive = LocalMainTabActive.current
+    val active = tabActive && LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
+    LaunchedEffect(platform, accountRevision, refreshRevision, tabActive) {
+        if (!tabActive) return@LaunchedEffect
         val force = refreshRevision != handledRefreshRevision
         handledRefreshRevision = refreshRevision
         recommendations.loadHome(platform, force = force)
@@ -56,16 +58,16 @@ internal fun AdditionalRecommendPage(platform: MusicPlatform, recommendations: A
             modifier = Modifier.padding(top = pageViewportTopInset(padding.calculateTopPadding())).pageLayerBackdrop(backdrop)) {
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize().overScrollVertical()
                 .nestedScroll(behavior.nestedScrollConnection), contentPadding = PaddingValues(top = pageScrollTopInset(padding.calculateTopPadding()), bottom = FeedBottomPads.More), overscrollEffect = null) {
-                if (home == null && loading) item { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { InfiniteProgressIndicator() } }
-                home?.error?.let { message -> item { Text(message, Modifier.padding(16.dp), color = MiuixTheme.colorScheme.error) } }
-                if (!home?.large.isNullOrEmpty()) {
+                home.error?.let { message -> item { Text(message, Modifier.padding(16.dp), color = MiuixTheme.colorScheme.error) } }
+                if (home.large.isNotEmpty()) {
                     item { SmallTitle("专属推荐") }
                     item {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
-                            items(home!!.large, key = { it.id }) { card ->
+                            items(home.large, key = { it.id }) { card ->
                                 PlayModeCard(title = card.title, subtitle = card.subtitle,
                                     gradientColor = MiuixTheme.colorScheme.primary, onClick = { open(card) },
                                     backgroundCoverUrl = card.cover.takeIf { card.background == "cover" },
+                                    plainLoadingBackground = card.background == "cover",
                                     fanGradientBackground = card.background == "fm", curveGradientBackground = card.background == "heart",
                                     randomGradientBackground = card.background == "random", randomBackgroundActive = active) {
                                     RecommendationCover(card)
@@ -74,11 +76,11 @@ internal fun AdditionalRecommendPage(platform: MusicPlatform, recommendations: A
                         }
                     }
                 }
-                home?.sections.orEmpty().filter { it.cards.isNotEmpty() }.forEach { section ->
+                home.sections.filter { it.cards.isNotEmpty() }.forEach { section ->
                     item {
                         HomeSection(title = section.title, lastCardTitle = section.cards.lastOrNull()?.title) {
                             items(section.cards, key = { it.id }) { card ->
-                                CoverCard(card.cover, card.title, card.subtitle, onClick = { open(card) },
+                                CoverCard(card.cover, card.title, card.subtitle, onClick = { open(card) }, modifier = Modifier.animateItem(),
                                     imageScale = if (platform == MusicPlatform.QISHUI) .5f else 1f,
                                     sharedCoverKey = if (card.radio) null else playlistCoverKey(card.id))
                             }

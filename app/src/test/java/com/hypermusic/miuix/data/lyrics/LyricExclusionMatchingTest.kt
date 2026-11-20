@@ -145,7 +145,7 @@ class LyricExclusionMatchingTest {
             assertTrue(excluded("作曲：某人"))
             assertTrue(excluded("和声编写：某人"))
             assertTrue(excluded("和声编写:某人"))
-            assertFalse(excluded("这是和声编写：正文"))
+            assertTrue(excluded("这是和声编写：正文"))
             assertTrue(excluded("我想编曲：给你听"))
             assertTrue(excluded("本作品禁止未经授权二创改编，谢谢"))
             assertTrue(excluded("禁止二创改编"))
@@ -219,7 +219,7 @@ class LyricExclusionMatchingTest {
         LyricExclusionRules.updateEnabled(true)
         try {
             for (colon in listOf(":", "：", "﹕")) {
-                for (keyword in listOf("和声编写", "文案", "贝斯", "鼓")) {
+                for (keyword in listOf("文案", "贝斯", "鼓")) {
                     assertTrue(excluded("${keyword} Credit $colon 某人"))
                     assertFalse(excluded("前缀${keyword} Credit $colon 某人"))
                     assertEquals(1, LyricExclusionRules.defaultRules.count { it.pattern == "$keyword.*\\s*[:：﹕]" })
@@ -235,6 +235,35 @@ class LyricExclusionMatchingTest {
             }
             for (text in listOf("这里有录音棚的名字", "欢迎网易音乐人参与", "获得流量扶持计划")) assertTrue(text, excluded(text))
             assertFalse(excluded("鼓点是我们的语言"))
+        } finally { LyricExclusionRules.updateEnabled(enabled) }
+    }
+
+    @Test fun expandedColonCreditsAndPlatformKeywordsRespectTheirRequestedScopes() {
+        val enabled = LyricExclusionRules.enabled
+        LyricExclusionRules.updateEnabled(true)
+        try {
+            for (colon in listOf(":", "：", "﹕")) {
+                for (credit in listOf("母带", "母带处理", "母带工作室", "短视频平台", "短视频平台合作",
+                    "杨琴", "杨琴演奏", "扬琴", "扬琴演奏", "手鼓", "手鼓演奏", "贝斯", "贝斯演奏", "鼓", "鼓演奏")) {
+                    assertTrue(credit, excluded("$credit $colon 某人"))
+                    assertFalse(credit, excluded("前缀$credit $colon 某人"))
+                    assertFalse(credit, excluded("$credit 某人"))
+                }
+                for (credit in listOf("提琴", "演唱", "演唱 Vocal", "和声", "和声编写", "和声 Backing Vocal",
+                    "导演", "导演助理", "乐队", "乐队成员", "录音", "录音工程", "编辑", "编辑协作")) {
+                    assertTrue(credit, excluded("前缀$credit $colon 某人"))
+                    assertFalse(credit, excluded("前缀$credit 某人"))
+                }
+            }
+            for (keyword in listOf("违者必究", "酷狗音乐", "酷狗音乐人·星曜计划", "腾讯音乐", "翻唱授权", "授权翻唱")) {
+                assertTrue(keyword, excluded("前缀${keyword}后缀"))
+            }
+            val patterns = LyricExclusionRules.defaultRules.map { it.pattern }
+            for (keyword in listOf("鼓", "贝斯", "演唱", "和声", "导演", "乐队", "录音", "编辑")) {
+                assertEquals(keyword, 1, patterns.count { it == "$keyword.*\\s*[:：﹕]" })
+                assertFalse(keyword, "$keyword\\s*[:：﹕]" in patterns)
+            }
+            assertFalse(patterns.any { it.startsWith("和声编写") || it.startsWith("和声 Backing Vocal") })
         } finally { LyricExclusionRules.updateEnabled(enabled) }
     }
 

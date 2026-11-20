@@ -1,4 +1,6 @@
 package com.hypermusic.miuix
+import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.Icons
 
 import com.hypermusic.miuix.data.model.shareText
 
@@ -123,6 +125,8 @@ import com.hypermusic.miuix.ui.components.BlurredBar
 import com.hypermusic.miuix.ui.components.FloatingBottomBar
 import com.hypermusic.miuix.ui.components.FloatingBottomBarItem
 import com.hypermusic.miuix.ui.components.rememberBlurBackdrop
+import com.hypermusic.miuix.ui.components.rememberContinuousBottomBackdrop
+import com.hypermusic.miuix.ui.components.continuousBackdropSource
 import com.hypermusic.miuix.ui.theme.LocalEnableBlur
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
@@ -149,7 +153,6 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.ListView
-import top.yukonga.miuix.kmp.icon.extended.Location
 import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.basic.Search
@@ -419,6 +422,7 @@ fun MainScreen(
     // 底栏模糊 / 液态玻璃所需的背景层
     val enableBlur = LocalEnableBlur.current
     val blurBackdrop = rememberBlurBackdrop(enableBlur)
+    val bottomBlurBackdrop = rememberContinuousBottomBackdrop(if (!useFloatingBar) blurBackdrop else null)
     val surfaceColor = MiuixTheme.colorScheme.surface
     val liquidBackdrop = rememberLayerBackdrop {
         drawRect(surfaceColor)
@@ -434,13 +438,13 @@ fun MainScreen(
     } else {
         null
     }
-    val secondaryBlurBackdrop = if (!useFloatingBar && enableBlur) {
+    val secondaryBlurBackdrop = rememberContinuousBottomBackdrop(if (!useFloatingBar && enableBlur) {
         secondaryBackdrop
     } else {
         null
-    }
+    })
     val secondaryLayerModifier = if (enableBlur) {
-        Modifier.layerBackdrop(secondaryBackdrop)
+        Modifier.continuousBackdropSource(secondaryBackdrop, secondaryBlurBackdrop)
     } else {
         Modifier
     }
@@ -542,7 +546,7 @@ fun MainScreen(
                             isFloatingStyle = useFloatingBar,
                             liquidBackdrop = secondaryFloatingLiquidBackdrop,
                             liquidAlpha = ThemeSettings.liquidGlassAlpha,
-                            blurBackdrop = if (enableBlur) blurBackdrop else null,
+                            blurBackdrop = bottomBlurBackdrop,
                             floatingProgress = playerBarFloatingProgress,
                             floatingBottomMargin = 12.dp + systemNavBarPadding
                                     )
@@ -620,7 +624,7 @@ fun MainScreen(
                                                             .fillMaxWidth()
                                                             .padding(vertical = 4.dp),
                                                         colors = CardDefaults.defaultColors(
-                                                            color = MiuixTheme.colorScheme.secondaryContainer
+                                                            color = com.hypermusic.miuix.ui.components.songRowBackground(track.id == viewModel.playerState.currentTrack?.id && track.source == viewModel.playerState.currentTrack?.source)
                                                         ),
                                                         pressFeedbackType = PressFeedbackType.Tilt,
                                                         showIndication = true,
@@ -631,7 +635,7 @@ fun MainScreen(
                                                     ) {
                                                         TrackItem(
                                                             track = track,
-                                                            isPlaying = track.id == viewModel.playerState.currentTrack?.id,
+                                                            isPlaying = track.id == viewModel.playerState.currentTrack?.id && track.source == viewModel.playerState.currentTrack?.source,
                                                             onClick = {
                                                                 viewModel.playTrack(track)
                                                                 showPlaylistSheet = false
@@ -645,26 +649,19 @@ fun MainScreen(
                                             onClick = { shouldScrollToCurrent = true },
                                             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 24.dp)
                                         ) {
-                                            Icon(imageVector = MiuixIcons.Location, contentDescription = null, tint = MiuixTheme.colorScheme.onPrimary)
+                                            Icon(imageVector = Icons.Rounded.MyLocation, contentDescription = "定位到当前歌曲", tint = MiuixTheme.colorScheme.onPrimary)
                                         }
                                     }
                                 }
-                                AnimatedContent(
-                                    targetState = selectedTab,
+                                com.hypermusic.miuix.ui.components.MainTabPager(
+                                    selectedTab = selectedTab,
+                                    onSelected = { selectedTab = it },
                                     modifier = Modifier
                                         .then(
                                             if (blurBackdrop != null) {
-                                                Modifier.layerBackdrop(blurBackdrop)
+                                                Modifier.continuousBackdropSource(blurBackdrop, bottomBlurBackdrop)
                                             } else Modifier
                                         ),
-                                    transitionSpec = {
-                                        if (targetState > initialState) {
-                                            slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                                        } else {
-                                            slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                                        }
-                                    },
-                                    label = "tab_transition"
                                 ) { tab ->
                                     if (com.hypermusic.miuix.data.api.PlatformManager.current in setOf(com.hypermusic.miuix.data.api.MusicPlatform.BODIAN, com.hypermusic.miuix.data.api.MusicPlatform.KUGOU, com.hypermusic.miuix.data.api.MusicPlatform.QISHUI) && tab in 0..1) {
                                         com.hypermusic.miuix.ui.pages.AdditionalPlatformPage(com.hypermusic.miuix.data.api.PlatformManager.current, tab,
@@ -697,7 +694,7 @@ fun MainScreen(
                                         isLoggedIn = isLoggedIn,
                                         onSearchClick = openSearch,
                                         showSearchAction = false,
-                                        isPlayerPageVisible = showPlayerPage,
+                                        isPlayerPageVisible = showPlayerPage || !com.hypermusic.miuix.ui.components.LocalMainTabActive.current,
                                         onOpenPlayerPage = { showPlayerPage = true },
                                         onIntelligenceMode = { songId, playlistId ->
                                             showPlayerPage = true
@@ -809,7 +806,7 @@ fun MainScreen(
                                             hasBottomBar = !floating,
                                             isFloatingStyle = floating,
                                             hidePlaylistButton = viewModel.isFMMode || viewModel.isIntelligenceMode,
-                                            blurBackdrop = if (!floating && enableBlur) blurBackdrop else null,
+                                            blurBackdrop = if (!floating) bottomBlurBackdrop else null,
                                             liquidBackdrop = if (floating && enableBlur) liquidBackdrop else null,
                                             liquidAlpha = ThemeSettings.liquidGlassAlpha,
                                             floatingProgress = playerBarFloatingProgress,
@@ -995,9 +992,10 @@ fun MainScreen(
                                     Column {
                                         playerBar(Modifier, false, 12.dp, false, true, false)
                                         // 普通底栏（半透明模糊）
-                                        BlurredBar(backdrop = blurBackdrop, isTopBar = false) {
+                                        BlurredBar(backdrop = bottomBlurBackdrop, isTopBar = false) {
                                             NavigationBar(
                                                 modifier = Modifier.fillMaxWidth(),
+                                                defaultWindowInsetsPadding = true,
                                                 color = if (blurBackdrop != null) {
                                                     Color.Transparent
                                                 } else {
@@ -1090,7 +1088,7 @@ fun MainScreen(
                                                         .fillMaxWidth()
                                                         .padding(vertical = 4.dp),
                                                     colors = CardDefaults.defaultColors(
-                                                        color = MiuixTheme.colorScheme.secondaryContainer
+                                                        color = com.hypermusic.miuix.ui.components.songRowBackground(track.id == viewModel.playerState.currentTrack?.id && track.source == viewModel.playerState.currentTrack?.source)
                                                     ),
                                                     pressFeedbackType = PressFeedbackType.Tilt,
                                                     showIndication = true,
@@ -1101,7 +1099,7 @@ fun MainScreen(
                                                 ) {
                                                     TrackItem(
                                                         track = track,
-                                                        isPlaying = track.id == viewModel.playerState.currentTrack?.id,
+                                                        isPlaying = track.id == viewModel.playerState.currentTrack?.id && track.source == viewModel.playerState.currentTrack?.source,
                                                         onClick = {
                                                             viewModel.playTrack(track)
                                                             showPlaylistSheet = false
@@ -1115,16 +1113,17 @@ fun MainScreen(
                                         onClick = { shouldScrollToCurrent = true },
                                         modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 24.dp)
                                     ) {
-                                        Icon(imageVector = MiuixIcons.Location, contentDescription = null, tint = MiuixTheme.colorScheme.onPrimary)
+                                        Icon(imageVector = Icons.Rounded.MyLocation, contentDescription = "定位到当前歌曲", tint = MiuixTheme.colorScheme.onPrimary)
                                     }
                                 }
                             }
-                            AnimatedContent(
-                                targetState = selectedTab,
+                            com.hypermusic.miuix.ui.components.MainTabPager(
+                                selectedTab = selectedTab,
+                                onSelected = { selectedTab = it },
                                 modifier = Modifier
                                     .then(
                                         if (blurBackdrop != null) {
-                                            Modifier.layerBackdrop(blurBackdrop)
+                                            Modifier.continuousBackdropSource(blurBackdrop, bottomBlurBackdrop)
                                         } else Modifier
                                     )
                                     .then(
@@ -1133,14 +1132,6 @@ fun MainScreen(
                                         } else Modifier
                                     )
                                     .nestedScroll(pageScrollConnection),
-                                transitionSpec = {
-                                    if (targetState > initialState) {
-                                        slideInHorizontally { it } togetherWith slideOutHorizontally { -it / 3 }
-                                    } else {
-                                        slideInHorizontally { -it / 3 } togetherWith slideOutHorizontally { it }
-                                    }
-                                },
-                                label = "tab_transition"
                             ) { tab ->
                                 if (com.hypermusic.miuix.data.api.PlatformManager.current in setOf(com.hypermusic.miuix.data.api.MusicPlatform.BODIAN, com.hypermusic.miuix.data.api.MusicPlatform.KUGOU, com.hypermusic.miuix.data.api.MusicPlatform.QISHUI) && tab in 0..1) {
                                         com.hypermusic.miuix.ui.pages.AdditionalPlatformPage(com.hypermusic.miuix.data.api.PlatformManager.current, tab,
@@ -1172,7 +1163,7 @@ fun MainScreen(
                                     viewModel = viewModel,
                                     isLoggedIn = isLoggedIn,
                                     onSearchClick = openSearch,
-                                    isPlayerPageVisible = showPlayerPage,
+                                    isPlayerPageVisible = showPlayerPage || !com.hypermusic.miuix.ui.components.LocalMainTabActive.current,
                                     onOpenPlayerPage = { showPlayerPage = true },
                                     onIntelligenceMode = { songId, playlistId ->
                                         showPlayerPage = true
@@ -1343,7 +1334,7 @@ fun MainScreen(
                                                     .fillMaxWidth()
                                                     .padding(vertical = 4.dp),
                                                 colors = CardDefaults.defaultColors(
-                                                    color = MiuixTheme.colorScheme.secondaryContainer
+                                                    color = com.hypermusic.miuix.ui.components.songRowBackground(track.id == viewModel.playerState.currentTrack?.id && track.source == viewModel.playerState.currentTrack?.source)
                                                 ),
                                                 pressFeedbackType = PressFeedbackType.Tilt,
                                                 showIndication = true,
@@ -1354,7 +1345,7 @@ fun MainScreen(
                                             ) {
                                                 TrackItem(
                                                     track = track,
-                                                    isPlaying = track.id == viewModel.playerState.currentTrack?.id,
+                                                    isPlaying = track.id == viewModel.playerState.currentTrack?.id && track.source == viewModel.playerState.currentTrack?.source,
                                                     onClick = {
                                                         viewModel.playTrack(track)
                                                         showPlaylistSheet = false
@@ -1368,7 +1359,7 @@ fun MainScreen(
                                     onClick = { shouldScrollToCurrent = true },
                                     modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 24.dp)
                                 ) {
-                                    Icon(imageVector = MiuixIcons.Location, contentDescription = null, tint = MiuixTheme.colorScheme.onPrimary)
+                                    Icon(imageVector = Icons.Rounded.MyLocation, contentDescription = "定位到当前歌曲", tint = MiuixTheme.colorScheme.onPrimary)
                                 }
                             }
                         }
@@ -1493,7 +1484,7 @@ fun MainScreen(
                                                     .fillMaxWidth()
                                                     .padding(vertical = 4.dp),
                                                 colors = CardDefaults.defaultColors(
-                                                    color = MiuixTheme.colorScheme.secondaryContainer
+                                                    color = com.hypermusic.miuix.ui.components.songRowBackground(track.id == viewModel.playerState.currentTrack?.id && track.source == viewModel.playerState.currentTrack?.source)
                                                 ),
                                                 pressFeedbackType = PressFeedbackType.Tilt,
                                                 showIndication = true,
@@ -1504,7 +1495,7 @@ fun MainScreen(
                                             ) {
                                                 TrackItem(
                                                     track = track,
-                                                    isPlaying = track.id == viewModel.playerState.currentTrack?.id,
+                                                    isPlaying = track.id == viewModel.playerState.currentTrack?.id && track.source == viewModel.playerState.currentTrack?.source,
                                                     onClick = {
                                                         viewModel.playTrack(track)
                                                         showPlaylistSheet = false
@@ -1518,7 +1509,7 @@ fun MainScreen(
                                     onClick = { shouldScrollToCurrent = true },
                                     modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 24.dp)
                                 ) {
-                                    Icon(imageVector = MiuixIcons.Location, contentDescription = null, tint = MiuixTheme.colorScheme.onPrimary)
+                                    Icon(imageVector = Icons.Rounded.MyLocation, contentDescription = "定位到当前歌曲", tint = MiuixTheme.colorScheme.onPrimary)
                                 }
                             }
                         }
@@ -1994,7 +1985,7 @@ fun MainScreen(
                                                 .fillMaxWidth()
                                                 .padding(vertical = 4.dp),
                                             colors = CardDefaults.defaultColors(
-                                                color = MiuixTheme.colorScheme.secondaryContainer
+                                                color = com.hypermusic.miuix.ui.components.songRowBackground(track.id == viewModel.playerState.currentTrack?.id && track.source == viewModel.playerState.currentTrack?.source)
                                             ),
                                             pressFeedbackType = PressFeedbackType.Tilt,
                                             showIndication = true,
@@ -2005,7 +1996,7 @@ fun MainScreen(
                                         ) {
                                             TrackItem(
                                                 track = track,
-                                                isPlaying = track.id == viewModel.playerState.currentTrack?.id,
+                                                isPlaying = track.id == viewModel.playerState.currentTrack?.id && track.source == viewModel.playerState.currentTrack?.source,
                                                 onClick = {
                                                     viewModel.playTrack(track)
                                                     showPlaylistSheet = false
@@ -2019,7 +2010,7 @@ fun MainScreen(
                                 onClick = { artistShouldScrollToCurrent = true },
                                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 24.dp)
                             ) {
-                                Icon(imageVector = MiuixIcons.Location, contentDescription = null, tint = MiuixTheme.colorScheme.onPrimary)
+                                Icon(imageVector = Icons.Rounded.MyLocation, contentDescription = "定位到当前歌曲", tint = MiuixTheme.colorScheme.onPrimary)
                             }
                         }
                     }
@@ -2177,7 +2168,7 @@ fun MainScreen(
                                                 .fillMaxWidth()
                                                 .padding(vertical = 4.dp),
                                             colors = CardDefaults.defaultColors(
-                                                color = MiuixTheme.colorScheme.secondaryContainer
+                                                color = com.hypermusic.miuix.ui.components.songRowBackground(track.id == viewModel.playerState.currentTrack?.id && track.source == viewModel.playerState.currentTrack?.source)
                                             ),
                                             pressFeedbackType = PressFeedbackType.Tilt,
                                             showIndication = true,
@@ -2188,7 +2179,7 @@ fun MainScreen(
                                         ) {
                                             TrackItem(
                                                 track = track,
-                                                isPlaying = track.id == viewModel.playerState.currentTrack?.id,
+                                                isPlaying = track.id == viewModel.playerState.currentTrack?.id && track.source == viewModel.playerState.currentTrack?.source,
                                                 onClick = {
                                                     viewModel.playTrack(track)
                                                     showPlaylistSheet = false
@@ -2202,7 +2193,7 @@ fun MainScreen(
                                 onClick = { albumShouldScrollToCurrent = true },
                                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 24.dp)
                             ) {
-                                Icon(imageVector = MiuixIcons.Location, contentDescription = null, tint = MiuixTheme.colorScheme.onPrimary)
+                                Icon(imageVector = Icons.Rounded.MyLocation, contentDescription = "定位到当前歌曲", tint = MiuixTheme.colorScheme.onPrimary)
                             }
                         }
                     }
