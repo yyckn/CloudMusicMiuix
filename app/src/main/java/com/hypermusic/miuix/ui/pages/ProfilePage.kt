@@ -1,5 +1,5 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
 import com.hypermusic.miuix.ui.components.pageViewportTopInset
 import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
@@ -80,7 +80,6 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.hypermusic.miuix.ui.FeedBottomPads
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.unit.DpSize
 
 @Composable
@@ -202,15 +201,7 @@ fun ProfilePage(
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                     scrollBehavior = scrollBehavior,
                     defaultWindowInsetsPadding = false,
-                    navigationIcon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            modifier = Modifier
-                                .padding(start = pageNavigationIconInset())
-                                .clickable { onBackClick() }
-                        )
-                    },
+                    navigationIcon = { PageBackButton(onClick = { onBackClick() }) },
                     actions = {
                         OverlayIconDropdownMenu(
                             entry = DropdownEntry(

@@ -1,5 +1,5 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
 
 import android.content.Intent
 import android.net.Uri
@@ -48,7 +48,6 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.hypermusic.miuix.ui.FeedBottomPads
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 data class AccountInfo(
     val userId: String,
@@ -92,15 +91,7 @@ fun ManageAccountsPage(
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                     scrollBehavior = scrollBehavior,
                     defaultWindowInsetsPadding = false,
-                    navigationIcon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            modifier = Modifier
-                                .padding(start = pageNavigationIconInset())
-                                .clickable { onBackClick() }
-                        )
-                    }
+                    navigationIcon = { PageBackButton(onClick = { onBackClick() }) }
                 )
             }
         }

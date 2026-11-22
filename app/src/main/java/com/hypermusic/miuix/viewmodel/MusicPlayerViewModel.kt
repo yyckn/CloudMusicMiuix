@@ -65,7 +65,6 @@ internal data class PlatformPlaybackSnapshot(
     @SerializedName(value = "mode", alternate = ["e"]) val mode: Int = 0,
     @SerializedName(value = "fm", alternate = ["f"]) val fm: Boolean = false,
     @SerializedName(value = "intelligence", alternate = ["g"]) val intelligence: Boolean = false,
-    @SerializedName(value = "guess", alternate = ["h"]) val guess: Boolean = false,
     @SerializedName(value = "fmTracks", alternate = ["i"]) val fmTracks: List<Track> = emptyList(),
     @SerializedName(value = "fmIndex", alternate = ["j"]) val fmIndex: Int = 0,
     @SerializedName(value = "intelligenceTracks", alternate = ["k"]) val intelligenceTracks: List<Track> = emptyList(),
@@ -391,8 +390,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private var qqGuessMode = false
-    private var qqGuessLoadJob: Job? = null
     private var playbackGeneration = 0
     private var playTrackRequestId = 0
     private var pendingPlatformRestore: MusicPlatform? = null
@@ -431,7 +428,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             
             // 设置回调，同步播放状态（处理音频焦点丢失等情况）
             mediaPlaybackService?.onPlaybackStateChanged = { isPlaying ->
-                playerState = playerState.copy(isPlaying = isPlaying)
+                playerState = playerState.copy(isPlaying = isPlaying, isLoading = if (isPlaying) false else playerState.isLoading)
             }
             mediaPlaybackService?.onAudioFormatChanged = { track, format, cacheFormat ->
                 val audioTrack = mediaPlaybackService?.currentAudioTrack ?: track
@@ -466,7 +463,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     if (playerState.currentTrack == track) prepareTrack(track, position, resume)
                 }
             }
-            mediaPlaybackService?.onNotificationClose = { clearPlaybackForPlatformSwitch() }
+            mediaPlaybackService?.onNotificationClose = { keepPlaybackAfterNotificationClose() }
             mediaPlaybackService?.onNotificationFavorite = { track ->
                 if (playerState.currentTrack == track) {
                     likeCurrentTrack { liked ->
@@ -551,7 +548,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             mediaPlaybackService?.getCurrentPosition() else null
         val snapshot = PlatformPlaybackSnapshot(track, currentPlaylist.toList(), originalPlaylist.toList(),
             positionOverride ?: servicePosition ?: playerState.currentPosition, playMode,
-            isFMMode, isIntelligenceMode, qqGuessMode, fmPlaylist.toList(), fmIndex,
+            isFMMode, isIntelligenceMode, fmPlaylist.toList(), fmIndex,
             intelligencePlaylist.toList(), intelligenceIndex, intelligenceSeedSongId, intelligencePlaylistId, albumPlayback, additionalRadioId, fmModeLabel)
         prefs.edit().putString(snapshotKey(platform), gson.toJson(snapshot)).apply()
     }
@@ -571,7 +568,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         fmModeLabel = snapshot.fmModeLabel?.takeIf { it.isNotBlank() }
             ?: com.hypermusic.miuix.data.model.radioModeLabel(additionalRadioId, additionalRadioId?.let { additionalRecommendations.card(it)?.title })
         isIntelligenceMode = snapshot.intelligence
-        qqGuessMode = snapshot.guess
         fmPlaylist = snapshot.fmTracks.orEmpty(); fmIndex = snapshot.fmIndex.coerceAtLeast(0)
         intelligencePlaylist = snapshot.intelligenceTracks.orEmpty(); intelligenceIndex = snapshot.intelligenceIndex.coerceAtLeast(0)
         intelligenceSeedSongId = snapshot.seed.orEmpty(); intelligencePlaylistId = snapshot.playlistId.orEmpty()
@@ -597,6 +593,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private fun keepPlaybackAfterNotificationClose() {
+        playbackGeneration++
+        playTrackRequestId++
+        additionalRadioJob?.cancel()
+        dailyShortcutJob?.cancel()
+        pendingTrack = null
+        pendingResume = false
+        val track = playerState.currentTrack
+        val service = mediaPlaybackService
+        val position = if (track != null && service?.getCurrentTrack() == track) service.getCurrentPosition()
+            else playerState.currentPosition
+        playerState = playerState.copy(isPlaying = false, isLoading = false, currentPosition = position)
+        if (track != null) {
+            saveLastPlayedTrack(track)
+            saveLastPlaylist()
+            savePlatformPlayback(PlatformManager.current, positionOverride = position)
+        }
+    }
+
     fun clearPlaybackForPlatformSwitch(clearSaved: Boolean = true) {
         additionalRadioJob?.cancel()
         additionalRadioId = null
@@ -604,8 +619,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         playbackGeneration++
         albumPlayback = false
         mediaPlaybackService?.setAlbumPlayback(false)
-        qqGuessMode = false
-        qqGuessLoadJob?.cancel()
         pendingTrack = null
         pendingPosition = 0L
         pendingResume = false
@@ -909,6 +922,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun prepareTrack(track: Track, position: Long = 0L, resume: Boolean = false) {
+        // Restoring an in-app record must not recreate media dismissed by the user.
+        if (!resume && prefs.getBoolean(MediaPlaybackService.PREF_MEDIA_DISMISSED, false)) return
         if (!isBound) {
             pendingTrack = track
             pendingPosition = position
@@ -1553,34 +1568,26 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun shufflePlaylist(playlist: List<Track>, qqGuess: Boolean = false, fromAlbum: Boolean = false) {
+    fun shufflePlaylist(playlist: List<Track>, fromAlbum: Boolean = false) {
         if (playlist.isEmpty()) return
         val first = playlist.random()
         if (com.hypermusic.miuix.data.download.OfflineLibrary.versions(first).size > 1) {
             com.hypermusic.miuix.data.download.Downloads.requestLocalVersion(first) { chosen ->
                 val keptTrack = com.hypermusic.miuix.data.download.OfflineLibrary.localTrack(chosen)
                 startShuffledTrack(keptTrack, playlist.map { if (it.source == first.source && it.id == first.id) keptTrack else it }
-                    .distinctBy { it.source to it.id }, qqGuess, fromAlbum)
+                    .distinctBy { it.source to it.id }, fromAlbum)
             }
             return
         }
-        startShuffledTrack(first, playlist, qqGuess, fromAlbum)
+        startShuffledTrack(first, playlist, fromAlbum)
     }
 
-    private fun startShuffledTrack(first: Track, playlist: List<Track>, qqGuess: Boolean, fromAlbum: Boolean) {
+    private fun startShuffledTrack(first: Track, playlist: List<Track>, fromAlbum: Boolean) {
         if (playMode != 1) {
             playMode = 1
             prefs.edit().putInt("play_mode", playMode).apply()
         }
-        if (qqGuess) playQqGuessTrack(first, playlist) else playTrackWithMode(first, playlist, fromAlbum)
-    }
-
-    fun playQqGuessTrack(track: Track, playlist: List<Track>) {
-        playTrackWithMode(track, playlist)
-        qqGuessMode = true
-        // playTrackWithMode saves the queue before this mode flag is set.
-        // Persist it as well so a process death does not restore a normal queue.
-        if (trackBelongsToCurrentPlatform(track)) savePlatformPlayback(PlatformManager.current, positionOverride = 0)
+        playTrackWithMode(first, playlist, fromAlbum)
     }
 
     fun playTrackWithMode(track: Track, playlist: List<Track>, fromAlbum: Boolean = false) {
@@ -1598,8 +1605,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         mediaPlaybackService?.setAlbumPlayback(fromAlbum)
         dailyShortcutJob?.cancel()
         dailyShortcutJob = null
-        qqGuessMode = false
-        qqGuessLoadJob?.cancel()
         // 如果当前在FM模式或心动模式，退出
         if (isFMMode) {
             exitFMMode()
@@ -1642,10 +1647,12 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         fmIndex = 0
         // 保存FM模式状态
         prefs.edit().putString("play_mode_type", "fm").apply()
+        val generation = playbackGeneration
         viewModelScope.launch {
             Log.d("MusicPlayerViewModel", "Loading FM songs...")
             NeteaseApi.getPersonalFM().fold(
                 onSuccess = { tracks ->
+                    if (generation != playbackGeneration) return@fold
                     Log.d("MusicPlayerViewModel", "FM songs loaded: ${tracks.size} tracks")
                     fmPlaylist = tracks
                     if (tracks.isNotEmpty()) {
@@ -1676,9 +1683,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         fmIndex++
         // 如果播放到最后一首，加载更多
         if (fmIndex >= fmPlaylist.size) {
+            val generation = playbackGeneration
             viewModelScope.launch {
                 NeteaseApi.getPersonalFM().fold(
                     onSuccess = { tracks ->
+                        if (generation != playbackGeneration) return@fold
                         fmPlaylist = fmPlaylist + tracks
                         if (fmIndex < fmPlaylist.size) {
                             playTrack(fmPlaylist[fmIndex])
@@ -1725,7 +1734,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 if (generation != playbackGeneration || platform != PlatformManager.current || stamp != additionalRecommendations.accountStamp(platform)) return@launch
                 if (isIntelligenceMode) exitIntelligenceMode()
                 // Do not call exitFMMode here: it would cancel this start request.
-                qqGuessMode = false; qqGuessLoadJob?.cancel()
                 albumPlayback = false; mediaPlaybackService?.setAlbumPlayback(false)
                 additionalRadioId = id; isFMMode = true
                 fmModeLabel = modeLabel
@@ -1812,9 +1820,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         playerState = playerState.copy(isLoading = true, error = null)
         onReady()
         ensureUserPlaylistsLoaded()
+        val generation = playbackGeneration
         viewModelScope.launch {
             Log.d("MusicPlayerViewModel", "Entering intelligence mode seed=$songId pid=$playlistId")
             val resolved = resolveHeartModeParams(songId, playlistId)
+            if (generation != playbackGeneration) return@launch
             if (resolved == null) {
                 Log.e("MusicPlayerViewModel", "Failed to resolve heart mode seed/playlist")
                 isIntelligenceMode = false
@@ -1829,6 +1839,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             val (seedId, pid) = resolved
             NeteaseApi.getIntelligenceList(seedId, pid).fold(
                 onSuccess = { tracks ->
+                    if (generation != playbackGeneration) return@fold
                     Log.d("MusicPlayerViewModel", "Intelligence songs loaded: ${tracks.size} tracks")
                     if (tracks.isEmpty()) {
                         isIntelligenceMode = false
@@ -1856,6 +1867,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     playTrack(tracks[0])
                 },
                 onFailure = { e ->
+                    if (generation != playbackGeneration) return@fold
                     Log.e("MusicPlayerViewModel", "Failed to load intelligence list: ${e.message}")
                     isIntelligenceMode = false
                     playerState = playerState.copy(isLoading = false)
@@ -2550,7 +2562,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
                 QqMusicApi.getSongAudio(track.id, track.qqMediaMid, cacheRequest).fold(
                     onSuccess = { audio ->
-                        if (playerState.currentTrack != track) return@fold
+                        if (generation != playbackGeneration || playerState.currentTrack != track) return@fold
                         mediaPlaybackService?.let { service ->
                             service.setPlaylist(currentPlaylist)
                             val format = "${cacheAccount ?: "guest"}:${audio.quality}:${audio.bitrate}:${audio.extension}"
@@ -2560,7 +2572,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         } ?: run { playerState = playerState.copy(isLoading = false, error = "播放器尚未就绪") }
                     },
                     onFailure = { e ->
-                        if (playerState.currentTrack != track) return@fold
+                        if (generation != playbackGeneration || playerState.currentTrack != track) return@fold
                         playerState = playerState.copy(isLoading = false, error = e.message)
                         _toastMessage.trySend(e.message ?: "QQ音乐播放失败")
                     }
@@ -2606,7 +2618,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
             NeteaseApi.getSongUrl(track.id, selectedBitrate, accountCookie = accountCookie).fold(
                 onSuccess = { (url, bitrate, type) ->
-                    if (playerState.currentTrack != track) return@fold
+                    if (generation != playbackGeneration || playerState.currentTrack != track) return@fold
                     try {
                         mediaPlaybackService?.let { service ->
                             service.setPlaylist(currentPlaylist)
@@ -2628,7 +2640,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                 },
                 onFailure = { e ->
-                    if (playerState.currentTrack != track) return@fold
+                    if (generation != playbackGeneration || playerState.currentTrack != track) return@fold
                     playerState = playerState.copy(
                         isLoading = false,
                         error = e.message
@@ -2660,6 +2672,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun updateAudioQualityIndex(index: Int) = updatePlatformAudioQualityIndex(PlatformManager.current, index)
     fun togglePlayPause() {
         mediaPlaybackService?.let { service ->
+            if (service.mediaNotificationDismissed || prefs.getBoolean(MediaPlaybackService.PREF_MEDIA_DISMISSED, false)) {
+                playerState.currentTrack?.let { track ->
+                    playerState = playerState.copy(isLoading = true, error = null)
+                    prepareTrack(track, playerState.currentPosition, resume = true)
+                }
+                return
+            }
             service.togglePlayPause()
             // 查询实际的播放状态，而不是简单反转
             val actualIsPlaying = service.isPlaying()
@@ -2691,26 +2710,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val index = currentPlaylist.indexOfFirst { it.id == current.id }
         if (index >= 0 && index < currentPlaylist.size - 1) {
             playTrack(currentPlaylist[index + 1])
-        } else if (qqGuessMode && index >= 0 && qqGuessLoadJob?.isActive != true) {
-            val generation = playbackGeneration
-            val existing = currentPlaylist.toList()
-            qqGuessLoadJob = viewModelScope.launch {
-                QqMusicApi.getHomeFeature(QqMusicApi.HomeFeature.GUESS, existing.map { it.qqSongId }).fold(
-                    onSuccess = { detail ->
-                        if (!qqGuessMode || generation != playbackGeneration || playerState.currentTrack != current) return@fold
-                        val known = existing.map { it.id }.toSet()
-                        val fresh = detail.tracks.filterNot { it.id in known }
-                        if (fresh.isEmpty()) {
-                            _toastMessage.trySend("暂无更多猜你喜欢歌曲")
-                        } else {
-                            currentPlaylist = existing + fresh
-                            saveLastPlaylist()
-                            playTrack(fresh.first())
-                        }
-                    },
-                    onFailure = { if (qqGuessMode && generation == playbackGeneration) _toastMessage.trySend(it.message ?: "加载更多推荐失败") }
-                )
-            }
         }
     }
 

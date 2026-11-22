@@ -34,6 +34,7 @@ object ThemeSettings {
     private const val KEY_SMALL_SCREEN_COVER_STYLE = "small_screen_cover_style"
     private const val KEY_LARGE_SCREEN_COVER_STYLE = "large_screen_cover_style"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+    private const val KEY_PLAYER_IMMERSIVE_MODE = "player_immersive_mode"
     private const val KEY_WORD_BY_WORD_LYRICS = "word_by_word_lyrics"
     private const val KEY_SHOW_CAST_BUTTON = "show_cast_button"
     private const val KEY_SHOW_QUALITY = "show_quality"
@@ -142,6 +143,8 @@ object ThemeSettings {
     // 播放页保持屏幕常亮
     var keepScreenOn by mutableStateOf(true)
         private set
+    var playerImmersiveMode by mutableStateOf(false)
+        private set
 
     // 显示小米秒播快捷按钮（播放页投屏按钮）
     var showCastButton by mutableStateOf(true)
@@ -185,6 +188,7 @@ object ThemeSettings {
         smallScreenCoverStyle = prefs?.getInt(KEY_SMALL_SCREEN_COVER_STYLE, 0) ?: 0
         largeScreenCoverStyle = prefs?.getInt(KEY_LARGE_SCREEN_COVER_STYLE, 1) ?: 1
         keepScreenOn = prefs?.getBoolean(KEY_KEEP_SCREEN_ON, true) ?: true
+        playerImmersiveMode = prefs?.getBoolean(KEY_PLAYER_IMMERSIVE_MODE, false) ?: false
         wordByWordLyrics = prefs?.getBoolean(KEY_WORD_BY_WORD_LYRICS, true) ?: true
         lyricSourcePreferenceIndex = prefs?.getInt(KEY_LYRIC_SOURCE, 0) ?: 0
         autoUpgradeLyrics = prefs?.getBoolean(KEY_AUTO_UPGRADE_LYRICS, true) ?: true
@@ -283,6 +287,11 @@ object ThemeSettings {
     fun updateKeepScreenOn(value: Boolean) {
         keepScreenOn = value
         prefs?.edit()?.putBoolean(KEY_KEEP_SCREEN_ON, value)?.apply()
+    }
+
+    fun updatePlayerImmersiveMode(value: Boolean) {
+        playerImmersiveMode = value
+        prefs?.edit()?.putBoolean(KEY_PLAYER_IMMERSIVE_MODE, value)?.apply()
     }
 
     fun updateWordByWordLyrics(value: Boolean) {

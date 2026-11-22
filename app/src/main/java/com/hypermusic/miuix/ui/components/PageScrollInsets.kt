@@ -17,6 +17,3 @@ internal fun pageViewportTopInset(top: Dp): Dp =
 @Composable
 internal fun pageScrollTopInset(top: Dp): Dp =
     if (LocalSoftGlassEnabled.current || LocalEnableBlur.current) top else 0.dp
-
-@Composable
-internal fun pageNavigationIconInset(): Dp = if (LocalSoftGlassEnabled.current) 0.dp else 8.dp

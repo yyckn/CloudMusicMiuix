@@ -1,14 +1,14 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.PageBackButton
 import androidx.compose.material.icons.rounded.MyLocation
 import com.hypermusic.miuix.data.cache.*
 import com.hypermusic.miuix.data.api.MusicPlatform
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
 import com.hypermusic.miuix.ui.components.pageViewportTopInset
 import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import com.hypermusic.miuix.ui.navigation.BackHandler
 import com.hypermusic.miuix.ui.components.rememberPageContentSearch
-import com.hypermusic.miuix.ui.components.PageContentSearchAction
+import com.hypermusic.miuix.ui.components.PageContentMenu
 import com.hypermusic.miuix.ui.components.PageContentSearchBar
 import com.hypermusic.miuix.ui.components.matchesPageQuery
 import com.hypermusic.miuix.ui.components.TrackMoreActions
@@ -105,7 +105,6 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.hypermusic.miuix.ui.FeedBottomPads
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.ui.unit.DpSize
 
@@ -484,8 +483,7 @@ fun ArtistPage(
                         color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                         scrollBehavior = scrollBehavior,
                         actions = {
-                            PageContentSearchAction(pageSearch)
-                            com.hypermusic.miuix.ui.components.BatchDownloadMenu(artistSongs, enabled = !isLoading, loadAll = {
+                            PageContentMenu(pageSearch, artistSongs, downloadEnabled = !isLoading, loadAll = {
                                 var pages = 0
                                 while (hasMoreSongs) {
                                     check(pages++ < 1000) { "歌手歌曲分页过多，请重试" }
@@ -502,16 +500,7 @@ fun ArtistPage(
                         },
                         bottomContent = { PageContentSearchBar(pageSearch, if (selectedTab == 0) "搜索歌手的单曲" else "搜索歌手的专辑") },
                         defaultWindowInsetsPadding = false,
-                        navigationIcon = {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "返回",
-                                modifier = Modifier
-                                    .padding(start = pageNavigationIconInset())
-                                    .clickable { if (pageSearch.active) pageSearch.close() else onBackClick() }
-                            )
-
-                        }
+                        navigationIcon = { PageBackButton(onClick = { if (pageSearch.active) pageSearch.close() else onBackClick() }) }
                     )
                     if (showCollapsedArtistAvatar) {
                         Row(

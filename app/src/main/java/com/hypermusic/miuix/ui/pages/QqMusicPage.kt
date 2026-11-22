@@ -1,4 +1,5 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.PageBackButton
 import com.hypermusic.miuix.ui.components.pageViewportTopInset
 import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
@@ -87,7 +88,7 @@ fun QqMusicPage(tab: Int, viewModel: MusicPlayerViewModel, onPlaylistClick: (Str
                     LazyRow(modifier = Modifier.padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp)) {
                         items(listOf(QqMusicApi.HomeFeature.RADAR, QqMusicApi.HomeFeature.DAILY,
-                            QqMusicApi.HomeFeature.NEW_SONGS, QqMusicApi.HomeFeature.GUESS)) { feature ->
+                            QqMusicApi.HomeFeature.NEW_SONGS)) { feature ->
                             val result = features[feature]
                             val detail = result?.getOrNull()
                             val cover = detail?.tracks?.firstOrNull()?.imgUrl
@@ -97,7 +98,6 @@ fun QqMusicPage(tab: Int, viewModel: MusicPlayerViewModel, onPlaylistClick: (Str
                                     result == null -> "正在加载..."
                                     result.isFailure -> "点击重试"
                                     feature == QqMusicApi.HomeFeature.RADAR -> "为你发现更多好音乐"
-                                    feature == QqMusicApi.HomeFeature.GUESS -> "发现你喜欢的歌曲"
                                     feature == QqMusicApi.HomeFeature.DAILY -> "每天为你精选"
                                     else -> "发现最新好歌"
                                 },
@@ -325,9 +325,7 @@ fun QqArtistPage(artistMid: String, viewModel: MusicPlayerViewModel, onBack: () 
         loading = false
     }
     com.hypermusic.miuix.ui.navigation.BackHandler { onBack() }
-    Scaffold(topBar = { SmallTopAppBar(title = if (albumId != null) "QQ音乐专辑" else "QQ音乐歌手", navigationIcon = {
-        Text("返回", modifier = Modifier.clickable { onBack() }.padding(12.dp))
-    }) }) { padding ->
+    Scaffold(topBar = { SmallTopAppBar(title = if (albumId != null) "QQ音乐专辑" else "QQ音乐歌手", navigationIcon = { PageBackButton(onClick = { onBack() }) }) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(top = pageViewportTopInset(padding.calculateTopPadding())),
             contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = pageScrollTopInset(padding.calculateTopPadding()), bottom = 140.dp)) {
             if (loading) item { Text("正在加载…", modifier = Modifier.padding(16.dp)) }

@@ -68,6 +68,9 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
 
     private var currentTrack: Track? = null
     private var currentUrl: String? = null
+    var mediaNotificationDismissed = false
+        private set
+    private var mediaRequestGeneration = 0L
     private var currentCacheFormat = "unknown"
     private var currentIsPreview = false
     private var playlist: List<Track> = emptyList()
@@ -208,6 +211,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     companion object {
         const val CHANNEL_ID = "media_playback_channel"
         const val NOTIFICATION_ID = 1
+        const val PREF_MEDIA_DISMISSED = "media_notification_dismissed"
         const val MEDIA_SESSION_TAG = "CloudMusicMediaSession"
         const val ACTION_PLAY = "com.hypermusic.miuix.PLAY"
         const val ACTION_PAUSE = "com.hypermusic.miuix.PAUSE"
@@ -234,6 +238,8 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         AudioSettings.init(this)
         com.hypermusic.miuix.data.lyrics.LyricMatches.init(this)
         createNotificationChannel()
+        mediaNotificationDismissed = getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
+            .getBoolean(PREF_MEDIA_DISMISSED, false)
         initializeMediaSession()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         
@@ -275,7 +281,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                 MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
             )
             setCallback(mediaSessionCallback)
-            isActive = true
+            isActive = !mediaNotificationDismissed
         }
         sessionToken = mediaSession.sessionToken
     }
@@ -323,9 +329,12 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     fun playTrack(track: Track) {
+        val generation = ++mediaRequestGeneration
+        mediaNotificationDismissed = false
         currentAudioTrack = track
         currentTrack = track
         serviceScope.launch {
+            if (generation != mediaRequestGeneration) return@launch
             try {
                 if (requestAudioFocus()) {
                     updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING)
@@ -341,12 +350,15 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         private set
 
     fun playTrackWithUrl(track: Track, url: String, cacheFormat: String = "unknown", isPreview: Boolean = false, audioTrack: Track = track) {
+        val generation = ++mediaRequestGeneration
+        mediaNotificationDismissed = false
         currentAudioTrack = audioTrack
         currentCacheFormat = cacheFormat
         currentIsPreview = isPreview
         currentTrack = track
         errorRetryCount = 0
         serviceScope.launch {
+            if (generation != mediaRequestGeneration) return@launch
             try {
                 if (requestAudioFocus()) {
                     // 第一阶段：立即用元数据（无歌词）更新 Lyricon
@@ -363,12 +375,15 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     fun restoreTrackWithUrl(track: Track, url: String, position: Long, resume: Boolean, cacheFormat: String = "unknown", isPreview: Boolean = false, audioTrack: Track = track) {
+        val generation = ++mediaRequestGeneration
+        mediaNotificationDismissed = false
         currentAudioTrack = audioTrack
         currentCacheFormat = cacheFormat
         currentIsPreview = isPreview
         currentTrack = track
         errorRetryCount = 0
         serviceScope.launch {
+            if (generation != mediaRequestGeneration) return@launch
             try {
                 lyriconManager?.setTrack(track)
                 if (resume && !requestAudioFocus()) return@launch
@@ -380,11 +395,14 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     fun prepareTrackWithUrl(track: Track, url: String) {
+        val generation = ++mediaRequestGeneration
+        mediaNotificationDismissed = false
         currentAudioTrack = track
         currentIsPreview = false
         currentTrack = track
         errorRetryCount = 0
         serviceScope.launch {
+            if (generation != mediaRequestGeneration) return@launch
             try {
                 // 设置词幕歌曲信息
                 lyriconManager?.setTrack(track)
@@ -407,6 +425,8 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     ) {
         currentTrack = track
         mediaSession.isActive = true
+        mediaNotificationDismissed = false
+        if (autoplay) getSharedPreferences("player_prefs", Context.MODE_PRIVATE).edit().putBoolean(PREF_MEDIA_DISMISSED, false).apply()
         currentUrl = url
         playbackPosition = startPosition
         completionHandled = false
@@ -602,7 +622,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
             val track = currentTrack
             val url = currentUrl
             if (track != null && url != null) {
-                requestAudioFocus()
+                if (!requestAudioFocus()) return
                 val fromStart = current?.playbackState == Player.STATE_ENDED
                 startPlayback(
                     track,
@@ -610,6 +630,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                     autoplay = true,
                     startPosition = if (fromStart) 0L else playbackPosition
                 )
+                updateMetadata(track)
                 showNotification()
                 onPlaybackStateChanged?.invoke(true)
                 lyriconManager?.setPlaybackState(true)
@@ -683,6 +704,8 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     fun clearPlayback() {
+        mediaRequestGeneration++
+        mediaNotificationDismissed = false
         favoriteJob?.cancel()
         favoriteTrack = null
         favorite = false
@@ -715,22 +738,36 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun closeFromNotification() {
-        if (onNotificationClose != null) {
-            onNotificationClose?.invoke()
-        } else {
+        mediaRequestGeneration++
+        playbackPosition = getCurrentPosition()
+        mediaNotificationDismissed = true
+        getSharedPreferences("player_prefs", Context.MODE_PRIVATE).edit().putBoolean(PREF_MEDIA_DISMISSED, true).apply()
+        isPlaying = false
+        wasPlayingBeforeFocusLoss = false
+        releasePlayer()
+        lyriconManager?.setPlaybackState(false)
+        mediaSession.setPlaybackState(PlaybackStateCompat.Builder()
+            .setState(PlaybackStateCompat.STATE_STOPPED, playbackPosition, 0f).build())
+        mediaSession.setMetadata(null)
+        mediaSession.isActive = false
+        abandonAudioFocus()
+        stopForeground(true)
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
+        onPlaybackStateChanged?.invoke(false)
+        if (onNotificationClose != null) onNotificationClose?.invoke() else {
+            // The UI may be gone. Keep its saved queue/mode and only update the position.
             val platform = com.hypermusic.miuix.data.api.MusicPlatform.fromTrackSource(currentTrack?.source)
-            clearPlayback()
             val prefs = getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
-            val legacySource = runCatching { com.google.gson.Gson().fromJson(prefs.getString("last_track", null), Track::class.java)?.source }.getOrNull()
-            prefs.edit().apply {
-                platform?.let { remove("playback_snapshot_${it.storageKey}") }
-                if (platform != null && legacySource == platform.trackSource) {
-                    remove("last_track"); remove("last_playlist")
+            platform?.let { source -> runCatching {
+                val key = "playback_snapshot_${source.storageKey}"
+                val raw = prefs.getString(key, null) ?: return@runCatching
+                val json = com.google.gson.JsonParser.parseString(raw).asJsonObject
+                val track = json.getAsJsonObject("track") ?: json.getAsJsonObject("a")
+                if (track?.get("id")?.asString == currentTrack?.id) {
+                    json.remove("d"); json.addProperty("position", playbackPosition)
+                    prefs.edit().putString(key, json.toString()).apply()
                 }
-                if (platform == com.hypermusic.miuix.data.api.MusicPlatform.NETEASE) {
-                    remove("play_mode_type"); remove("intelligence_song_id"); remove("intelligence_playlist_id")
-                }
-            }.apply()
+            } }
             stopSelf()
         }
     }
@@ -914,6 +951,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun updatePlaybackState(state: Int) {
+        if (mediaNotificationDismissed) return
         val position = player?.currentPosition ?: playbackPosition
         val playbackState = PlaybackStateCompat.Builder()
             .setActions(
@@ -959,6 +997,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun updateMetadata(track: Track) {
+        if (mediaNotificationDismissed) return
         val metadataBuilder = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.artist)
@@ -1016,6 +1055,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun showNotification() {
+        if (mediaNotificationDismissed) return
         val track = currentTrack ?: return
 
         val intent = Intent(this, MainActivity::class.java).apply {

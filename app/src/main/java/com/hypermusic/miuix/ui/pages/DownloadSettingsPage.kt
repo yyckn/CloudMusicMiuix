@@ -1,5 +1,5 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
 
 import android.content.Intent
 import android.content.Context
@@ -24,7 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.core.content.FileProvider
 import com.hypermusic.miuix.ui.components.AsyncImage
 import com.hypermusic.miuix.data.download.Downloads
@@ -57,9 +56,7 @@ fun DownloadSettingsPage(onBack: () -> Unit) {
     var qishui by remember { mutableIntStateOf(prefs.getInt("quality_qishui", -1)) }
     var parallel by remember { mutableIntStateOf(prefs.getInt("parallel", 2).coerceIn(1, 5)) }
     com.hypermusic.miuix.ui.navigation.BackHandler(onBack = onBack)
-    Scaffold(topBar = { SmallTopAppBar(title = "下载设置", navigationIcon = {
-        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", modifier = Modifier.padding(start = pageNavigationIconInset()).clickable(onClick = onBack))
-    }) }) { padding ->
+    Scaffold(topBar = { SmallTopAppBar(title = "下载设置", navigationIcon = { PageBackButton(onClick = onBack) }) }) { padding ->
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding)) {
             SmallTitle("下载")
             Card(Modifier.padding(horizontal = 12.dp)) {

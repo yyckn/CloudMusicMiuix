@@ -1,4 +1,5 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.PageBackButton
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,7 +17,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import com.hypermusic.miuix.data.api.*
 import com.hypermusic.miuix.ui.FeedBottomPads
 import com.hypermusic.miuix.ui.components.*
@@ -43,8 +43,7 @@ internal fun AdditionalProfilePage(platform: MusicPlatform, selectedAccountId: S
         BlurredBar(backdrop) {
             TopAppBar(title = "我的资料", largeTitle = "我的资料", scrollBehavior = behavior,
                 color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
-                navigationIcon = { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回",
-                    modifier = Modifier.padding(start = pageNavigationIconInset()).clickable(onClick = onBack)) })
+                navigationIcon = { PageBackButton(onClick = onBack) })
         }
     }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(top = pageViewportTopInset(padding.calculateTopPadding()))

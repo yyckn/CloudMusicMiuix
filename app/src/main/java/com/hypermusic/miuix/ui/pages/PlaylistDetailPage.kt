@@ -1,12 +1,12 @@
 package com.hypermusic.miuix.ui.pages
+import com.hypermusic.miuix.ui.components.PageBackButton
 import androidx.compose.material.icons.rounded.MyLocation
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
 import com.hypermusic.miuix.ui.components.pageViewportTopInset
 import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
 import com.hypermusic.miuix.ui.navigation.BackHandler
 import com.hypermusic.miuix.ui.components.rememberPageContentSearch
-import com.hypermusic.miuix.ui.components.PageContentSearchAction
+import com.hypermusic.miuix.ui.components.PageContentMenu
 import com.hypermusic.miuix.ui.components.PageContentSearchBar
 import com.hypermusic.miuix.ui.components.matchesPageQuery
 import com.hypermusic.miuix.ui.components.TrackMoreActions
@@ -100,7 +100,6 @@ import top.yukonga.miuix.kmp.utils.pressable
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.hypermusic.miuix.ui.FeedBottomPads
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.ui.unit.DpSize
 import kotlinx.coroutines.launch
@@ -227,21 +226,11 @@ fun PlaylistDetailPage(
                     defaultWindowInsetsPadding = false,
                     scrollBehavior = scrollBehavior,
                     actions = {
-                        PageContentSearchAction(pageSearch)
-                        if (isLocalMusic) IconButton(onClick = onShowDownloads) { Icon(MiuixIcons.Download, "下载任务") }
-                        else com.hypermusic.miuix.ui.components.BatchDownloadMenu(playlistDetail?.tracks.orEmpty(), enabled = !isLoading)
+                        PageContentMenu(pageSearch, playlistDetail?.tracks.orEmpty(), downloadEnabled = !isLoading,
+                            onShowDownloads = if (isLocalMusic) onShowDownloads else null)
                     },
                     bottomContent = { PageContentSearchBar(pageSearch) },
-                    navigationIcon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            modifier = Modifier
-                                .padding(start = pageNavigationIconInset())
-                                .size(24.dp)
-                                .clickable { if (pageSearch.active) pageSearch.close() else onBackClick() }
-                        )
-                    }
+                    navigationIcon = { PageBackButton(onClick = { if (pageSearch.active) pageSearch.close() else onBackClick() }) }
                 )
             }
         },

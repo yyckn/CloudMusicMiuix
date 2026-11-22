@@ -1,5 +1,5 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
 import com.hypermusic.miuix.ui.components.pageViewportTopInset
 import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Comment
 import com.hypermusic.miuix.ui.components.AsyncImage
 import com.google.gson.Gson
@@ -236,10 +235,7 @@ fun SearchPage(
         BlurredBar(backdrop = backdrop) {
             TopAppBar(title = "搜索", largeTitle = "搜索", scrollBehavior = scrollBehavior,
                 actions = { PlatformSwitch() }, defaultWindowInsetsPadding = false,
-                navigationIcon = {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回",
-                        modifier = Modifier.padding(start = pageNavigationIconInset()).clickable { onBack() })
-                }, color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface)
+                navigationIcon = { PageBackButton(onClick = { onBack() }) }, color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface)
         }
     }) { padding ->
         PullToRefresh(isRefreshing = refreshing, onRefresh = {

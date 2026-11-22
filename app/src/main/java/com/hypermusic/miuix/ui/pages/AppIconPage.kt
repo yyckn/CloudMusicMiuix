@@ -1,5 +1,5 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
 import com.hypermusic.miuix.ui.components.pageViewportTopInset
 import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.runtime.saveable.rememberSaveable
 import top.yukonga.miuix.kmp.basic.IconButton
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -118,15 +117,7 @@ fun AppIconPage(
                             Icon(Icons.Filled.Save, contentDescription = "保存图标和名称")
                         }
                     },
-                    navigationIcon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            modifier = Modifier
-                                .padding(start = pageNavigationIconInset())
-                                .clickable { requestBack() }
-                        )
-                    }
+                    navigationIcon = { PageBackButton(onClick = { requestBack() }) }
                 )
             }
         }

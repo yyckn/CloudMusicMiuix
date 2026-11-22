@@ -1,5 +1,5 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
 
 import android.annotation.SuppressLint
 import android.webkit.CookieManager
@@ -28,7 +28,6 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -53,15 +52,7 @@ fun LoginPage(
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                     scrollBehavior = scrollBehavior,
                     defaultWindowInsetsPadding = false,
-                    navigationIcon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            modifier = Modifier
-                                .padding(start = pageNavigationIconInset())
-                                .clickable { onBackClick() }
-                        )
-                    }
+                    navigationIcon = { PageBackButton(onClick = { onBackClick() }) }
                 )
             }
         }

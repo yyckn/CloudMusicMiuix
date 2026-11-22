@@ -34,12 +34,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
+import com.hypermusic.miuix.ui.components.playerSystemBarInsets
+import com.hypermusic.miuix.ui.components.playerNavigationBarInsets
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
@@ -521,12 +523,13 @@ fun PlayerPage(
             }
     ) {
         Scaffold(
+        contentWindowInsets = playerSystemBarInsets().union(WindowInsets.displayCutout),
         topBar = {
             // 空的TopBar，只保留状态栏间距
             Spacer(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                    .windowInsetsPadding(playerSystemBarInsets().only(WindowInsetsSides.Top))
             )
         }
     ) { paddingValues ->
@@ -736,7 +739,7 @@ fun PlayerPage(
                     // 车机布局：标题、封面与歌词、播放控制依次排列，内容宽度不受比例限制。
                     Column(
                         modifier = Modifier.fillMaxSize().padding(top = topPadding)
-                            .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+                            .windowInsetsPadding(playerNavigationBarInsets().only(WindowInsetsSides.Bottom))
                             .padding(horizontal = 24.dp)
                     ) {
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
@@ -1293,7 +1296,7 @@ fun PlayerPage(
                                 .fillMaxHeight()
                                 .padding(start = 16.dp, end = 24.dp)
                                 .windowInsetsPadding(
-                                    WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)
+                                    playerNavigationBarInsets().only(WindowInsetsSides.Bottom)
                                 )
                         ) {
                             if (isPureMusic) {

@@ -26,22 +26,10 @@ import kotlinx.coroutines.sync.withPermit
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Close
-import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.More
-import top.yukonga.miuix.kmp.menu.WindowIconDropdownMenu
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-
-@Composable
-internal fun BatchDownloadMenu(tracks: List<Track>, enabled: Boolean = true, loadAll: (suspend () -> List<Track>)? = null) {
-    WindowIconDropdownMenu(entry = DropdownEntry(items = listOf(DropdownItem("批量下载", enabled = enabled && tracks.isNotEmpty(),
-        icon = { Icon(MiuixIcons.Download, null, modifier = it.size(24.dp)) },
-        onClick = { BatchDownloads.open(tracks, loadAll) })))) {
-        Icon(MiuixIcons.More, "更多")
-    }
-}
 
 @Composable
 internal fun BatchDownloadSheets() {

@@ -1,5 +1,5 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
 import com.hypermusic.miuix.ui.components.pageViewportTopInset
 import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
@@ -28,7 +28,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import com.hypermusic.miuix.ui.components.AsyncImage
 import com.hypermusic.miuix.data.api.QqMusicApi
 import com.hypermusic.miuix.ui.FeedBottomPads
@@ -94,10 +93,7 @@ fun QqProfilePage(onBackClick: () -> Unit, onLogout: () -> Unit, selectedAccount
             TopAppBar(title = "我的资料", largeTitle = "我的资料", scrollBehavior = scrollBehavior,
                 color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                 defaultWindowInsetsPadding = false,
-                navigationIcon = {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回",
-                        modifier = Modifier.padding(start = pageNavigationIconInset()).clickable { onBackClick() })
-                },
+                navigationIcon = { PageBackButton(onClick = { onBackClick() }) },
                 actions = {
                     OverlayIconDropdownMenu(entry = DropdownEntry(items = listOf(
                         DropdownItem(text = "二维码分享登录凭证", onClick = { showCredentialQr = true }),

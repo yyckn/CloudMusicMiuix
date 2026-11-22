@@ -1,5 +1,5 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
 
 import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -52,7 +52,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import com.hypermusic.miuix.R
 import com.hypermusic.miuix.data.api.MusicPlatform
@@ -240,10 +239,7 @@ private fun OnboardingWelcome(completed: Boolean, onClick: () -> Unit, onBack: (
     Box(Modifier.fillMaxSize()) {
     OnboardingGlow()
     Scaffold(containerColor = Color.Transparent, topBar = {
-        if (completed) SmallTopAppBar(title = "", color = Color.Transparent, navigationIcon = {
-            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回",
-                tint = Color.White, modifier = Modifier.padding(start = pageNavigationIconInset()).clickable { onBack() })
-        })
+        if (completed) SmallTopAppBar(title = "", color = Color.Transparent, navigationIcon = { PageBackButton(onClick = { onBack() }, tint = Color.White) })
     }, bottomBar = {
         Surface(color = Color.Transparent) {
             Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp).padding(top = 20.dp, bottom = if (completed) 20.dp else 40.dp),
@@ -342,10 +338,7 @@ private fun OnboardingScaffold(
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(topBar = {
-        SmallTopAppBar(title = "", navigationIcon = {
-            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回",
-                modifier = Modifier.padding(start = pageNavigationIconInset()).clickable { onBack() })
-        })
+        SmallTopAppBar(title = "", navigationIcon = { PageBackButton(onClick = { onBack() }) })
     }, bottomBar = {
         Surface(color = MiuixTheme.colorScheme.surface) {
             Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 12.dp),

@@ -1,5 +1,5 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
 
 import android.content.Context
 import androidx.activity.compose.BackHandler
@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.media3.common.util.UnstableApi
 import com.hypermusic.miuix.data.cache.AudioCache
 import com.hypermusic.miuix.data.cache.ImageCaches
@@ -51,9 +50,7 @@ fun CacheSettingsPage(onBack: () -> Unit) {
         pageSize = com.hypermusic.miuix.data.cache.PageCache.size(context)
     }
     com.hypermusic.miuix.ui.navigation.BackHandler(enabled = pendingClear == null, onBack = onBack)
-    Scaffold(topBar = { SmallTopAppBar(title = "缓存设置", navigationIcon = {
-        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", modifier = Modifier.padding(start = pageNavigationIconInset()).clickable(onClick = onBack))
-    }) }) { padding ->
+    Scaffold(topBar = { SmallTopAppBar(title = "缓存设置", navigationIcon = { PageBackButton(onClick = onBack) }) }) { padding ->
         Column(Modifier.verticalScroll(rememberScrollState()).padding(padding)) {
             SmallTitle("页面缓存")
             Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {

@@ -21,7 +21,6 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -43,7 +42,6 @@ val LocalSoftGlassEnabled = compositionLocalOf { false }
 val LocalSoftGlassTabsEnabled = compositionLocalOf { true }
 internal val LocalGlassDark = compositionLocalOf { false }
 internal val LocalGlassToolbar = compositionLocalOf { false }
-internal val LocalGlassNavigation = compositionLocalOf { false }
 private val LocalGlassScene = compositionLocalOf<GlassScene?> { null }
 
 /** 只采样 Scaffold 正文，标题栏和弹层不能进入自己的采样源。 */
@@ -180,32 +178,10 @@ internal fun GlassToolbarContent(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalGlassToolbar provides true, content = content)
 }
 
-/** 同时兼容应用现有的 Icon.clickable 和 IconButton 返回按钮；空导航槽不显示玻璃圆点。 */
+/** Navigation uses the same actual icon buttons as toolbar actions, with no extra hit layer. */
 @Composable
 internal fun GlassNavigationContent(content: @Composable () -> Unit) {
-    if (!LocalSoftGlassEnabled.current) { content(); return }
-    CompositionLocalProvider(LocalGlassNavigation provides true) {
-        val backdrop = officialButtonBackdrop()
-        SubcomposeLayout { constraints ->
-            val children = subcompose("navigationContent", content).map {
-                it.measure(constraints.copy(minWidth = 0, minHeight = 0))
-            }
-            val width = children.maxOfOrNull { it.width } ?: 0
-            val height = children.maxOfOrNull { it.height } ?: 0
-            if (width == 0 || height == 0) layout(0, 0) {}
-            else {
-                val w = constraints.constrainWidth(maxOf(width, 44.dp.roundToPx()))
-                val h = constraints.constrainHeight(maxOf(height, 44.dp.roundToPx()))
-                val surface = subcompose("navigationSurface") {
-                    top.yukonga.miuix.kmp.glass.GlassIconButton(onClick = {}, backdrop = backdrop, size = 44.dp) {}
-                }.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
-                layout(w, h) {
-                    surface.forEach { it.placeRelative((w - it.width) / 2, (h - it.height) / 2) }
-                    children.forEach { it.placeRelative((w - it.width) / 2, (h - it.height) / 2) }
-                }
-            }
-        }
-    }
+    GlassToolbarContent(content)
 }
 
 /** 图标菜单的触发按钮也使用同一材质；普通列表内的非菜单图标按钮保持原有行为。 */

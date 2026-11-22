@@ -23,7 +23,8 @@ class PlatformPlaybackSnapshotTest {
         assertEquals(song, snapshot.intelligenceTracks.single())
         assertEquals(42000L, snapshot.position)
         assertTrue(snapshot.fm)
-        assertTrue(snapshot.guess)
+        // Obsolete mode fields in old saves are ignored; the queue and position still restore.
+        assertTrue(!gson.toJson(snapshot).contains("\"guess\""))
         assertEquals("list", snapshot.playlistId)
     }
 

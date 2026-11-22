@@ -1,5 +1,5 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
 
 import com.hypermusic.miuix.ui.navigation.BackHandler
 import androidx.compose.foundation.clickable
@@ -15,7 +15,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import com.hypermusic.miuix.data.model.VersionHistory
 import com.hypermusic.miuix.ui.FeedBottomPads
 import com.hypermusic.miuix.ui.components.BlurredBar
@@ -50,13 +49,7 @@ fun UpdateHistoryPage(
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                     scrollBehavior = scrollBehavior,
                     defaultWindowInsetsPadding = false,
-                    navigationIcon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            modifier = Modifier.padding(start = pageNavigationIconInset()).clickable { onBackClick() }
-                        )
-                    }
+                    navigationIcon = { PageBackButton(onClick = { onBackClick() }) }
                 )
             }
         }

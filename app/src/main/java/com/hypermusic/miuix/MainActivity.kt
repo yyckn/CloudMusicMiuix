@@ -340,6 +340,7 @@ fun MainScreen(
     var profileVersion by remember { mutableIntStateOf(0) } // 用于触发UI刷新
     var showPlaylistSheet by remember { mutableStateOf(false) }
     var showPlayerPage by remember { mutableStateOf(false) }
+    com.hypermusic.miuix.ui.components.PlayerImmersiveMode(showPlayerPage && ThemeSettings.playerImmersiveMode)
     var returnToPlayerFromSound by remember { mutableStateOf(false) }
     var isNavigatingBack by remember { mutableStateOf(false) }
     val tabs = listOf("推荐", "收藏", "设置")
@@ -1535,7 +1536,7 @@ fun MainScreen(
                             favoritePlaylistInProgress = viewModel.playlistFavoriteInProgress,
                             onFavoritePlaylist = { viewModel.favoriteCurrentPlaylist() },
                             onShuffleClick = { tracks ->
-                                viewModel.shufflePlaylist(tracks, qqGuess = viewModel.playlistDetailState.detail?.info?.id == "qqfeature:GUESS")
+                                viewModel.shufflePlaylist(tracks)
                             },
                             isCloudDisk = viewModel.playlistDetailState.detail?.info?.id == "cloud_disk",
                             isLoadingMore = viewModel.isCloudDiskLoadingMore,
@@ -1551,18 +1552,14 @@ fun MainScreen(
                                 // 点击歌曲时替换播放列表
                                 val tracks = viewModel.playlistDetailState.detail?.tracks
                                 if (tracks != null) {
-                                    if (viewModel.playlistDetailState.detail?.info?.id == "qqfeature:GUESS")
-                                        viewModel.playQqGuessTrack(track, tracks)
-                                    else viewModel.playTrackWithMode(track, tracks)
+                                    viewModel.playTrackWithMode(track, tracks)
                                 } else {
                                     viewModel.playTrack(track)
                                 }
                             },
                             onPlayAllClick = { tracks ->
                                 if (tracks.isNotEmpty()) {
-                                    if (viewModel.playlistDetailState.detail?.info?.id == "qqfeature:GUESS")
-                                        viewModel.playQqGuessTrack(tracks.first(), tracks)
-                                    else viewModel.playTrackWithMode(tracks.first(), tracks)
+                                    viewModel.playTrackWithMode(tracks.first(), tracks)
                                 }
                             },
                             onShare = { track ->

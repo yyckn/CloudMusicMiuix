@@ -1,5 +1,5 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -59,7 +59,6 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -195,10 +194,7 @@ internal fun LoginPageFrame(onBackClick: () -> Unit, onRefreshClick: () -> Unit,
                 color = if (blurBackdrop != null) ComposeColor.Transparent else MiuixTheme.colorScheme.surface,
                 scrollBehavior = scrollBehavior,
                 defaultWindowInsetsPadding = false,
-                navigationIcon = {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回",
-                        modifier = Modifier.padding(start = pageNavigationIconInset()).clickable { onBackClick() })
-                },
+                navigationIcon = { PageBackButton(onClick = { onBackClick() }) },
                 actions = {
                     IconButton(onClick = onRefreshClick) {
                         Icon(imageVector = Icons.Default.Refresh, contentDescription = "刷新登录状态")

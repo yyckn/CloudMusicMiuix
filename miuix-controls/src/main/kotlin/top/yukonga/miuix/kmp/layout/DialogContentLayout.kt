@@ -3,9 +3,6 @@
 
 package top.yukonga.miuix.kmp.layout
 
-import top.yukonga.miuix.kmp.material.GlassSurface
-import top.yukonga.miuix.kmp.material.glassSurface
-
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
@@ -334,7 +331,8 @@ internal fun DialogContent(
         .pointerInput(Unit) {
             detectTapGestures { /* Consume click */ }
         }
-        .glassSurface(backgroundColor, bottomCornerRadius, GlassSurface.Dialog)
+        // Match the opaque sheet background without disabling glass controls inside it.
+        .squircleSurface(color = backgroundColor, cornerRadius = bottomCornerRadius)
         .padding(horizontal = insideMargin.width, vertical = insideMargin.height)
 
     Box(

@@ -13,6 +13,11 @@ import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.Search
+import top.yukonga.miuix.kmp.icon.extended.Download
+import top.yukonga.miuix.kmp.icon.extended.More
+import top.yukonga.miuix.kmp.menu.WindowIconDropdownMenu
+import com.hypermusic.miuix.data.download.BatchDownloads
+import com.hypermusic.miuix.data.model.Track
 
 @Stable
 internal class PageContentSearchState(active: Boolean = false, query: String = "") {
@@ -34,9 +39,25 @@ internal fun matchesPageQuery(query: String, vararg fields: String): Boolean {
 }
 
 @Composable
-internal fun PageContentSearchAction(state: PageContentSearchState) {
-    IconButton(onClick = { state.active = true }) {
-        Icon(MiuixIcons.Basic.Search, contentDescription = "搜索页面内容")
+internal fun PageContentMenu(
+    state: PageContentSearchState,
+    tracks: List<Track>,
+    downloadEnabled: Boolean = true,
+    loadAll: (suspend () -> List<Track>)? = null,
+    onShowDownloads: (() -> Unit)? = null,
+) {
+    WindowIconDropdownMenu(entry = DropdownEntry(items = buildList {
+        add(DropdownItem("搜索当前页面内容",
+            icon = { Icon(MiuixIcons.Basic.Search, null, modifier = it.size(24.dp)) },
+            onClick = { state.active = true }))
+        if (onShowDownloads != null) add(DropdownItem("下载任务",
+            icon = { Icon(MiuixIcons.Download, null, modifier = it.size(24.dp)) },
+            onClick = onShowDownloads))
+        else add(DropdownItem("批量下载", enabled = downloadEnabled && tracks.isNotEmpty(),
+            icon = { Icon(MiuixIcons.Download, null, modifier = it.size(24.dp)) },
+            onClick = { BatchDownloads.open(tracks, loadAll) }))
+    })) {
+        Icon(MiuixIcons.More, contentDescription = "更多")
     }
 }
 

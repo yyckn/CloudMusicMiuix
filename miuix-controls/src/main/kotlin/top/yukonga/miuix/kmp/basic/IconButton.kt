@@ -4,9 +4,7 @@
 package top.yukonga.miuix.kmp.basic
 
 import top.yukonga.miuix.kmp.material.LocalGlassToolbar
-import top.yukonga.miuix.kmp.material.LocalGlassNavigation
 import top.yukonga.miuix.kmp.material.LocalSoftGlassEnabled
-import top.yukonga.miuix.kmp.material.glassSurface
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.LocalIndication
@@ -54,7 +52,7 @@ fun IconButton(
     minWidth: Dp = IconButtonDefaults.MinWidth,
     content: @Composable () -> Unit,
 ) {
-    if (LocalSoftGlassEnabled.current && LocalGlassToolbar.current && !LocalGlassNavigation.current) {
+    if (LocalSoftGlassEnabled.current && LocalGlassToolbar.current) {
         top.yukonga.miuix.kmp.material.OfficialGlassToolbarButton(onClick = onClick,
             modifier = modifier, enabled = enabled, content = content)
         return
@@ -64,8 +62,7 @@ fun IconButton(
     HoldDownObserver(holdDownState, interactionSource)
 
     val currentOnClick by rememberUpdatedState(onClick)
-    val glassChrome = LocalSoftGlassEnabled.current && (LocalGlassToolbar.current || LocalGlassNavigation.current)
-    val indication = if (glassChrome) null else LocalIndication.current
+    val indication = LocalIndication.current
     val clickableModifier = remember(enabled, interactionSource, indication) {
         if (enabled) {
             Modifier.clickable(
@@ -82,9 +79,7 @@ fun IconButton(
     Box(
         modifier = modifier
             .defaultMinSize(minWidth = minWidth, minHeight = minHeight)
-            .glassSurface(
-                if (LocalGlassNavigation.current && LocalSoftGlassEnabled.current) Color.Transparent else backgroundColor,
-                cornerRadius, enabled = LocalGlassToolbar.current && !LocalGlassNavigation.current && LocalSoftGlassEnabled.current)
+            .squircleSurface(color = backgroundColor, cornerRadius = cornerRadius)
             .then(clickableModifier),
         contentAlignment = Alignment.Center,
     ) {

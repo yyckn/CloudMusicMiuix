@@ -616,10 +616,10 @@ object QqMusicApi {
     }
 
     enum class HomeFeature(val title: String) {
-        RADAR("雷达推荐"), GUESS("猜你喜欢"), DAILY("每日30首"), NEW_SONGS("推荐新歌")
+        RADAR("雷达推荐"), DAILY("每日30首"), NEW_SONGS("推荐新歌")
     }
 
-    suspend fun getHomeFeature(feature: HomeFeature, excludedSongIds: List<Long> = emptyList()): Result<PlaylistDetail> = withContext(Dispatchers.IO) {
+    suspend fun getHomeFeature(feature: HomeFeature): Result<PlaylistDetail> = withContext(Dispatchers.IO) {
         runCatching {
             val auth = credential
             val tracks = when (feature) {
@@ -635,18 +635,6 @@ object QqMusicApi {
                         if (data.text("HasMore") !in listOf("1", "true") || all.size >= 30 || songs.size() == 0) break
                     }
                     all.distinctBy { it.id }
-                }
-                HomeFeature.GUESS -> {
-                    val data = request("music.radioProxy.MbTrackRadioSvr", "get_radio_track", JsonObject().apply {
-                        // Keep the Android recommendation contract: larger batches and
-                        // queue history in song_ids can be rejected with business code 1000.
-                        addProperty("id", 99); addProperty("num", 5); addProperty("from", 0); addProperty("scene", 0)
-                        add("song_ids", com.google.gson.JsonArray())
-                    }, auth)
-                    val songs = data.getAsJsonArray("tracks") ?: error("猜你喜欢暂不可用")
-                    val excluded = excludedSongIds.filter { it > 0 }.toHashSet()
-                    songs.mapNotNull { it.takeIf { e -> e.isJsonObject }?.asJsonObject?.toTrack() }
-                        .distinctBy { it.id }.filterNot { it.qqSongId > 0 && it.qqSongId in excluded }
                 }
                 HomeFeature.NEW_SONGS -> {
                     val data = request("newsong.NewSongServer", "get_new_song_info", JsonObject().apply { addProperty("type", 5) }, auth)

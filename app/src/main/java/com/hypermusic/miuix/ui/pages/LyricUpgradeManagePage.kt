@@ -1,5 +1,5 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
 import com.hypermusic.miuix.ui.components.pageViewportTopInset
 import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,7 +33,7 @@ fun LyricUpgradeManagePage(onBackClick: () -> Unit, modifier: Modifier = Modifie
         BlurredBar(backdrop = backdrop) {
             SmallTopAppBar(title = "管理歌词匹配", color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                 scrollBehavior = scrollBehavior, defaultWindowInsetsPadding = false,
-                navigationIcon = { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.padding(start = pageNavigationIconInset()).clickable { onBackClick() }) })
+                navigationIcon = { PageBackButton(onClick = { onBackClick() }) })
         }
     }) { padding ->
         LazyColumn(modifier = modifier.fillMaxSize().padding(top = pageViewportTopInset(padding.calculateTopPadding())).overScrollVertical()

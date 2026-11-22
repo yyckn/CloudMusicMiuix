@@ -1,5 +1,6 @@
 package com.hypermusic.miuix.ui.pages
-import com.hypermusic.miuix.ui.components.pageNavigationIconInset
+import com.hypermusic.miuix.ui.components.PageBackButton
+import androidx.compose.material.icons.rounded.Fullscreen
 import com.hypermusic.miuix.ui.components.pageViewportTopInset
 import com.hypermusic.miuix.ui.components.pageScrollTopInset
 
@@ -44,7 +45,6 @@ import com.hypermusic.miuix.ui.theme.KeyboardShortcutSettings
 import com.hypermusic.miuix.ui.theme.ShortcutAction
 import com.hypermusic.miuix.ui.theme.ThemeSettings
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -147,15 +147,7 @@ fun PlayPageSettingsPage(
                     color = if (blurBackdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
                     scrollBehavior = scrollBehavior,
                     defaultWindowInsetsPadding = false,
-                    navigationIcon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            modifier = Modifier
-                                .padding(start = pageNavigationIconInset())
-                                .clickable { onBackClick() }
-                        )
-                    }
+                    navigationIcon = { PageBackButton(onClick = { onBackClick() }) }
                 )
             }
         }
@@ -478,6 +470,16 @@ fun PlayPageSettingsPage(
                             keepScreenOn = !keepScreenOn
                             ThemeSettings.updateKeepScreenOn(keepScreenOn)
                         }
+                    )
+                    BasicComponent(
+                        title = "沉浸模式",
+                        summary = "播放页自动隐藏状态栏和小白条",
+                        startAction = { Icon(Icons.Rounded.Fullscreen, contentDescription = null, modifier = Modifier.size(24.dp)) },
+                        endActions = {
+                            Switch(checked = ThemeSettings.playerImmersiveMode,
+                                onCheckedChange = ThemeSettings::updatePlayerImmersiveMode)
+                        },
+                        onClick = { ThemeSettings.updatePlayerImmersiveMode(!ThemeSettings.playerImmersiveMode) }
                     )
                 }
             }
