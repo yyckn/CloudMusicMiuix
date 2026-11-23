@@ -71,6 +71,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.material.LocalGlassTopBarBackgroundEnabled
 
 @Composable
 fun OnboardingPage() {
@@ -238,6 +239,7 @@ fun OnboardingPage() {
 private fun OnboardingWelcome(completed: Boolean, onClick: () -> Unit, onBack: () -> Unit = {}, onButtonBounds: (Rect) -> Unit = {}) {
     Box(Modifier.fillMaxSize()) {
     OnboardingGlow()
+    CompositionLocalProvider(LocalGlassTopBarBackgroundEnabled provides false) {
     Scaffold(containerColor = Color.Transparent, topBar = {
         if (completed) SmallTopAppBar(title = "", color = Color.Transparent, navigationIcon = { PageBackButton(onClick = { onBack() }, tint = Color.White) })
     }, bottomBar = {
@@ -278,6 +280,7 @@ private fun OnboardingWelcome(completed: Boolean, onClick: () -> Unit, onBack: (
                 Text("一切准备就绪", color = Color.White.copy(alpha = 0.75f))
             }
         }
+    }
     }
     }
 }

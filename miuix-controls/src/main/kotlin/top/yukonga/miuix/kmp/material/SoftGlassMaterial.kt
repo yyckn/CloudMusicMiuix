@@ -39,6 +39,8 @@ import top.yukonga.miuix.kmp.basic.ScrollBehavior
 
 /** 全局材质开关和各控件共用的采样源，不与业务层或账号状态耦合。 */
 val LocalSoftGlassEnabled = compositionLocalOf { false }
+/** Allows full-screen artwork pages to keep toolbar controls without a background layer. */
+val LocalGlassTopBarBackgroundEnabled = compositionLocalOf { true }
 val LocalSoftGlassTabsEnabled = compositionLocalOf { true }
 internal val LocalGlassDark = compositionLocalOf { false }
 internal val LocalGlassToolbar = compositionLocalOf { false }
@@ -282,7 +284,7 @@ internal fun GlassTopBarHost(content: @Composable () -> Unit) {
     val state = remember { GlassBarState() }
     CompositionLocalProvider(LocalGlassBarState provides state) {
     Box {
-        if (LocalSoftGlassEnabled.current) Box(Modifier.matchParentSize().layout { measurable, constraints ->
+        if (LocalSoftGlassEnabled.current && LocalGlassTopBarBackgroundEnabled.current) Box(Modifier.matchParentSize().layout { measurable, constraints ->
             val extension = if (constraints.maxHeight > 0 && state.behavior != null) 48.dp.roundToPx() else 0
             val height = constraints.maxHeight + extension
             val layer = measurable.measure(constraints.copy(minHeight = height, maxHeight = height))

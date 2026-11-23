@@ -130,6 +130,7 @@ data class LyricState(
 )
 
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
+    val listeningHistorySession = com.hypermusic.miuix.ui.pages.ListeningHistorySession()
 
     private val radarPlaylistIds = setOf("3136952023", "8402996200", "5320167908", "5327906368", "5362359247", "5300458264", "5341776086")
 

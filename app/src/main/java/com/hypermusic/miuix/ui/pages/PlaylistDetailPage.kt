@@ -714,7 +714,9 @@ internal fun SharedTrackRow(
     fileSizeText: String? = null,
     versionCount: Int = 1,
     showVip: Boolean = true,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    supportingText: String? = null,
+    durationLabel: String? = null
 ) {
     Card(
         modifier = modifier
@@ -744,7 +746,7 @@ internal fun SharedTrackRow(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = formatDuration(track.duration),
+                        text = durationLabel ?: formatDuration(track.duration),
                         fontSize = 12.sp,
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
@@ -799,6 +801,10 @@ internal fun SharedTrackRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+            if (supportingText != null) {
+                Text(text = supportingText, style = MiuixTheme.textStyles.footnote1,
+                    color = if (isPlaying) MiuixTheme.colorScheme.primary.copy(alpha = 0.7f) else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f))
             }
             com.hypermusic.miuix.ui.components.TrackFileDetails(qualityTag, fileSizeText)
         }

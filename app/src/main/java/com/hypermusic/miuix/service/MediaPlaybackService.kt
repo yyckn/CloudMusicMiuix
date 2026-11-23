@@ -65,6 +65,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     private var audioProcessor: SoundAudioProcessor? = null
     @Volatile private var albumPlayback = false
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private lateinit var historyTracker: com.hypermusic.miuix.data.history.PlaybackHistoryTracker
 
     private var currentTrack: Track? = null
     private var currentUrl: String? = null
@@ -111,6 +112,13 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     private val playerListener = object : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (::historyTracker.isInitialized) historyTracker.update(isPlaying, player?.playbackParameters?.speed ?: 1f, player?.duration ?: 0L)
+        }
+
+        override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
+            if (::historyTracker.isInitialized) historyTracker.update(player?.isPlaying == true, playbackParameters.speed)
+        }
         override fun onMetadata(metadata: Metadata) = applyReplayGainMetadata(metadata)
 
         override fun onTracksChanged(tracks: Tracks) {
@@ -144,6 +152,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
                     }
                 }
                 Player.STATE_ENDED -> {
+                    if (::historyTracker.isInitialized) historyTracker.finish(completed = true)
                     if (!completionHandled) {
                         completionHandled = true
                         Log.d(TAG, "Track completed normally")
@@ -233,6 +242,14 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
 
     override fun onCreate() {
         super.onCreate()
+        com.hypermusic.miuix.data.history.ListeningHistory.init(this)
+        historyTracker = com.hypermusic.miuix.data.history.PlaybackHistoryTracker(this)
+        serviceScope.launch {
+            while (isActive) {
+                delay(1000)
+                historyTracker.update(player?.isPlaying == true, player?.playbackParameters?.speed ?: 1f, player?.duration ?: 0L)
+            }
+        }
         com.hypermusic.miuix.data.download.Downloads.init(this)
         ThemeSettings.init(this)
         AudioSettings.init(this)
@@ -434,6 +451,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
 
         releasePlayer()
         val newPlayer = createPlayer(track)
+        historyTracker.begin(track)
         player = newPlayer
         pendingFadeIn = autoplay && ThemeSettings.fadeEnabled
         newPlayer.volume = if (pendingFadeIn) 0f else 1f
@@ -494,6 +512,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun releasePlayer() {
+        if (::historyTracker.isInitialized) historyTracker.finish()
         cancelFade()
         pendingFadeIn = false
         player?.removeListener(playerListener)

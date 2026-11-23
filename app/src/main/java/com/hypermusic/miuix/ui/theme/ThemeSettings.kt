@@ -73,7 +73,7 @@ object ThemeSettings {
             else -> 0.4f
         }
 
-    var accentIndex by mutableIntStateOf(SOURCE_ACCENT_INDEX)
+    var accentIndex by mutableIntStateOf(0)
         private set
     var paletteStyleIndex by mutableIntStateOf(4)
         private set
@@ -173,7 +173,7 @@ object ThemeSettings {
         autoCollapseFloatingPlayer = prefs?.getBoolean(KEY_AUTO_COLLAPSE_FLOATING_PLAYER, false) ?: false
         liquidGlassEffectIndex = prefs?.getInt(KEY_LIQUID_GLASS_EFFECT, 1) ?: 1
         followMonet = prefs?.getBoolean(KEY_FOLLOW_MONET, true) ?: true
-        accentIndex = (prefs?.getInt("accent_index", SOURCE_ACCENT_INDEX) ?: SOURCE_ACCENT_INDEX).coerceIn(0, SOURCE_ACCENT_INDEX)
+        accentIndex = (prefs?.getInt("accent_index", 0) ?: 0).coerceIn(0, SOURCE_ACCENT_INDEX)
         paletteStyleIndex = (prefs?.getInt("palette_style_index", 4) ?: 4).coerceIn(0, 8)
         colorSpecIndex = (prefs?.getInt("color_spec_index", 1) ?: 1).coerceIn(0, 1)
         defaultHomePageIndex = (prefs?.getInt(KEY_DEFAULT_HOME_PAGE, 0) ?: 0).coerceIn(0, 1)

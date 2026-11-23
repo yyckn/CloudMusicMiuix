@@ -2119,8 +2119,8 @@ fun PlayerPage(
                             )
                         ) {
                             if (!isLocalTrack) WindowDropdownPreference(
-                                title = "音质",
-                                summary = com.hypermusic.miuix.data.model.AudioQuality.summary,
+                                title = "播放音质",
+                                summary = "实际音质取决于歌曲本身质量及账号VIP权限，切歌后生效",
                                 items = qualityOptions,
                                 selectedIndex = viewModel.audioQualityIndex,
                                 startAction = { Icon(imageVector = MiuixIcons.Music, contentDescription = null, modifier = Modifier.size(24.dp)) },

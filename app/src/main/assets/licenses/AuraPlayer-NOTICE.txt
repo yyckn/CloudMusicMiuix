@@ -1,0 +1,10 @@
+AuraPlayer — https://github.com/ColdP/AuraPlayer
+Reference revision: 732dc63823f8e7fe586f12b177ce3ae594038c46
+Copyright AuraPlayer contributors. Licensed under GNU AGPL version 3 (see repository LICENSE).
+
+HyperMusic's NetEase listening-history integration references AuraPlayer's
+NeteaseListenReport.kt and OfficialNeteaseClient.kt: parallel official endpoint
+selection, compatible report fields, and merging local records with cloud history.
+The UI remains HyperMusic's Miuix implementation. Local listening measurements,
+cloud duration estimates, account isolation and durable cloud-event storage are
+implemented for HyperMusic's existing playback and persistence architecture.

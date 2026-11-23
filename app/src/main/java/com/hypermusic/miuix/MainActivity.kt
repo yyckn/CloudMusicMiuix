@@ -175,6 +175,7 @@ sealed class Screen {
     object SongSettings : Screen()
     object SoundEffects : Screen()
     object CacheSettings : Screen()
+    object ListeningHistory : Screen()
     object DownloadSettings : Screen()
     object About : Screen()
     data class Profile(val accountId: String? = null) : Screen()
@@ -228,6 +229,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         NeteaseApi.init(applicationContext)
+        com.hypermusic.miuix.data.history.ListeningHistory.init(applicationContext)
+        com.hypermusic.miuix.data.history.ListeningHistory.retryAtLaunch()
         com.hypermusic.miuix.data.api.QqMusicApi.init(applicationContext)
         com.hypermusic.miuix.data.api.PlatformManager.init(applicationContext)
         ThemeSettings.init(applicationContext)
@@ -747,6 +750,7 @@ fun MainScreen(
                                         navigateTo(Screen.SongSettings)
                                     },
                                     onCacheSettingsClick = { navigateTo(Screen.CacheSettings) },
+                                    onListeningHistoryClick = { navigateTo(Screen.ListeningHistory) },
                                     onDownloadSettingsClick = { navigateTo(Screen.DownloadSettings) },
                                     onAboutClick = {
                                         navigateTo(Screen.About)
@@ -1212,6 +1216,7 @@ fun MainScreen(
                                         navigateTo(Screen.SongSettings)
                                     },
                                     onCacheSettingsClick = { navigateTo(Screen.CacheSettings) },
+                                    onListeningHistoryClick = { navigateTo(Screen.ListeningHistory) },
                                     onDownloadSettingsClick = { navigateTo(Screen.DownloadSettings) },
                                     onAboutClick = {
                                         navigateTo(Screen.About)
@@ -1233,7 +1238,7 @@ fun MainScreen(
                     }
                     }
                 }
-                is Screen.Search, is Screen.LocalMusic -> {
+                is Screen.Search, is Screen.LocalMusic, is Screen.ListeningHistory -> {
                     Scaffold(
                         bottomBar = {
                             Box(
@@ -1364,7 +1369,13 @@ fun MainScreen(
                                 }
                             }
                         }
-                        if (screen is Screen.LocalMusic) com.hypermusic.miuix.ui.pages.LocalMusicPage(
+                        if (screen is Screen.ListeningHistory) com.hypermusic.miuix.ui.pages.ListeningHistoryPage(viewModel,
+                            onBack = { if (!navigateBack()) currentScreen = Screen.Main },
+                            onComment = { track -> navigateTo(Screen.Comment(track.id, track.title)) },
+                            onArtist = { navigateTo(Screen.Artist(it)) },
+                            onAlbum = { navigateTo(Screen.Album(it, false)) },
+                            modifier = Modifier.then(secondaryLayerModifier))
+                        else if (screen is Screen.LocalMusic) com.hypermusic.miuix.ui.pages.LocalMusicPage(
                             viewModel = viewModel, onBack = { if (!navigateBack()) currentScreen = Screen.Main },
                             onArtist = { navigateTo(Screen.Artist(it)) },
                             onAlbum = { id, qq -> navigateTo(Screen.Album(id, qq)) },

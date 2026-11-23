@@ -116,8 +116,8 @@ private fun ThemePreview(previewWidth: Dp, previewHeight: Dp) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("11:45", fontSize = ThemePreviewLabelFontSize)
-                Text("14%", fontSize = ThemePreviewLabelFontSize)
+                Text("11:45", fontSize = ThemePreviewLabelFontSize, fontWeight = FontWeight.Bold)
+                Text("14%", fontSize = ThemePreviewLabelFontSize, fontWeight = FontWeight.Bold)
             }
             Text(
                 "HyperMusic",
@@ -148,7 +148,7 @@ private fun ThemePreview(previewWidth: Dp, previewHeight: Dp) {
             Spacer(Modifier.weight(1f))
             Row(
                 Modifier.fillMaxWidth().background(MiuixTheme.colorScheme.surfaceContainer)
-                    .padding(vertical = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val icons = listOf(MiuixIcons.Home, MiuixIcons.ListView, MiuixIcons.Settings)
@@ -277,8 +277,7 @@ fun ThemeSettingsPage(
                     )
                     if (ThemeSettings.useFloatingBar) {
                         WindowDropdownPreference(
-                            title = "适人握持",
-                            summary = "选择底栏对齐方向，适用于阔屏和平板机型",
+                            title = "底栏对齐方向",
                             startAction = { ThemeSettingIcon(Icons.AutoMirrored.Rounded.AlignHorizontalLeft) },
                             items = floatingBarAlignOptions,
                             selectedIndex = ThemeSettings.floatingBarAlignmentIndex,

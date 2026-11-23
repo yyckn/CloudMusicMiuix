@@ -90,6 +90,7 @@ fun SettingsPage(
     onLyriconAdapterClick: () -> Unit = {},
     onLyricSettingsClick: () -> Unit = {},
     onManageAccountsClick: () -> Unit = {},
+    onListeningHistoryClick: () -> Unit = {},
     onSearchClick: () -> Unit = {},
     showSearchAction: Boolean = true,
     profileVersion: Int = 0,
@@ -390,6 +391,12 @@ fun SettingsPage(
                         }
                     }
                 }
+                }
+                if (isNetease) item {
+                    Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                        ArrowPreference(title = "听歌记录", summary = "播放历史与听歌足迹", onClick = onListeningHistoryClick,
+                            startAction = { Icon(MiuixIcons.Playlist, contentDescription = null, modifier = Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)) })
+                    }
                 }
                 item { SmallTitle("个性化") }
                 item {
