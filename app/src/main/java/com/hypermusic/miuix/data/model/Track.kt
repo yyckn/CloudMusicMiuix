@@ -1,5 +1,7 @@
 package com.hypermusic.miuix.data.model
 
+import com.google.gson.annotations.SerializedName
+
 data class Track(
     val id: String,
     val title: String,
@@ -15,14 +17,27 @@ data class Track(
     val isVip: Boolean = false,
     val artistNames: List<String> = emptyList(), // 原始歌手名称列表
     val artistIds: List<String> = emptyList(), // 原始歌手ID列表
-    val isCloudDisk: Boolean = false, // 是否为音乐云盘歌曲
-    val qqMediaMid: String = "",
-    val qqSongId: Long = 0,
-    val bodianFreeSign: String = "",
-    val kugouHash: String = "",
-    val kugouAlbumAudioId: String = "",
-    val localDownloadId: String? = null
-)
+    val localDownloadId: String? = null,
+    @SerializedName("platformData")
+    internal val platformData: TrackPlatformData? = null,
+    // Legacy JSON fields are retained only so existing downloads and playback snapshots remain readable.
+    @SerializedName("isCloudDisk") private val legacyIsCloudDisk: Boolean? = null,
+    @SerializedName("qqMediaMid") private val legacyQqMediaMid: String? = null,
+    @SerializedName("qqSongId") private val legacyQqSongId: Long? = null,
+    @SerializedName("bodianFreeSign") private val legacyBodianFreeSign: String? = null,
+    @SerializedName("kugouHash") private val legacyKugouHash: String? = null,
+    @SerializedName("kugouAlbumAudioId") private val legacyKugouAlbumAudioId: String? = null
+) {
+    val platform: TrackPlatformData
+        get() = platformData ?: TrackPlatformData(
+            isCloudDisk = legacyIsCloudDisk == true,
+            qqMediaMid = legacyQqMediaMid.orEmpty(),
+            qqSongId = legacyQqSongId ?: 0,
+            bodianFreeSign = legacyBodianFreeSign.orEmpty(),
+            kugouHash = legacyKugouHash.orEmpty(),
+            kugouAlbumAudioId = legacyKugouAlbumAudioId.orEmpty()
+        )
+}
 
 data class Playlist(
     val id: String,

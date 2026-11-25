@@ -5,6 +5,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.hypermusic.miuix.data.model.Track
+import com.hypermusic.miuix.data.model.TrackPlatformData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
@@ -53,7 +54,7 @@ object KugouLyricsApi {
         try {
             val cacheKey = "${track.source}:${track.id}"
             val hash = nativeHash(track) ?: hashCache[cacheKey]
-                ?: (if (track.source == "kugou" && track.kugouAlbumAudioId.isNotBlank()) {
+                ?: (if (track.source == "kugou" && track.platform.kugouAlbumAudioId.isNotBlank()) {
                     try { catalogClient?.trackHash(track)?.also { hashCache[cacheKey] = it } }
                     catch (e: CancellationException) { throw e } catch (_: Exception) { null }
                 } else null)
@@ -70,7 +71,7 @@ object KugouLyricsApi {
 
     internal fun nativeHash(track: Track): String? {
         if (track.source != "kugou") return null
-        val value = track.kugouHash.ifBlank {
+        val value = track.platform.kugouHash.ifBlank {
             when {
                 track.id.startsWith("kgtrack_") -> track.id.removePrefix("kgtrack_")
                 track.id.startsWith("kugou_") -> track.id.removePrefix("kugou_")
@@ -84,7 +85,8 @@ object KugouLyricsApi {
         searchCandidates(track).map { candidate ->
             Track(id = "kgtrack_${candidate.extra.hash}", title = candidate.name, artist = candidate.artist,
                 artistId = "", album = candidate.album.orEmpty(), albumId = "", source = "kugou", sourceUrl = "",
-                imgUrl = candidate.extra.image, duration = candidate.duration, kugouHash = candidate.extra.hash)
+                imgUrl = candidate.extra.image, duration = candidate.duration,
+                platformData = TrackPlatformData(kugouHash = candidate.extra.hash))
         }
     }
 

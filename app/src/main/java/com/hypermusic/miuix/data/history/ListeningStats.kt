@@ -4,6 +4,21 @@ import java.time.*
 import kotlin.math.roundToLong
 
 object ListeningStats {
+    private val clockFormat = java.time.format.DateTimeFormatter.ofPattern("HH:mm", java.util.Locale.ROOT)
+
+    fun playbackTime(timestampMs: Long, zone: ZoneId = ZoneId.systemDefault()): String {
+        val time = Instant.ofEpochMilli(timestampMs).atZone(zone)
+        val period = when (time.hour) {
+            in 0..5 -> "凌晨"
+            in 6..8 -> "早上"
+            in 9..11 -> "上午"
+            in 12..13 -> "中午"
+            in 14..17 -> "下午"
+            else -> "晚上"
+        }
+        return "$period${time.format(clockFormat)}"
+    }
+
     /** Attribute each real listening interval to its local calendar date, including midnight. */
     fun days(records: List<ListeningRecord>, zone: ZoneId = ZoneId.systemDefault()): Map<LocalDate, Long> {
         val result = mutableMapOf<LocalDate, Long>()

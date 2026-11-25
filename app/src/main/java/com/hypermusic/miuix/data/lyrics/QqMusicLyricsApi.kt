@@ -64,7 +64,7 @@ object QqMusicLyricsApi {
             require(track.source == "qqmusic") { "当前歌曲不是 QQ 音乐来源" }
             val mid = track.id.removePrefix("qqtrack_")
             require(mid.isEmpty() || mid.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' }) { "QQ音乐歌曲标识无效" }
-            val ref = if (track.qqSongId > 0) SongRef(track.qqSongId.toString(), mid)
+            val ref = if (track.platform.qqSongId > 0) SongRef(track.platform.qqSongId.toString(), mid)
                 else if (mid.isNotBlank()) search(track, exactMid = mid) else null
             val data = ref?.let { requestLyricData(track, it) }
             val fallback = if (mid.isNotBlank()) getJson(lrcUrl(mid)) else null
@@ -85,7 +85,7 @@ object QqMusicLyricsApi {
     suspend fun fetch(track: Track, showRomanization: Boolean = com.hypermusic.miuix.ui.theme.ThemeSettings.showJapaneseRomaji): PlatformLyricResult? = withContext(Dispatchers.IO) {
         try {
             val mid = track.id.removePrefix("qqtrack_").takeIf { track.source == "qqmusic" && it.matches(Regex("[A-Za-z0-9]{1,64}")) }
-            val ref = (if (track.source == "qqmusic" && track.qqSongId > 0) SongRef(track.qqSongId.toString(), mid.orEmpty())
+            val ref = (if (track.source == "qqmusic" && track.platform.qqSongId > 0) SongRef(track.platform.qqSongId.toString(), mid.orEmpty())
             else if (track.source == "qqmusic") search(track, exactMid = track.id.removePrefix("qqtrack_"))
             else refCache["${track.source}:${track.id}"]
                 ?: search(track)?.also { refCache["${track.source}:${track.id}"] = it })

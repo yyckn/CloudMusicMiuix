@@ -18,6 +18,47 @@ import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class MediaNotificationActionsTest {
+    @Test fun focusLossWhileNotForegroundUpdatesPausedCardWithoutPromotingService() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        instrumentation.uiAutomation.executeShellCommand("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
+            .use { java.io.FileInputStream(it.fileDescriptor).readBytes() }
+        val connected = CountDownLatch(1)
+        lateinit var service: MediaPlaybackService
+        val connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                service = (binder as MediaPlaybackService.LocalBinder).getService()
+                connected.countDown()
+            }
+            override fun onServiceDisconnected(name: ComponentName?) = Unit
+        }
+        assertTrue(context.bindService(Intent(context, MediaPlaybackService::class.java), connection, Context.BIND_AUTO_CREATE))
+        try {
+            assertTrue(connected.await(10, TimeUnit.SECONDS))
+            val type = MediaPlaybackService::class.java
+            val track = Track("focus-loss-test", "焦点丢失测试", "测试", "", "测试", "", source = "offline-test", sourceUrl = "", imgUrl = "")
+            instrumentation.runOnMainSync {
+                service.clearPlayback()
+                type.getDeclaredField("currentTrack").apply { isAccessible = true }.set(service, track)
+                val listener = type.getDeclaredField("audioFocusChangeListener").apply { isAccessible = true }
+                    .get(service) as android.media.AudioManager.OnAudioFocusChangeListener
+                for (loss in listOf(android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT, android.media.AudioManager.AUDIOFOCUS_LOSS)) {
+                    type.getDeclaredField("isPlaying").apply { isAccessible = true }.setBoolean(service, true)
+                    listener.onAudioFocusChange(loss)
+                    assertFalse(service.isPlaying())
+                    assertEquals(track, service.getCurrentTrack())
+                }
+            }
+            val notification = context.getSystemService(android.app.NotificationManager::class.java)
+                .activeNotifications.single { it.id == MediaPlaybackService.NOTIFICATION_ID }.notification
+            assertEquals(0, notification.flags and android.app.Notification.FLAG_FOREGROUND_SERVICE)
+            val session = type.getDeclaredField("mediaSession").apply { isAccessible = true }.get(service) as MediaSessionCompat
+            assertEquals(PlaybackStateCompat.STATE_PAUSED, session.controller.playbackState.state)
+        } finally {
+            instrumentation.runOnMainSync { service.clearPlayback() }
+            context.unbindService(connection)
+        }
+    }
     private lateinit var dismissalPrefs: android.content.SharedPreferences
     private var hadDismissal = false
     private var dismissalValue = false

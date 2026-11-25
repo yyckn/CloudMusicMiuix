@@ -1,11 +1,12 @@
 package com.hypermusic.miuix.data.lyrics
 
 import com.hypermusic.miuix.data.model.Track
+import com.hypermusic.miuix.data.model.TrackPlatformData
 import org.junit.Assert.*
 import org.junit.Test
 
 class KugouNativeLyricsTest {
-    private fun song(id: String, source: String = "kugou", hash: String = "") = Track(id, "歌曲", "歌手", "", "", "", source, "", "", kugouHash = hash)
+    private fun song(id: String, source: String = "kugou", hash: String = "") = Track(id, "歌曲", "歌手", "", "", "", source, "", "", platformData = TrackPlatformData(kugouHash = hash))
 
     @Test fun usesActualHashInsteadOfAlbumAudioId() {
         val hash = "1f7e7659b9fff4fb6f71562a61bbc25f"

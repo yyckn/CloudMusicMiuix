@@ -52,7 +52,7 @@ class OfflineMusicDeviceTest {
         val old = com.google.gson.JsonParser.parseString(prefs.getString("entries", "[]")).asJsonArray
         val legacy = Gson().toJsonTree(entry).asJsonObject
         val legacyTrack = legacy.getAsJsonObject("track")
-        listOf("bodianFreeSign", "kugouHash", "kugouAlbumAudioId", "qqMediaMid", "artistNames", "artistIds", "localDownloadId").forEach { legacyTrack.remove(it) }
+        listOf("platformData", "bodianFreeSign", "kugouHash", "kugouAlbumAudioId", "qqMediaMid", "artistNames", "artistIds", "localDownloadId").forEach { legacyTrack.remove(it) }
         old.add(legacy)
         prefs.edit().putString("entries", old.toString()).commit()
         ThemeSettings.init(context)
@@ -78,8 +78,8 @@ class OfflineMusicDeviceTest {
                 rawDocument = raw, matchedTrack = track)).isEmpty())
             Downloads.init(context)
             val restored = Downloads.entries.first { it.id == id }
-            assertEquals("", restored.track.bodianFreeSign)
-            assertEquals("", restored.track.kugouHash)
+            assertEquals("", restored.track.platform.bodianFreeSign)
+            assertEquals("", restored.track.platform.kugouHash)
             val local = OfflineLibrary.localTrack(restored)
             val originalAudio = audio.readBytes()
             val rawBeforeRepair = context.filesDir.resolve("downloads/assets/$id/lyrics.json").readText()

@@ -102,14 +102,14 @@ internal class KugouLibrary(private val client: KugouClient, private val auth: K
             if (!owned) page = result.nextPage ?: return@withContext error("只能添加到自己的歌单")
         }
         check(owned) { "未找到个人歌单" }
-        val resolved = track.copy(kugouHash = client.trackHash(track))
+        val resolved = track.copy(platformData = track.platform.copy(kugouHash = client.trackHash(track)))
         check(auth.sessionGeneration() == expectedGeneration) { "酷狗音乐账号已切换，请重新选择歌单" }
         client.songMutation(account, listId, resolved, null, true)
         check(auth.sessionGeneration() == expectedGeneration) { "酷狗音乐账号已切换，请刷新收藏状态" }
     }
     private fun findLiked(track: Track, account: KugouAuth.Account, version: Long): LikedRow {
         fun checkAccount() = check(auth.sessionGeneration() == version && auth.account()?.userId == account.userId) { "酷狗音乐账号已切换，请重试" }
-        require(track.source == "kugou" && track.kugouHash.matches(Regex("[A-Fa-f0-9]{32}"))) { "酷狗音乐歌曲标识缺失" }
+        require(track.source == "kugou" && track.platform.kugouHash.matches(Regex("[A-Fa-f0-9]{32}"))) { "酷狗音乐歌曲标识缺失" }
         var page = 1
         var playlist: Collection? = null
         while (page <= 200) {
@@ -129,7 +129,7 @@ internal class KugouLibrary(private val client: KugouClient, private val auth: K
             checkAccount()
             val rows = data.getAsJsonArray("songs") ?: error("酷狗音乐喜欢的歌曲列表缺失")
             val total = data.text("count").toIntOrNull()?.takeIf { it >= 0 } ?: error("酷狗音乐喜欢的歌曲数量缺失")
-            val matching = rows.firstOrNull { it.isJsonObject && it.asJsonObject.text("hash").equals(track.kugouHash, ignoreCase = true) }
+            val matching = rows.firstOrNull { it.isJsonObject && it.asJsonObject.text("hash").equals(track.platform.kugouHash, ignoreCase = true) }
             if (matching != null) return LikedRow(liked, matching.asJsonObject.text("fileid").takeIf { it.isNotBlank() } ?: error("酷狗音乐收藏条目标识缺失"))
             offset += rows.size()
             if (offset >= total) return LikedRow(liked, null)
@@ -141,7 +141,7 @@ internal class KugouLibrary(private val client: KugouClient, private val auth: K
     suspend fun isLiked(track: Track): Boolean = withContext(Dispatchers.IO) {
         val version = auth.sessionGeneration()
         val account = auth.account() ?: error("请先登录酷狗音乐")
-        val resolved = track.copy(kugouHash = client.trackHash(track))
+        val resolved = track.copy(platformData = track.platform.copy(kugouHash = client.trackHash(track)))
         check(auth.sessionGeneration() == version) { "酷狗音乐账号已切换，请重试" }
         findLiked(resolved, account, version).fileId != null
     }
@@ -150,7 +150,7 @@ internal class KugouLibrary(private val client: KugouClient, private val auth: K
         val version = auth.sessionGeneration()
         val account = auth.account() ?: error("请先登录酷狗音乐")
         check(expectedUserId == null || account.userId == expectedUserId) { "酷狗音乐账号已切换，请重试" }
-        val resolved = track.copy(kugouHash = client.trackHash(track))
+        val resolved = track.copy(platformData = track.platform.copy(kugouHash = client.trackHash(track)))
         check(auth.sessionGeneration() == version) { "酷狗音乐账号已切换，请重试" }
         val current = findLiked(resolved, account, version)
         if ((current.fileId != null) != liked) {

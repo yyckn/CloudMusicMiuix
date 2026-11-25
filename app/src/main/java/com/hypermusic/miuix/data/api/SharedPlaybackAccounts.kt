@@ -116,7 +116,7 @@ internal object SharedPlaybackAccounts {
     }
     data class Audio(val url: String, val quality: String, val bitrate: Int, val extension: String, val preview: Boolean = false)
     suspend fun audio(context: Context, route: Route): Audio = if (route.account.source == "qqmusic") {
-        val audio = QqMusicApi.getSongAudio(route.track.id, route.track.qqMediaMid, route.qualityIndex, route.account.id).getOrThrow()
+        val audio = QqMusicApi.getSongAudio(route.track.id, route.track.platform.qqMediaMid, route.qualityIndex, route.account.id).getOrThrow()
         Audio(audio.url, audio.quality, audio.bitrate, audio.extension)
     } else {
         val requested = when (route.qualityIndex) { 0 -> BodianPlayback.Quality.LOSSLESS; 1 -> BodianPlayback.Quality.HIGH; else -> BodianPlayback.Quality.STANDARD }

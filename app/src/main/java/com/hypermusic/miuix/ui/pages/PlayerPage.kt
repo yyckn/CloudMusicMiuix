@@ -676,9 +676,9 @@ fun PlayerPage(
                                     val progress = if (playerState.duration > 0) displayPosition.toFloat() / playerState.duration.toFloat() else 0f
                                     PlayerProgressSlider(value = progress, color = playerText, onValueChange = { newValue -> seekPosition = (newValue * playerState.duration).toLong() }, onValueChangeFinished = { seekPosition?.let { onSeekTo(it) }; seekPosition = null }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp))
                                     Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text(text = formatDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
+                                        Text(text = formatPlayerDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                                         Text(text = qualityLabel, fontSize = 12.sp, color = playerText)
-                                        Text(text = formatDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
+                                        Text(text = formatPlayerDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                                     }
                                     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -787,10 +787,10 @@ fun PlayerPage(
                             onValueChangeFinished = { seekPosition?.let(onSeekTo); seekPosition = null },
                             enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth())
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(formatDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
+                            Text(formatPlayerDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                             Text(qualityLabel,
                                 fontSize = 12.sp, color = playerText)
-                            Text(formatDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
+                            Text(formatPlayerDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                         }
                         if (windowHeight > 800.dp) {
                             // 控制按钮
@@ -1125,7 +1125,7 @@ fun PlayerPage(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = formatDuration(displayPosition),
+                                    text = formatPlayerDuration(displayPosition),
                                     fontSize = 12.sp,
                                     color = playerText.copy(alpha = 0.6f)
                                 )
@@ -1135,7 +1135,7 @@ fun PlayerPage(
                                     color = playerText
                                 )
                                 Text(
-                                    text = formatDuration(playerState.duration),
+                                    text = formatPlayerDuration(playerState.duration),
                                     fontSize = 12.sp,
                                     color = playerText.copy(alpha = 0.6f)
                                 )
@@ -1541,9 +1541,9 @@ fun PlayerPage(
                                 val progress = if (playerState.duration > 0) displayPosition.toFloat() / playerState.duration.toFloat() else 0f
                                 PlayerProgressSlider(value = progress, color = playerText, onValueChange = { newValue -> seekPosition = (newValue * playerState.duration).toLong() }, onValueChangeFinished = { seekPosition?.let { onSeekTo(it) }; seekPosition = null }, enabled = !playerState.isLoading, modifier = Modifier.fillMaxWidth().padding(horizontal = if (screenWidth < 400.dp) 16.dp else 0.dp).padding(bottom = 2.dp))
                                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = if (screenWidth < 400.dp) 16.dp else 0.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(text = formatDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
+                                    Text(text = formatPlayerDuration(displayPosition), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                                     Text(text = qualityLabel, fontSize = 12.sp, color = playerText)
-                                    Text(text = formatDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
+                                    Text(text = formatPlayerDuration(playerState.duration), fontSize = 12.sp, color = playerText.copy(alpha = 0.6f))
                                 }
                                 Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -1788,7 +1788,7 @@ fun PlayerPage(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                         Text(
-                            text = formatDuration(displayPosition),
+                            text = formatPlayerDuration(displayPosition),
                             fontSize = 12.sp,
                             color = playerText.copy(alpha = 0.6f)
                         )
@@ -1798,7 +1798,7 @@ fun PlayerPage(
                             color = playerText
                         )
                         Text(
-                            text = formatDuration(playerState.duration),
+                            text = formatPlayerDuration(playerState.duration),
                             fontSize = 12.sp,
                             color = playerText.copy(alpha = 0.6f)
                         )
@@ -2162,6 +2162,7 @@ fun PlayerPage(
                                     showSpeedDialog = true
                                 }
                             )
+                            if (track != null) PlayerVocalSeparationControl()
                         }
                     }
 
@@ -2380,285 +2381,3 @@ fun PlayerPage(
     }
 }
 
-private fun formatSpeedValue(speed: Float): String {
-    val hundredths = (speed * 100f).roundToInt()
-    return if (hundredths % 10 == 0) {
-        String.format(java.util.Locale.US, "%.1f", speed)
-    } else {
-        String.format(java.util.Locale.US, "%.2f", speed)
-    }
-}
-
-/** Local playback has no online account actions; car controls keep their existing arrangement. */
-@Composable
-private fun LocalPlayerActions(
-    color: Color,
-    locked: Boolean,
-    playMode: Int,
-    onClose: () -> Unit,
-    onPlayMode: () -> Unit,
-    onPlaylist: () -> Unit,
-    onEffects: () -> Unit,
-    onMore: () -> Unit,
-    onLyrics: (() -> Unit)?,
-    lyricsSelected: Boolean
-) {
-    val tint = color.copy(alpha = 0.6f)
-    IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
-        Icon(MiuixIcons.Close, "关闭", tint = tint, modifier = Modifier.size(24.dp))
-    }
-    Spacer(Modifier.width(16.dp))
-    if (onLyrics != null) {
-        IconButton(onClick = onLyrics, modifier = Modifier.size(48.dp)) {
-            Icon(if (lyricsSelected) MiuixIcons.NotesFill else MiuixIcons.Notes, "歌词",
-                tint = if (lyricsSelected) color else tint, modifier = Modifier.size(24.dp))
-        }
-        Spacer(Modifier.width(16.dp))
-    }
-    IconButton(onClick = onPlayMode, modifier = Modifier.size(48.dp).alpha(if (locked) 0.35f else 1f)) {
-        Icon(when (playMode) { 1 -> MiuixIcons.Merge; 2 -> MiuixIcons.Replace; else -> MiuixIcons.Sort },
-            when (playMode) { 1 -> "乱序播放"; 2 -> "单曲循环"; else -> "顺序播放" },
-            tint = tint, modifier = Modifier.size(24.dp))
-    }
-    Spacer(Modifier.width(16.dp))
-    IconButton(onClick = onPlaylist, modifier = Modifier.size(48.dp).alpha(if (locked) 0.35f else 1f)) {
-        Icon(MiuixIcons.Playlist, "播放列表", tint = tint, modifier = Modifier.size(24.dp))
-    }
-    Spacer(Modifier.width(16.dp))
-    if (onLyrics == null) {
-        IconButton(onClick = onEffects, modifier = Modifier.size(48.dp)) {
-            Icon(painterResource(R.drawable.ic_md3_equalizer), "音效", tint = tint, modifier = Modifier.size(24.dp))
-        }
-        Spacer(Modifier.width(16.dp))
-    }
-    IconButton(onClick = onMore, modifier = Modifier.size(48.dp)) {
-        Icon(MiuixIcons.More, "更多", tint = tint, modifier = Modifier.size(24.dp))
-    }
-}
-
-@Composable
-private fun PlayerArtistAlbumText(track: Track?, color: Color, fontSize: TextUnit,
-    onArtistClick: (Int) -> Unit, onAlbumClick: () -> Unit, modifier: Modifier = Modifier, centered: Boolean = false,
-    maxLines: Int = 1) {
-    val text = buildPlayerArtistAlbumText(track)
-    ClickableText(text = text, modifier = modifier, maxLines = maxLines, overflow = TextOverflow.Ellipsis,
-        style = TextStyle(fontSize = fontSize, color = color.copy(alpha = 0.7f),
-            textAlign = if (centered) TextAlign.Center else TextAlign.Start),
-        onClick = { offset ->
-            when {
-                text.getStringAnnotations("artist", offset, offset).isNotEmpty() ->
-                    onArtistClick(text.getStringAnnotations("artist", offset, offset).first().item.toIntOrNull() ?: 0)
-                text.getStringAnnotations("album", offset, offset).isNotEmpty() -> onAlbumClick()
-            }
-        })
-}
-
-internal fun isPlayerArtistGroup(track: Track): Boolean =
-    track.artistNames.size >= 4 || track.artist.trim() == "群星"
-
-internal fun buildPlayerArtistAlbumText(track: Track?): androidx.compose.ui.text.AnnotatedString {
-    val artist = track?.artist ?: "未知歌手"
-    val album = track?.album ?: "未知专辑"
-    return buildAnnotatedString {
-        var cursor = 0
-        val names = track?.artistNames.orEmpty()
-        val isGroup = track?.let(::isPlayerArtistGroup) ?: false
-        if (!isGroup && names.isNotEmpty()) {
-            names.forEachIndexed { index, name ->
-                if (name.isNotBlank()) {
-                    val start = artist.indexOf(name, cursor)
-                    if (start >= 0) {
-                        append(artist.substring(cursor, start))
-                        pushStringAnnotation("artist", index.toString()); append(name); pop()
-                        cursor = start + name.length
-                    }
-                }
-            }
-        }
-        if (cursor < artist.length) {
-            pushStringAnnotation("artist", "0"); append(artist.substring(cursor)); pop()
-        }
-        append(" - ")
-        pushStringAnnotation("album", "album"); append(album); pop()
-    }
-}
-
-@Composable
-private fun PlayerProgressSlider(
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    onValueChangeFinished: () -> Unit,
-    enabled: Boolean,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val progress = value.coerceIn(0f, 1f)
-    var isDragging by remember { mutableStateOf(false) }
-    val lineWidth by animateDpAsState(if (isDragging) 10.dp else 6.dp, label = "playerProgressWidth")
-    BoxWithConstraints(modifier = modifier.height(24.dp).pointerInput(enabled) {
-        if (!enabled) return@pointerInput
-        awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            try {
-                do {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                    if (kotlin.math.abs(change.position.x - down.position.x) > viewConfiguration.touchSlop) {
-                        isDragging = true
-                    }
-                } while (change.pressed)
-            } finally {
-                isDragging = false
-            }
-        }
-    }, contentAlignment = Alignment.CenterStart) {
-        // 保留 Miuix 滑块的拖动、点击、触觉反馈和无障碍语义，视觉由细轨道单独绘制。
-        Slider(
-            value = progress,
-            onValueChange = onValueChange,
-            onValueChangeFinished = onValueChangeFinished,
-            enabled = enabled,
-            modifier = Modifier.requiredWidth(maxWidth + 18.dp).height(28.dp).alpha(0f)
-        )
-        ComposeCanvas(Modifier.matchParentSize()) {
-            val strokeWidth = lineWidth.toPx()
-            val radius = 5.dp.toPx()
-            val left = radius
-            val right = (size.width - radius).coerceAtLeast(left)
-            val thumbX = if (rtl) right - (right - left) * progress else left + (right - left) * progress
-            val y = size.height / 2f
-            drawLine(color.copy(alpha = 0.3f), Offset(left, y), Offset(right, y), strokeWidth, StrokeCap.Round)
-            drawLine(color, Offset(if (rtl) right else left, y), Offset(thumbX, y), strokeWidth, StrokeCap.Round)
-            drawCircle(color, radius = radius, center = Offset(thumbX, y))
-        }
-    }
-}
-
-private fun formatDuration(durationMs: Long): String {
-    if (durationMs <= 0) return "0:00"
-    val totalSeconds = durationMs / 1000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
-}
-
-internal fun getQualityText(
-    bitrate: Int,
-    actualQuality: String,
-    isFMMode: Boolean = false,
-    isIntelligenceMode: Boolean = false,
-    showQuality: Boolean = true,
-    fmModeLabel: String = "私人FM"
-): String {
-    val quality = actualQuality.ifBlank {
-        if (bitrate > 0) com.hypermusic.miuix.data.model.AudioQuality.neteaseActual(bitrate, "") else "未知音质"
-    }
-    val prefix = when {
-        isFMMode -> fmModeLabel
-        isIntelligenceMode -> "心动模式"
-        else -> ""
-    }
-    // 关闭「显示当前歌曲音质」时只保留私人FM/心动模式文字
-    if (!showQuality) return prefix
-    return if (prefix.isEmpty()) quality else "$prefix · $quality"
-}
-
-/**
- * 使用共享的封面 Bitmap 渲染封面，避免每个位置重复联网获取封面。
- * bitmap 为 null 时展示占位图。
- */
-@Composable
-private fun CoverImage(
-    bitmap: ImageBitmap?,
-    contentDescription: String?,
-    modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop
-) {
-    if (bitmap != null) {
-        Image(
-            bitmap = bitmap,
-            contentDescription = contentDescription,
-            modifier = modifier,
-            contentScale = contentScale
-        )
-    } else {
-        Image(
-            painter = com.hypermusic.miuix.ui.components.rememberMusicImageFallbackPainter(),
-            contentDescription = contentDescription,
-            modifier = modifier,
-            contentScale = contentScale
-        )
-    }
-}
-
-/**
- * 私人FM / 心动模式下的喜欢（取消喜欢）按钮。
- * 未喜欢时直接喜欢，已喜欢时弹出取消喜欢确认框。
- */
-@Composable
-private fun FmLikeButton(
-    isLiked: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val playerDark = rememberPlayerDark()
-    val playerText = if (playerDark) Color.White else Color.Black
-    IconButton(onClick = onClick, modifier = modifier.size(48.dp)) {
-        Icon(
-            imageVector = if (isLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
-            contentDescription = if (isLiked) "取消喜欢" else "喜欢",
-            tint = if (isLiked) playerText else playerText.copy(alpha = 0.6f),
-            modifier = Modifier.size(24.dp)
-        )
-    }
-}
-
-@Composable
-private fun PlayerFavoriteButton(
-    isLiked: Boolean,
-    playerText: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    IconButton(onClick = onClick, modifier = modifier.size(48.dp)) {
-        Icon(
-            imageVector = if (isLiked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
-            contentDescription = if (isLiked) "取消收藏" else "收藏",
-            tint = if (isLiked) playerText else playerText.copy(alpha = 0.6f),
-            modifier = Modifier.size(24.dp)
-        )
-    }
-}
-
-@Composable
-private fun PlayerShareButton(
-    playerText: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    IconButton(onClick = onClick, modifier = modifier.size(48.dp)) {
-        Icon(
-            imageVector = MiuixIcons.Share,
-            contentDescription = "分享",
-            tint = playerText.copy(alpha = 0.6f),
-            modifier = Modifier.size(24.dp)
-        )
-    }
-}
-
-@Composable
-private fun PlayerCommentButton(
-    playerText: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    IconButton(onClick = onClick, modifier = modifier.size(48.dp)) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.Comment,
-            contentDescription = "评论",
-            tint = playerText.copy(alpha = 0.6f),
-            modifier = Modifier.size(24.dp)
-        )
-    }
-}

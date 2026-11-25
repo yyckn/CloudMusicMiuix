@@ -18,7 +18,7 @@ internal class KugouPlayback(private val client: KugouClient, private val auth: 
         val hash = client.trackHash(track)
         val account = auth.account(playback = true)
         val album = track.albumId.takeIf { it.matches(Regex("[0-9]{1,20}")) }.orEmpty()
-        val audioId = track.kugouAlbumAudioId.takeIf { it.matches(Regex("[0-9]{1,20}")) }.orEmpty()
+        val audioId = track.platform.kugouAlbumAudioId.takeIf { it.matches(Regex("[0-9]{1,20}")) }.orEmpty()
         selectAudio(quality, { candidate ->
             val variants = if (album.isNotEmpty() || audioId.isNotEmpty()) listOf(album to audioId, "" to "") else listOf("" to "")
             var preview: Audio? = null

@@ -21,7 +21,7 @@ internal class BodianPlayback(private val client: BodianClient) {
         require(track.source == "bodian")
         val rawId = track.id.removePrefix("bodian_")
         val id = rawId.toLongOrNull()?.takeIf { it > 0 && it <= 9_007_199_254_740_991L } ?: error("无效的波点音乐歌曲 ID")
-        val freeSign = track.bodianFreeSign.orEmpty()
+        val freeSign = track.platform.bodianFreeSign.orEmpty()
         require(freeSign.length <= 4096)
         val rightBody = linkedMapOf<String, Any>("musicId" to id, "freeSign" to freeSign)
         val right = client.call("/api/play/music/v2/checkRight", mapOf("musicId" to rawId, "freeSign" to freeSign),

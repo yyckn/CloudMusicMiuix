@@ -156,7 +156,7 @@ object AmllLyricsApi {
                 return@withContext null
             }
             track.source == "qqmusic" -> {
-                val ids = listOf(track.id.removePrefix("qqtrack_"), track.qqSongId.takeIf { it > 0 }?.toString().orEmpty())
+                val ids = listOf(track.id.removePrefix("qqtrack_"), track.platform.qqSongId.takeIf { it > 0 }?.toString().orEmpty())
                 for (id in ids.filter(String::isNotBlank).distinct()) {
                     parse(mirror("qq-lyrics", id))?.let { return@withContext it }
                     parse(apiLyrics("qqMusicId", id))?.let { return@withContext it }

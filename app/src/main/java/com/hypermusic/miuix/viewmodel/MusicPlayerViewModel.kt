@@ -44,91 +44,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-data class PlayerState(
-    val currentTrack: Track? = null,
-    val isPlaying: Boolean = false,
-    val isLoading: Boolean = false,
-    val error: String? = null,
-    val currentPosition: Long = 0L,
-    val lyricOffsetMs: Long = 0L,
-    val duration: Long = 0L,
-    val bitrate: Int = 0,
-    val audioQuality: String = ""
-)
-
-@Keep
-internal data class PlatformPlaybackSnapshot(
-    @SerializedName(value = "track", alternate = ["a"]) val track: Track? = null,
-    @SerializedName(value = "playlist", alternate = ["b"]) val playlist: List<Track> = emptyList(),
-    @SerializedName(value = "original", alternate = ["c"]) val original: List<Track> = emptyList(),
-    @SerializedName(value = "position", alternate = ["d"]) val position: Long = 0,
-    @SerializedName(value = "mode", alternate = ["e"]) val mode: Int = 0,
-    @SerializedName(value = "fm", alternate = ["f"]) val fm: Boolean = false,
-    @SerializedName(value = "intelligence", alternate = ["g"]) val intelligence: Boolean = false,
-    @SerializedName(value = "fmTracks", alternate = ["i"]) val fmTracks: List<Track> = emptyList(),
-    @SerializedName(value = "fmIndex", alternate = ["j"]) val fmIndex: Int = 0,
-    @SerializedName(value = "intelligenceTracks", alternate = ["k"]) val intelligenceTracks: List<Track> = emptyList(),
-    @SerializedName(value = "intelligenceIndex", alternate = ["l"]) val intelligenceIndex: Int = 0,
-    @SerializedName(value = "seed", alternate = ["m"]) val seed: String = "",
-    @SerializedName(value = "playlistId", alternate = ["n"]) val playlistId: String = "",
-    @SerializedName("albumPlayback") val albumPlayback: Boolean = false,
-    @SerializedName("additionalRadioId") val additionalRadioId: String? = null,
-    @SerializedName("fmModeLabel") val fmModeLabel: String? = null
-) {
-    internal fun belongsTo(platform: MusicPlatform): Boolean {
-        val source = platform.trackSource
-        return (additionalRadioId == null || additionalRadioId.startsWith("extra:${platform.storageKey}:")) &&
-            (track == null || track.source == source || !track.localDownloadId.isNullOrBlank()) &&
-            listOf(playlist, original, fmTracks, intelligenceTracks).all { tracks ->
-                tracks.orEmpty().all { it?.source == source || !it?.localDownloadId.isNullOrBlank() }
-            }
-    }
-}
-
-data class RecommendState(
-    val playlists: List<RecommendPlaylist> = emptyList(),
-    val userPlaylists: List<RecommendPlaylist> = emptyList(),
-    val dailySongs: List<Track> = emptyList(),
-    /** 雷达歌单 */
-    val radarPlaylists: List<RecommendPlaylist> = emptyList(),
-    /** 歌手推荐 */
-    val recommendArtists: List<com.hypermusic.miuix.data.model.ArtistInfo> = emptyList(),
-    /** 新碟上架 */
-    val newAlbums: List<com.hypermusic.miuix.data.model.AlbumInfo> = emptyList(),
-    /** 收藏的专辑 */
-    val userAlbums: List<com.hypermusic.miuix.data.model.AlbumInfo> = emptyList(),
-    /** 云盘第一首歌封面（歌单页云盘卡片用） */
-    val cloudDiskCoverUrl: String = "",
-    val isLoading: Boolean = false,
-    val error: String? = null
-)
-
-data class PlaylistDetailState(
-    val detail: PlaylistDetail? = null,
-    val isLoading: Boolean = false,
-    val error: String? = null
-)
-
-data class SearchState(
-    val results: List<Track> = emptyList(),
-    val isLoading: Boolean = false,
-    val error: String? = null,
-    val hasMore: Boolean = false,
-    val isLoadingMore: Boolean = false,
-    val loadMoreError: String? = null
-)
-
-data class LyricState(
-    val lyrics: SongLyrics? = null,
-    val source: String? = null,
-    val rawDebugText: String = "",
-    val matchedTrack: Track? = null,
-    val upgraded: Boolean = false,
-    val isLoading: Boolean = false,
-    val error: String? = null,
-    val loadingStartedAt: Long = 0
-)
-
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
     val listeningHistorySession = com.hypermusic.miuix.ui.pages.ListeningHistorySession()
 
@@ -837,7 +752,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun playbackAccountFor(track: Track): String? = when (track.source) {
         "qqmusic" -> QqMusicApi.playbackAccountId
-        "netease" -> NeteaseApi.getAccounts().getOrNull(if (track.isCloudDisk) dataAccountIndex else playbackAccountIndex)?.userId
+        "netease" -> NeteaseApi.getAccounts().getOrNull(if (track.platform.isCloudDisk) dataAccountIndex else playbackAccountIndex)?.userId
         "bodian" -> com.hypermusic.miuix.data.api.BodianAuth(getApplication(), com.hypermusic.miuix.data.api.BodianClient(getApplication())).currentAccount(playback = true)?.uid
         "kugou" -> com.hypermusic.miuix.data.api.KugouAuth(getApplication(), com.hypermusic.miuix.data.api.KugouClient(getApplication())).account(playback = true)?.userId
         "qishui" -> com.hypermusic.miuix.data.api.QishuiAuth(getApplication(), com.hypermusic.miuix.data.api.QishuiClient(getApplication())).account(playback = true)?.userId
@@ -990,7 +905,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 return@launch
             }
             if (track.source == "qqmusic") {
-                QqMusicApi.getSongAudio(track.id, track.qqMediaMid, qqAudioQualityIndex, cacheAccount).onSuccess { audio ->
+                QqMusicApi.getSongAudio(track.id, track.platform.qqMediaMid, qqAudioQualityIndex, cacheAccount).onSuccess { audio ->
                     if (generation != playbackGeneration || playerState.currentTrack != track || playbackAccountFor(track) != cacheAccount) return@onSuccess
                     val format = "${cacheAccount ?: "guest"}:${audio.quality}:${audio.bitrate}:${audio.extension}"
                     rememberCachedFormat(track, cacheAccount, cacheRequest, format, audio.bitrate, audio.quality)
@@ -1007,7 +922,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             // 云盘歌曲属于「获取数据」账号，必须用该账号 Cookie 获取播放地址；
             // 其他歌曲使用「播放歌曲」账号，且不切换全局账号，避免影响并发中的数据请求
             val accounts = NeteaseApi.getAccounts()
-            val accountIndex = if (track.isCloudDisk) dataAccountIndex else playbackAccountIndex
+            val accountIndex = if (track.platform.isCloudDisk) dataAccountIndex else playbackAccountIndex
             val accountUserId = accounts.getOrNull(accountIndex)?.userId
             val accountCookie = accountUserId?.let { NeteaseApi.getAccountCookie(it) }
 
@@ -2561,7 +2476,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     }
                     return@launch
                 }
-                QqMusicApi.getSongAudio(track.id, track.qqMediaMid, cacheRequest).fold(
+                QqMusicApi.getSongAudio(track.id, track.platform.qqMediaMid, cacheRequest).fold(
                     onSuccess = { audio ->
                         if (generation != playbackGeneration || playerState.currentTrack != track) return@fold
                         mediaPlaybackService?.let { service ->
@@ -2602,7 +2517,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             // 云盘歌曲属于「获取数据」账号，必须用该账号 Cookie 获取播放地址；
             // 其他歌曲使用「播放歌曲」账号，且不切换全局账号影响其他请求
             val accounts = NeteaseApi.getAccounts()
-            val accountIndex = if (track.isCloudDisk) dataAccountIndex else playbackAccountIndex
+            val accountIndex = if (track.platform.isCloudDisk) dataAccountIndex else playbackAccountIndex
             val accountUserId = accounts.getOrNull(accountIndex)?.userId
             val accountCookie = accountUserId?.let { NeteaseApi.getAccountCookie(it) }
 
@@ -2726,7 +2641,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun downloadCurrentTrack(track: Track? = playerState.currentTrack) {
         track ?: return
         val accountId = if (track.source == "qqmusic") QqMusicApi.playbackAccountId else {
-            val index = if (track.isCloudDisk) dataAccountIndex else playbackAccountIndex
+            val index = if (track.platform.isCloudDisk) dataAccountIndex else playbackAccountIndex
             NeteaseApi.getAccounts().getOrNull(index)?.userId
         }
         viewModelScope.launch {

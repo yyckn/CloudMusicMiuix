@@ -8,9 +8,7 @@ internal fun Track.withStorageDefaults(): Track = Track(
     album = album.orEmpty(), albumId = albumId.orEmpty(), source = source.orEmpty().ifBlank { "netease" },
     sourceUrl = sourceUrl.orEmpty(), imgUrl = imgUrl.orEmpty(), url = url, duration = duration,
     isVip = isVip, artistNames = artistNames.orEmpty().filterNotNull(), artistIds = artistIds.orEmpty().filterNotNull(),
-    isCloudDisk = isCloudDisk, qqMediaMid = qqMediaMid.orEmpty(), qqSongId = qqSongId,
-    bodianFreeSign = bodianFreeSign.orEmpty(), kugouHash = kugouHash.orEmpty(),
-    kugouAlbumAudioId = kugouAlbumAudioId.orEmpty(), localDownloadId = localDownloadId
+    localDownloadId = localDownloadId, platformData = platform
 )
 
 internal fun DownloadEntry.withStorageDefaults(): DownloadEntry = DownloadEntry(

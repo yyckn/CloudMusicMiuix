@@ -35,7 +35,6 @@ import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.time.*
-import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 import kotlinx.coroutines.async
 
@@ -152,6 +151,7 @@ fun ListeningHistoryPage(viewModel: MusicPlayerViewModel, onBack: () -> Unit, on
         val viewport = pageViewportTopInset(padding.calculateTopPadding())
         PullToRefresh(isRefreshing = refreshing, onRefresh = { if (!loading) { refreshing = true; refresh++ } },
             pullToRefreshState = pullToRefreshState, topAppBarScrollBehavior = scrollBehavior,
+            refreshTexts = listOf("继续下拉以刷新", "松手后刷新", "正在刷新...", "刷新成功"),
             contentPadding = PaddingValues(top = top), modifier = Modifier.padding(top = viewport)) {
         LazyColumn(state = session.listStates[tab], modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection).pageLayerBackdrop(backdrop),
             contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = top, bottom = FeedBottomPads.Standard)) {
@@ -160,10 +160,13 @@ fun ListeningHistoryPage(viewModel: MusicPlayerViewModel, onBack: () -> Unit, on
                 if (timeline.isEmpty() && !session.reading && !loading) item { HistoryNote("听歌超过10秒后，将在这里记录歌曲和播放时间") }
                 if ((loading || session.reading) && timeline.isEmpty()) item { Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) { InfiniteProgressIndicator() } }
                 timeline.groupBy { Instant.ofEpochMilli(it.playedAt).atZone(ZoneId.systemDefault()).toLocalDate() }.forEach { (date, entries) ->
-                    item(key = date.toString()) { SmallTitle(ListeningStats.dateLabel(date)) }
+                    item(key = date.toString()) {
+                        // The list already contributes 12dp: keep the standard 28dp title inset.
+                        SmallTitle(ListeningStats.dateLabel(date), insideMargin = PaddingValues(horizontal = 16.dp, vertical = 8.dp))
+                    }
                     items(entries, key = { it.key }) { record ->
-                        val time = Instant.ofEpochMilli(record.playedAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
-                        val source = if (record.local != null) "HyperMusic" else "网易云音乐"
+                        val time = ListeningStats.playbackTime(record.playedAt)
+                        val source = if (record.local != null) "本地" else "网易云"
                         val listening = record.listenedMs?.let { ms ->
                             " 已听${ListeningStats.duration(ms, fractionalMinutes = true)}"
                         }.orEmpty()

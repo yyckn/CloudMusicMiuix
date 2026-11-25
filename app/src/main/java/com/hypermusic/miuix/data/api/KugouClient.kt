@@ -225,13 +225,13 @@ internal class KugouClient(context: Context, private val http: OkHttpClient = Ok
 
     internal fun songMutation(account: KugouAuth.Account, listId: String, track: com.hypermusic.miuix.data.model.Track, fileId: String?, add: Boolean) {
         require(listId.matches(Regex("[1-9][0-9]{0,18}")))
-        require(track.kugouHash.matches(Regex("[A-Fa-f0-9]{32}")))
+        require(track.platform.kugouHash.matches(Regex("[A-Fa-f0-9]{32}")))
         val timestamp = (System.currentTimeMillis() / 1000).toString()
         val row = JsonObject().apply {
             if (add) {
-                addProperty("number", 1); addProperty("name", track.title); addProperty("hash", track.kugouHash.uppercase())
+                addProperty("number", 1); addProperty("name", track.title); addProperty("hash", track.platform.kugouHash.uppercase())
                 addProperty("size", 0); addProperty("sort", 0); addProperty("timelen", 0); addProperty("bitrate", 0)
-                addProperty("album_id", track.albumId.toLongOrNull() ?: 0); addProperty("mixsongid", track.kugouAlbumAudioId.toLongOrNull() ?: 0)
+                addProperty("album_id", track.albumId.toLongOrNull() ?: 0); addProperty("mixsongid", track.platform.kugouAlbumAudioId.toLongOrNull() ?: 0)
             } else {
                 val numeric = fileId?.toLongOrNull()?.takeIf { it > 0 } ?: error("酷狗音乐收藏条目标识缺失")
                 addProperty("fileid", numeric)
@@ -365,10 +365,10 @@ internal class KugouClient(context: Context, private val http: OkHttpClient = Ok
     }
 
     internal fun trackHash(track: com.hypermusic.miuix.data.model.Track): String {
-        if (track.kugouHash.matches(Regex("[A-Fa-f0-9]{32}"))) return track.kugouHash.uppercase()
+        if (track.platform.kugouHash.matches(Regex("[A-Fa-f0-9]{32}"))) return track.platform.kugouHash.uppercase()
         val embedded = track.id.removePrefix("kugou_").takeIf { track.id.startsWith("kugou_") && it.matches(Regex("[A-Fa-f0-9]{32}")) }
         if (embedded != null) return embedded.uppercase()
-        val rawId = track.kugouAlbumAudioId.ifBlank { track.id.removePrefix("kugou_") }
+        val rawId = track.platform.kugouAlbumAudioId.ifBlank { track.id.removePrefix("kugou_") }
         val id = rawId.toLongOrNull()?.takeIf { it in 1..9_007_199_254_740_991L } ?: error("酷狗音乐歌曲标识缺失")
         val result = catalogRequest("/kmr/v2/audio", JsonObject().apply {
             add("data", com.google.gson.JsonArray().apply { add(JsonObject().apply { addProperty("entity_id", id) }) })

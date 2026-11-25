@@ -67,3 +67,10 @@
 -keep class com.hypermusic.miuix.data.download.OfflineLibrary$SavedLyrics { *; }
 -keep class com.hypermusic.miuix.data.lyrics.RawLyricDocument { *; }
 -keep class com.hypermusic.miuix.data.cache.AudioCache$CachedAudio { *; }
+
+# ONNX Runtime 的 JNI 层按类名查找 Java 包装类，release 构建不能混淆。
+-keep class ai.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**
+
+# JTransforms 的 large-array 实现仅可选引用 JDK 内部清理器。
+-dontwarn sun.misc.**

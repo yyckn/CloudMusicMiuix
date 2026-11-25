@@ -20,7 +20,7 @@ class QqLiveReadOnlyTest {
         assertTrue("search returned no songs", songs.isNotEmpty())
         assertTrue(songs.all { it.source == "qqmusic" && it.id.isNotBlank() })
         assertTrue("no playable URL returned", songs.take(12).any {
-            QqMusicApi.getSongAudio(it.id, it.qqMediaMid, 3).getOrNull()?.url?.startsWith("https://") == true
+            QqMusicApi.getSongAudio(it.id, it.platform.qqMediaMid, 3).getOrNull()?.url?.startsWith("https://") == true
         })
         val recommendations = QqMusicApi.getRecommendPlaylists().getOrThrow()
         assertTrue("no recommended playlists", recommendations.isNotEmpty())
@@ -50,7 +50,7 @@ class QqLiveReadOnlyTest {
         assertTrue("artist album pagination failed", nextAlbums.isNotEmpty() && nextAlbums.none { next -> firstAlbums.any { it.id == next.id } })
         val withAlbum = songs.first { (it.albumId.toLongOrNull() ?: 0L) > 0 }
         assertTrue(QqMusicApi.getAlbumSongs(withAlbum.albumId.toLong()).getOrThrow().isNotEmpty())
-        val withId = songs.first { it.qqSongId > 0 }
-        assertNotNull(QqMusicApi.getComments(withId.qqSongId).getOrThrow())
+        val withId = songs.first { it.platform.qqSongId > 0 }
+        assertNotNull(QqMusicApi.getComments(withId.platform.qqSongId).getOrThrow())
     }
 }

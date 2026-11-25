@@ -8,4 +8,11 @@ class HyperMusicApplication : Application() {
         super.attachBaseContext(base)
         CrashDiagnostics.install(this)
     }
+
+    override fun onCreate() {
+        super.onCreate()
+        if (Application.getProcessName() == packageName) {
+            AppBootstrap.initialize(this)
+        }
+    }
 }

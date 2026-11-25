@@ -2,6 +2,7 @@ package com.hypermusic.miuix.data.api
 
 import com.google.gson.JsonObject
 import com.hypermusic.miuix.data.model.Track
+import com.hypermusic.miuix.data.model.TrackPlatformData
 import com.hypermusic.miuix.data.model.SearchCategory
 import com.hypermusic.miuix.data.model.SearchEntity
 import com.hypermusic.miuix.data.model.AlbumInfo
@@ -132,7 +133,7 @@ internal class KugouCatalog(private val client: KugouClient) {
                 artistId = singers.firstOrNull()?.text("author_id").orEmpty().ifBlank { base.text("author_id") }, artistNames = singers.map { it.text("author_name") },
                 artistIds = singers.map { it.text("author_id") }, album = album?.text("album_name").orEmpty(), albumId = base.text("album_id"),
                 source = "kugou", sourceUrl = "", imgUrl = cover, duration = audio.text("duration").toLongOrNull()?.coerceAtLeast(0) ?: 0,
-                kugouHash = hash, kugouAlbumAudioId = audioId)
+                platformData = TrackPlatformData(kugouHash = hash, kugouAlbumAudioId = audioId))
         }
         internal fun parseSearchEntity(row: JsonObject, category: SearchCategory): SearchEntity? {
             fun first(vararg names: String) = names.firstNotNullOfOrNull { row.text(it).takeIf(String::isNotBlank) }.orEmpty()
@@ -177,7 +178,7 @@ internal class KugouCatalog(private val client: KugouClient) {
                 artistId = ids.firstOrNull().orEmpty().ifBlank { row.text("author_id").ifBlank { row.text("SingerId") } }, album = row.text("AlbumName").ifBlank { row.text("album_name") }.ifBlank { row.obj("albuminfo")?.text("name").orEmpty() }, albumId = albumId,
                 source = "kugou", sourceUrl = "", imgUrl = cover,
                 duration = duration.coerceAtLeast(0), isVip = payType > 0,
-                artistNames = names, artistIds = ids, kugouHash = hash, kugouAlbumAudioId = audioId)
+                artistNames = names, artistIds = ids, platformData = TrackPlatformData(kugouHash = hash, kugouAlbumAudioId = audioId))
         }
         internal fun parsePlaylist(data: JsonObject, offset: Int): PlaylistPage {
             val info = data.obj("list_info") ?: error("酷狗音乐歌单信息缺失")

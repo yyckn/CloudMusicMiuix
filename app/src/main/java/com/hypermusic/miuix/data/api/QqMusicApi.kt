@@ -5,6 +5,7 @@ import androidx.compose.runtime.setValue
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.hypermusic.miuix.data.model.Track
+import com.hypermusic.miuix.data.model.TrackPlatformData
 import com.hypermusic.miuix.data.model.RecommendPlaylist
 import com.hypermusic.miuix.data.model.Playlist
 import com.hypermusic.miuix.data.model.PlaylistDetail
@@ -537,8 +538,10 @@ object QqMusicApi {
             duration = (text("interval").toLongOrNull() ?: 0L) * 1000,
             isVip = getAsJsonObject("pay")?.let { it.text("pay_month") == "1" && it.text("pay_play") == "1" } == true,
             artistNames = singers.map { it.text("name") }, artistIds = singers.map { "qqartist_${it.text("mid")}" },
-            qqMediaMid = getAsJsonObject("file")?.text("media_mid").orEmpty(),
-            qqSongId = text("id").toLongOrNull() ?: 0L)
+            platformData = TrackPlatformData(
+                qqMediaMid = getAsJsonObject("file")?.text("media_mid").orEmpty(),
+                qqSongId = text("id").toLongOrNull() ?: 0L
+            ))
     }
 
     private fun request(module: String, method: String, params: JsonObject, auth: Credential? = credential, loginTypeOverride: Int? = null, web: Boolean = false): JsonObject {
@@ -933,7 +936,7 @@ object QqMusicApi {
                     imgUrl = if (albumMid.isBlank()) "" else "https://y.gtimg.cn/music/photo_new/T002R1500x1500M000$albumMid.jpg",
                     duration = (song.text("interval").toLongOrNull() ?: 0L) * 1000,
                     artistNames = singers.map { it.text("name") }, artistIds = singers.map { "qqartist_${it.text("mid")}" },
-                    qqMediaMid = song.text("strMediaMid"), qqSongId = song.text("songid").toLongOrNull() ?: 0,
+                    platformData = TrackPlatformData(qqMediaMid = song.text("strMediaMid"), qqSongId = song.text("songid").toLongOrNull() ?: 0),
                     isVip = song.text("payplay") == "1" || song.getAsJsonObject("pay")?.text("pay_play") == "1")
             }
             val first = tracks.firstOrNull()
@@ -957,13 +960,13 @@ object QqMusicApi {
     suspend fun setLiked(track: Track, liked: Boolean): Result<Boolean> = withContext(Dispatchers.IO) {
         runCatching {
             check(isLoggedIn()) { "请先登录QQ音乐" }
-            require(track.qqSongId > 0) { "歌曲标识缺失" }
+            require(track.platform.qqSongId > 0) { "歌曲标识缺失" }
             val data = request("music.musicasset.PlaylistDetailWrite", if (liked) "AddSonglist" else "DelSonglist", JsonObject().apply {
                 addProperty("dirId", 201); addProperty("tid", 0); addProperty("bFmtUtf8", true)
                 add("v_songInfo", com.google.gson.JsonArray().apply { add(JsonObject().apply {
                     // PlaylistDetailWrite uses 0 for ordinary songs; the search/track
                     // `type` field uses a different enum and is commonly 1.
-                    addProperty("songId", track.qqSongId); addProperty("songType", 0)
+                    addProperty("songId", track.platform.qqSongId); addProperty("songType", 0)
                 }) })
             })
             check(data.text("retCode") == "0") { "QQ音乐收藏操作失败 (${data.text("retCode")})" }

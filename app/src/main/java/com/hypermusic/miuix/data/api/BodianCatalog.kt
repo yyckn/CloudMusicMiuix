@@ -2,6 +2,7 @@ package com.hypermusic.miuix.data.api
 
 import com.google.gson.JsonObject
 import com.hypermusic.miuix.data.model.Track
+import com.hypermusic.miuix.data.model.TrackPlatformData
 import com.hypermusic.miuix.data.model.SearchCategory
 import com.hypermusic.miuix.data.model.SearchEntity
 import com.hypermusic.miuix.data.model.AlbumInfo
@@ -136,7 +137,7 @@ internal class BodianCatalog(private val client: BodianClient) {
                 isVip = item.get("payInfo")?.takeIf { it.isJsonObject }?.asJsonObject
                     ?.get("feeType")?.takeIf { it.isJsonObject }?.asJsonObject
                     ?.get("vip")?.takeIf { it.isJsonPrimitive }?.asString?.let { it == "1" || it.equals("true", true) } == true,
-                bodianFreeSign = item.text("freeSign").ifBlank { item.text("fsig") })
+                platformData = TrackPlatformData(bodianFreeSign = item.text("freeSign").ifBlank { item.text("fsig") }))
         }
     }
 }

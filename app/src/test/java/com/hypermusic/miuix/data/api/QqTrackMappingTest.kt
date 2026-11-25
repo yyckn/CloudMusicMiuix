@@ -23,7 +23,7 @@ class QqTrackMappingTest {
         assertEquals("qqmusic", track.source)
         assertEquals("qqartist_0025NhlN2yWrP4", track.artistId)
         assertEquals("8220", track.albumId)
-        assertEquals("003Qui1q2u1Zho", track.qqMediaMid)
+        assertEquals("003Qui1q2u1Zho", track.platform.qqMediaMid)
         assertEquals(269000L, track.duration)
     }
 }

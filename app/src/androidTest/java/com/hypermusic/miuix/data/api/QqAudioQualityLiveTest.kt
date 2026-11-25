@@ -18,11 +18,11 @@ class QqAudioQualityLiveTest {
         QqMusicApi.init(InstrumentationRegistry.getInstrumentation().targetContext)
         assertTrue("QQ account required", QqMusicApi.isLoggedIn())
         val songs = QqMusicApi.searchSongs("周杰伦").getOrThrow()
-        val song = songs.firstOrNull { QqMusicApi.getSongAudio(it.id, it.qqMediaMid, 0).isSuccess }
+        val song = songs.firstOrNull { QqMusicApi.getSongAudio(it.id, it.platform.qqMediaMid, 0).isSuccess }
         assertNotNull("No playable track found for the test account", song)
         val track = requireNotNull(song)
         val outputs = (0..4).mapNotNull { index ->
-            QqMusicApi.getSongAudio(track.id, track.qqMediaMid, index).getOrNull()?.let { index to it }
+            QqMusicApi.getSongAudio(track.id, track.platform.qqMediaMid, index).getOrNull()?.let { index to it }
         }
         assertTrue(outputs.isNotEmpty())
         outputs.forEach { (index, audio) ->

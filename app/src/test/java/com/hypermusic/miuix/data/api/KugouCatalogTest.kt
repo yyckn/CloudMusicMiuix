@@ -23,8 +23,8 @@ class KugouCatalogTest {
         val row = JsonParser.parseString("""{"FileName":"歌手 - 歌名","OriSongName":"歌名","SingerName":"歌手","FileHash":"1f7e7659b9fff4fb6f71562a61bbc25f","MixSongID":"7351234567890123456","AlbumID":"958909","AlbumName":"专辑","Duration":299,"PayType":3,"Image":"http://imge.kugou.com/stdmusic/{size}/cover.jpg","Singers":[{"name":"歌手","id":3520}]}""").asJsonObject
         val track = KugouCatalog.parseTrack(row)
         assertEquals("kugou_7351234567890123456", track.id)
-        assertEquals("1F7E7659B9FFF4FB6F71562A61BBC25F", track.kugouHash)
-        assertEquals("7351234567890123456", track.kugouAlbumAudioId)
+        assertEquals("1F7E7659B9FFF4FB6F71562A61BBC25F", track.platform.kugouHash)
+        assertEquals("7351234567890123456", track.platform.kugouAlbumAudioId)
         assertEquals(299000L, track.duration)
         assertEquals("https://imge.kugou.com/stdmusic/400/cover.jpg", track.imgUrl)
         assertEquals(listOf("歌手"), track.artistNames)
@@ -76,8 +76,8 @@ class KugouCatalogTest {
         val row = JsonParser.parseString("""{"base":{"album_audio_id":32029511,"audio_name":"歌曲"},"audio_info":{"duration":226873}}""").asJsonObject
         val track = KugouCatalog.parseAlbumTrack(row)
         assertEquals("kugou_32029511", track.id)
-        assertEquals("32029511", track.kugouAlbumAudioId)
-        assertEquals("", track.kugouHash)
+        assertEquals("32029511", track.platform.kugouAlbumAudioId)
+        assertEquals("", track.platform.kugouHash)
         assertEquals("kugou_32029511", KugouCatalog.parseAlbumTrack(JsonParser.parseString("""{"base":{"album_audio_id":32029511}}""").asJsonObject).id)
         assertTrue(runCatching { KugouCatalog.parseAlbumTrack(JsonParser.parseString("""{"base":{},"audio_info":{}}""").asJsonObject) }.isFailure)
     }

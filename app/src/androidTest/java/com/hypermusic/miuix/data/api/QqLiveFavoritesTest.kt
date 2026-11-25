@@ -18,7 +18,7 @@ class QqLiveFavoritesTest {
         QqMusicApi.init(InstrumentationRegistry.getInstrumentation().targetContext)
         assertTrue("QQ Music account is required", QqMusicApi.isLoggedIn())
         val existing = QqMusicApi.getPlaylistDetail("qqdir:201").getOrThrow().tracks.map { it.id }.toSet()
-        val candidate = QqMusicApi.searchSongs("jay").getOrThrow().firstOrNull { it.qqSongId > 0 && it.id !in existing }
+        val candidate = QqMusicApi.searchSongs("jay").getOrThrow().firstOrNull { it.platform.qqSongId > 0 && it.id !in existing }
         assertNotNull("No suitable test song", candidate)
         val song = candidate!!
         println("LIVE_TEST_ID=${song.id}")

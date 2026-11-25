@@ -63,6 +63,7 @@ fun SongSettingsPage(
     viewModel: MusicPlayerViewModel,
     onBackClick: () -> Unit,
     onSoundEffectsClick: () -> Unit = {},
+    onVocalSeparationClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -129,6 +130,12 @@ fun SongSettingsPage(
             item { SmallTitle("播放选项") }
             item {
                 Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                    ArrowPreference(
+                        title = "人声分离",
+                        summary = "本地 AI 分离人声与伴奏，可独立调节人声音量",
+                        startAction = { SettingsItemIcon(R.drawable.ic_md3_equalizer) },
+                        onClick = onVocalSeparationClick,
+                    )
                     com.hypermusic.miuix.ui.components.LoudnessPreference()
                     ArrowPreference(title = "音效", startAction = { SettingsItemIcon(R.drawable.ic_md3_equalizer) }, onClick = onSoundEffectsClick)
 

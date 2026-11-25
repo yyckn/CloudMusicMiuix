@@ -19,10 +19,10 @@ class PlatformPublicCatalogTest {
         val auth = KugouAuth(context, client)
         val tracks = KugouCatalog(client).searchSongs("晴天", limit = 10).items
         val audio = tracks.firstNotNullOfOrNull { track ->
-            if (track.kugouAlbumAudioId.isBlank()) return@firstNotNullOfOrNull null
+            if (track.platform.kugouAlbumAudioId.isBlank()) return@firstNotNullOfOrNull null
             runCatching {
-                val withoutHash = track.copy(kugouHash = "")
-                assertEquals(track.kugouHash.uppercase(), client.trackHash(withoutHash))
+                val withoutHash = track.copy(platformData = track.platform.copy(kugouHash = ""))
+                assertEquals(track.platform.kugouHash.uppercase(), client.trackHash(withoutHash))
                 KugouPlayback(client, auth).resolve(withoutHash, KugouPlayback.Quality.STANDARD)
             }.getOrNull()
         } ?: error("未找到可验证的公开歌曲")

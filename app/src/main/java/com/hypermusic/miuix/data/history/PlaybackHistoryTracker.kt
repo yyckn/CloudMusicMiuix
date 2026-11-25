@@ -22,7 +22,7 @@ class PlaybackHistoryTracker(private val context: Context) {
         if (track.source != "netease") return
         this.track = track
         val prefs = context.getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
-        val index = prefs.getInt(if (track.isCloudDisk) "data_account_index" else "playback_account_index", 0)
+        val index = prefs.getInt(if (track.platform.isCloudDisk) "data_account_index" else "playback_account_index", 0)
         account = NeteaseApi.getAccounts().getOrNull(index)?.userId.orEmpty()
         id = ListeningHistory.newId(); startedAt = System.currentTimeMillis()
         duration = track.duration; session = ListeningSession(); checkpoint = 0

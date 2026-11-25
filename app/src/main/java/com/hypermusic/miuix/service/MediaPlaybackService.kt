@@ -26,6 +26,7 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.ForwardingAudioSink
 import androidx.media3.extractor.metadata.flac.VorbisComment
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.extractor.metadata.id3.InternalFrame
@@ -34,6 +35,8 @@ import androidx.media3.container.MdtaMetadataEntry
 import com.hypermusic.miuix.data.audio.AudioSettings
 import com.hypermusic.miuix.data.audio.ReplayGainInfo
 import com.hypermusic.miuix.data.audio.SoundAudioProcessor
+import com.hypermusic.miuix.data.audio.separation.VocalSeparationEngine
+import java.nio.ByteBuffer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -120,6 +123,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
             if (::historyTracker.isInitialized) historyTracker.update(player?.isPlaying == true, playbackParameters.speed)
         }
         override fun onMetadata(metadata: Metadata) = applyReplayGainMetadata(metadata)
+
 
         override fun onTracksChanged(tracks: Tracks) {
             for (group in tracks.groups) {
@@ -453,6 +457,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         val newPlayer = createPlayer(track)
         historyTracker.begin(track)
         player = newPlayer
+        notifyVocalSeparationTrack(track, url)
         pendingFadeIn = autoplay && ThemeSettings.fadeEnabled
         newPlayer.volume = if (pendingFadeIn) 0f else 1f
 
@@ -493,11 +498,31 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         audioProcessor = soundProcessor
         val renderers = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
-                DefaultAudioSink.Builder(context)
+                object : ForwardingAudioSink(DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(false)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .setAudioProcessors(arrayOf<AudioProcessor>(soundProcessor))
-                    .build()
+                    .build()) {
+                    private var streamOffsetUs = 0L
+
+                    override fun setOutputStreamOffsetUs(outputStreamOffsetUs: Long) {
+                        streamOffsetUs = outputStreamOffsetUs
+                        super.setOutputStreamOffsetUs(outputStreamOffsetUs)
+                    }
+
+                    override fun handleBuffer(
+                        buffer: ByteBuffer,
+                        presentationTimeUs: Long,
+                        encodedAccessUnitCount: Int,
+                    ): Boolean {
+                        soundProcessor.mediaTimeUs = if (presentationTimeUs == C.TIME_UNSET) {
+                            C.TIME_UNSET
+                        } else {
+                            presentationTimeUs - streamOffsetUs
+                        }
+                        return super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
+                    }
+                }
         }
         return ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cachedDataSource ?: sourceFactory))
@@ -519,6 +544,31 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         player?.release()
         player = null
         audioProcessor = null
+    }
+
+    private fun separationCacheKey(track: Track, url: String): String? {
+        if (url != "https://127.0.0.1/cached") return null
+        val audioTrack = currentAudioTrack ?: track
+        if (currentCacheFormat.isBlank() || currentCacheFormat == "unknown") return null
+        return AudioCache.key(audioTrack.source, audioTrack.id, currentCacheFormat)
+    }
+
+    private fun notifyVocalSeparationTrack(track: Track, url: String) {
+        val audioTrack = currentAudioTrack ?: track
+        val headers = when (audioTrack.source) {
+            "qqmusic" -> mapOf("Referer" to "https://y.qq.com/")
+            "netease" -> mapOf("Referer" to "https://music.163.com")
+            else -> emptyMap()
+        }
+        VocalSeparationEngine.notifyTrackChanged(
+            trackKey = "${audioTrack.source}:${audioTrack.id}",
+            title = track.title,
+            artist = track.artist,
+            album = track.album,
+            sourceUrl = url,
+            cacheKey = separationCacheKey(track, url),
+            headers = headers,
+        )
     }
 
     private fun recoverFromError() {
@@ -737,6 +787,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
         playlist = emptyList()
         isPlaying = false
         playbackPosition = 0L
+        VocalSeparationEngine.clearTrack()
         releasePlayer()
         lyriconManager?.setPlaybackState(false)
         mediaSession.setMetadata(null)
@@ -1133,7 +1184,15 @@ class MediaPlaybackService : MediaBrowserServiceCompat() {
             )
             .build()
 
-        startForeground(NOTIFICATION_ID, notification)
+        if (isPlaying) {
+            startForeground(NOTIFICATION_ID, notification)
+        } else {
+            // Focus-loss callbacks can arrive while the app is background-restricted.
+            // Updating a paused media card must not attempt to promote the service.
+            // notify() also updates an existing foreground notification without
+            // changing the running service's foreground status.
+            getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun getActionIntent(action: String): PendingIntent {

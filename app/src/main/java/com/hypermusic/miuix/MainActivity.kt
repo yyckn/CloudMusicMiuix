@@ -133,6 +133,7 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import com.hypermusic.miuix.ui.components.PlayerBar
 import com.hypermusic.miuix.ui.components.SwipeablePlayerSheet
+import com.hypermusic.miuix.ui.navigation.Screen
 import com.hypermusic.miuix.ui.theme.CloudMusicMiuixTheme
 import com.hypermusic.miuix.ui.theme.AgreementSettings
 import com.hypermusic.miuix.ui.theme.KeyboardShortcutSettings
@@ -157,40 +158,6 @@ import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.basic.Search
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
-
-sealed class Screen {
-    object Main : Screen()
-    object Search : Screen()
-    object LocalMusic : Screen()
-    data class PlaylistDetail(
-        val coverUrl: String = "",
-        val title: String = "",
-        val isTopChart: Boolean = false,
-        val sharedCoverKey: String? = null
-    ) : Screen()
-    object Login : Screen()
-    object QrLogin : Screen()
-    object ThemeSettings : Screen()
-    object PlayPageSettings : Screen()
-    object SongSettings : Screen()
-    object SoundEffects : Screen()
-    object CacheSettings : Screen()
-    object ListeningHistory : Screen()
-    object DownloadSettings : Screen()
-    object About : Screen()
-    data class Profile(val accountId: String? = null) : Screen()
-    data class Artist(val artistId: String) : Screen()
-    data class Album(val albumId: Long, val qq: Boolean = false, val initialCoverUrl: String = "", val sharedCoverKey: String? = null) : Screen()
-    object LyriconAdapter : Screen()
-    object LyricSettings : Screen()
-    object LyricUpgradeManage : Screen()
-    object LyricRules : Screen()
-    object DeveloperOptions : Screen()
-    object AppIcon : Screen()
-    object ManageAccounts : Screen()
-    object UpdateHistory : Screen()
-    data class Comment(val songId: String, val songTitle: String, val qqSongId: Long? = null) : Screen()
-}
 
 class MainActivity : ComponentActivity() {
     private var pendingDailyShortcut by mutableIntStateOf(0)
@@ -228,42 +195,6 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        NeteaseApi.init(applicationContext)
-        com.hypermusic.miuix.data.history.ListeningHistory.init(applicationContext)
-        com.hypermusic.miuix.data.history.ListeningHistory.retryAtLaunch()
-        com.hypermusic.miuix.data.api.QqMusicApi.init(applicationContext)
-        com.hypermusic.miuix.data.api.PlatformManager.init(applicationContext)
-        ThemeSettings.init(applicationContext)
-        com.hypermusic.miuix.data.audio.AudioSettings.init(applicationContext)
-        com.hypermusic.miuix.data.lyrics.LyricMatches.init(applicationContext)
-        com.hypermusic.miuix.data.lyrics.BodianLyricsApi.init(applicationContext)
-        com.hypermusic.miuix.data.lyrics.KugouLyricsApi.init(applicationContext)
-        com.hypermusic.miuix.data.lyrics.QishuiLyricsApi.init(applicationContext)
-        AppIconSettings.init(applicationContext)
-        AppIconSettings.applySaved(applicationContext)
-        LyricExclusionRules.init(applicationContext)
-        KeyboardShortcutSettings.init(applicationContext)
-        AgreementSettings.init(applicationContext)
-        com.hypermusic.miuix.ui.theme.OnboardingSettings.init(applicationContext)
-        if (com.hypermusic.miuix.ui.theme.OnboardingSettings.completed && AgreementSettings.accepted) {
-            val loggedIn = when (com.hypermusic.miuix.data.api.PlatformManager.current) {
-                com.hypermusic.miuix.data.api.MusicPlatform.QQ -> com.hypermusic.miuix.data.api.QqMusicApi.isLoggedIn()
-                com.hypermusic.miuix.data.api.MusicPlatform.NETEASE -> NeteaseApi.isLoggedIn()
-                com.hypermusic.miuix.data.api.MusicPlatform.BODIAN -> {
-                    val api = com.hypermusic.miuix.data.api.BodianClient(applicationContext)
-                    com.hypermusic.miuix.data.api.BodianAuth(applicationContext, api).currentAccount() != null
-                }
-                com.hypermusic.miuix.data.api.MusicPlatform.KUGOU -> {
-                    val api = com.hypermusic.miuix.data.api.KugouClient(applicationContext)
-                    com.hypermusic.miuix.data.api.KugouAuth(applicationContext, api).account() != null
-                }
-                com.hypermusic.miuix.data.api.MusicPlatform.QISHUI -> runCatching {
-                    val api = com.hypermusic.miuix.data.api.QishuiClient(applicationContext)
-                    com.hypermusic.miuix.data.api.QishuiAuth(applicationContext, api).account() != null
-                }.getOrDefault(false)
-            }
-            com.hypermusic.miuix.ui.theme.OnboardingSettings.recoverMissingAccount(AgreementSettings.accepted, loggedIn)
-        }
         handleCredentialIntent(intent)
         handleDailyShortcut(intent)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -1379,7 +1310,7 @@ fun MainScreen(
                             viewModel = viewModel, onBack = { if (!navigateBack()) currentScreen = Screen.Main },
                             onArtist = { navigateTo(Screen.Artist(it)) },
                             onAlbum = { id, qq -> navigateTo(Screen.Album(id, qq)) },
-                            onComment = { track -> navigateTo(Screen.Comment(track.id, track.title, track.qqSongId.takeIf { track.source == "qqmusic" && it > 0 })) },
+                            onComment = { track -> navigateTo(Screen.Comment(track.id, track.title, track.platform.qqSongId.takeIf { track.source == "qqmusic" && it > 0 })) },
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedContent,
                             modifier = Modifier.then(secondaryLayerModifier)
@@ -1390,7 +1321,7 @@ fun MainScreen(
                             navigateTo(Screen.PlaylistDetail(cover, title))
                         }, onArtist = { navigateTo(Screen.Artist(it)) },
                             onAlbum = { id, qq -> navigateTo(Screen.Album(id, qq)) },
-                            onComment = { track -> navigateTo(Screen.Comment(track.id, track.title, track.qqSongId.takeIf { track.source == "qqmusic" && it > 0 })) },
+                            onComment = { track -> navigateTo(Screen.Comment(track.id, track.title, track.platform.qqSongId.takeIf { track.source == "qqmusic" && it > 0 })) },
                             modifier = Modifier.then(secondaryLayerModifier))
                     }
                 }
@@ -1690,6 +1621,7 @@ fun MainScreen(
                 SongSettingsPage(
                     viewModel = viewModel,
                     onSoundEffectsClick = { returnToPlayerFromSound = false; navigateTo(Screen.SoundEffects) },
+                    onVocalSeparationClick = { navigateTo(Screen.VocalSeparation) },
                     onBackClick = {
                         if (!navigateBack()) {
                             currentScreen = Screen.Main
@@ -1701,6 +1633,11 @@ fun MainScreen(
                 com.hypermusic.miuix.ui.pages.SoundEffectsPage(onBack = {
                     if (!navigateBack()) currentScreen = Screen.Main
                     if (returnToPlayerFromSound) { returnToPlayerFromSound = false; showPlayerPage = true }
+                })
+            }
+            is Screen.VocalSeparation -> {
+                com.hypermusic.miuix.ui.pages.VocalSeparationPage(onBack = {
+                    if (!navigateBack()) currentScreen = Screen.Main
                 })
             }
             is Screen.About -> {
@@ -1821,6 +1758,7 @@ fun MainScreen(
                         playbackAccountIndex = sharedPlayback.indexOfFirst { it.selection == playbackSelection }.coerceAtLeast(0),
                         dataAccountIndex = accounts.indexOfFirst { it.credential.musicId == qq.dataAccountId }.coerceAtLeast(0),
                         playbackOptions = sharedPlayback.map { it.label }, playbackInterop = true,
+                        onAccountSettingsChanged = { profileVersion++; viewModel.checkIfCurrentTrackLiked() },
                         onPlaybackAccountChange = { index -> sharedPlayback.getOrNull(index)?.let {
                             runCatching { com.hypermusic.miuix.data.api.SharedPlaybackAccounts.select(context, "qqmusic", it.selection) }
                                 .onFailure { error -> android.widget.Toast.makeText(context, error.message ?: "切换账号失败", android.widget.Toast.LENGTH_SHORT).show() }
@@ -1841,6 +1779,7 @@ fun MainScreen(
                             avatarUrl = account.avatarUrl
                         )
                     },
+                    onAccountSettingsChanged = { profileVersion++ },
                     onBackClick = {
                         if (!navigateBack()) {
                             currentScreen = Screen.Main
@@ -2079,7 +2018,7 @@ fun MainScreen(
                             navigateTo(Screen.Album(albumId, screen.artistId.startsWith("qqartist_")))
                         },
                         onNavigateToComment = { track ->
-                            if (track.source in setOf("netease", "qqmusic")) navigateTo(Screen.Comment(track.id, track.title, track.qqSongId.takeIf { track.source == "qqmusic" }))
+                            if (track.source in setOf("netease", "qqmusic")) navigateTo(Screen.Comment(track.id, track.title, track.platform.qqSongId.takeIf { track.source == "qqmusic" }))
                             else android.widget.Toast.makeText(context, "该平台的评论正在接入", android.widget.Toast.LENGTH_SHORT).show()
                         },
                         onPlayTrack = { track ->
@@ -2270,7 +2209,7 @@ fun MainScreen(
                             else android.widget.Toast.makeText(context, "该平台的歌手页正在接入", android.widget.Toast.LENGTH_SHORT).show()
                         },
                         onNavigateToComment = { track ->
-                            if (track.source in setOf("netease", "qqmusic")) navigateTo(Screen.Comment(track.id, track.title, track.qqSongId.takeIf { track.source == "qqmusic" && it > 0 }))
+                            if (track.source in setOf("netease", "qqmusic")) navigateTo(Screen.Comment(track.id, track.title, track.platform.qqSongId.takeIf { track.source == "qqmusic" && it > 0 }))
                             else android.widget.Toast.makeText(context, "该平台的评论正在接入", android.widget.Toast.LENGTH_SHORT).show()
                         },
                         onPlayTrack = { track ->
@@ -2316,7 +2255,7 @@ fun MainScreen(
                         .firstOrNull { it.id == screen.songId }
                     if (screen.qqSongId != null || commentTrack?.source == "qqmusic") {
                         com.hypermusic.miuix.ui.pages.QqCommentPage(
-                            screen.qqSongId ?: commentTrack?.qqSongId ?: 0L, screen.songTitle,
+                            screen.qqSongId ?: commentTrack?.platform?.qqSongId ?: 0L, screen.songTitle,
                             onBack = { if (!navigateBack()) currentScreen = Screen.Main },
                             modifier = secondaryLayerModifier,
                             isBackHandlerEnabled = !showPlayerPage

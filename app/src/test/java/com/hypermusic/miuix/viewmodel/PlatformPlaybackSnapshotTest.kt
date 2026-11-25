@@ -2,6 +2,7 @@ package com.hypermusic.miuix.viewmodel
 
 import com.google.gson.Gson
 import com.hypermusic.miuix.data.model.Track
+import com.hypermusic.miuix.data.model.TrackPlatformData
 import com.hypermusic.miuix.data.api.MusicPlatform
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -37,8 +38,8 @@ class PlatformPlaybackSnapshotTest {
 
     @Test fun newPlatformPlaybackIdentitySurvivesSnapshotRoundTrip() {
         val tracks = listOf(
-            song.copy(id = "bodian_123", source = "bodian", bodianFreeSign = "sample-sign"),
-            song.copy(id = "kugou_456", source = "kugou", kugouHash = "ABCDEF0123456789ABCDEF0123456789", kugouAlbumAudioId = "456"),
+            song.copy(id = "bodian_123", source = "bodian", platformData = TrackPlatformData(bodianFreeSign = "sample-sign")),
+            song.copy(id = "kugou_456", source = "kugou", platformData = TrackPlatformData(kugouHash = "ABCDEF0123456789ABCDEF0123456789", kugouAlbumAudioId = "456")),
             song.copy(id = "qishui_789", source = "qishui")
         )
         for (track in tracks) {

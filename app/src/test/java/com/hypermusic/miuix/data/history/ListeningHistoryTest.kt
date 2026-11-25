@@ -7,6 +7,20 @@ import org.junit.Test
 import java.time.*
 
 class ListeningHistoryTest {
+    @Test fun playbackTimeUsesDeviceTimeZoneAndPeriodBoundaries() {
+        val zone = ZoneId.of("Asia/Shanghai")
+        val date = LocalDate.of(2026, 11, 24)
+        listOf("00:00" to "凌晨", "05:59" to "凌晨", "06:00" to "早上", "08:59" to "早上",
+            "09:00" to "上午", "11:59" to "上午", "12:00" to "中午", "13:59" to "中午",
+            "14:00" to "下午", "17:59" to "下午", "18:00" to "晚上", "23:59" to "晚上").forEach { (clock, period) ->
+            val timestamp = date.atTime(LocalTime.parse(clock)).atZone(zone).toInstant().toEpochMilli()
+            assertEquals("$period$clock", ListeningStats.playbackTime(timestamp, zone))
+        }
+        val timestamp = Instant.parse("2026-11-24T04:34:00Z").toEpochMilli()
+        assertEquals("中午12:34", ListeningStats.playbackTime(timestamp, zone))
+        assertEquals("凌晨04:34", ListeningStats.playbackTime(timestamp, ZoneOffset.UTC))
+    }
+
     @Test fun chartLabelsPreferFullUnitsThenRoundHoursThenShortenUnit() {
         val time = 75 * 60_000L
         assertEquals("1.3小时", ListeningStats.chartDuration(time) { true })

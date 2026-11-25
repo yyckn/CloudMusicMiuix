@@ -96,7 +96,7 @@ object Downloads {
     suspend fun prepare(ctx: Context, track: Track): DownloadEntry {
         val playbackPrefs = ctx.getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
         val accountId = if (track.source == "qqmusic") com.hypermusic.miuix.data.api.QqMusicApi.playbackAccountId else {
-            val index = playbackPrefs.getInt(if (track.isCloudDisk) "data_account_index" else "playback_account_index", 0)
+            val index = playbackPrefs.getInt(if (track.platform.isCloudDisk) "data_account_index" else "playback_account_index", 0)
             com.hypermusic.miuix.data.api.NeteaseApi.getAccounts().getOrNull(index)?.userId
         }
         return prepare(ctx, track, accountId)

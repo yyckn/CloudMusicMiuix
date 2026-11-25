@@ -15,5 +15,10 @@
 .cxx
 local.properties
 
+# Local signing materials
+*.jks
+*.keystore
+keystore.properties
+
 # Generated build, test, device and tool logs
 *.log

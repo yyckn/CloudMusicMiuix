@@ -23,10 +23,10 @@ class OfflineDocumentTest {
         val entry = raw.withStorageDefaults()
         val local = OfflineLibrary.localTrack(entry)
         assertEquals("旧版歌曲", local.title)
-        assertEquals("", local.bodianFreeSign)
-        assertEquals("", local.kugouHash)
-        assertEquals("", local.kugouAlbumAudioId)
-        assertEquals("", local.qqMediaMid)
+        assertEquals("", local.platform.bodianFreeSign)
+        assertEquals("", local.platform.kugouHash)
+        assertEquals("", local.platform.kugouAlbumAudioId)
+        assertEquals("", local.platform.qqMediaMid)
         assertTrue(local.artistNames.isEmpty())
         assertEquals("", local.artistId)
         assertEquals("", local.albumId)
@@ -34,7 +34,7 @@ class OfflineDocumentTest {
         assertEquals("", entry.format)
         assertEquals(entry.id, local.localDownloadId)
         // The conversion itself is defensive, even outside the download-record loader.
-        assertEquals("", OfflineLibrary.localTrack(raw).bodianFreeSign)
+        assertEquals("", OfflineLibrary.localTrack(raw).platform.bodianFreeSign)
     }
     @Test fun explicitNullFieldsAreNormalizedWithoutLosingTheSong() {
         val json = """{"id":"song","title":"Test","artist":null,"album":null,"source":null,"artistNames":[null,"Singer"],"bodianFreeSign":null}"""
@@ -42,7 +42,7 @@ class OfflineDocumentTest {
         assertEquals("netease", parsed.source)
         assertEquals(listOf("Singer"), parsed.artistNames)
         assertEquals("", parsed.copy(url = null).artist)
-        assertEquals("", parsed.bodianFreeSign)
+        assertEquals("", parsed.platform.bodianFreeSign)
     }
     @Test fun rawTextRoundTripsWithoutFiltering() {
         val original = "[00:01.00]作词：有人\n[00:03.00]Hello world\n[00:05.00]Second line"

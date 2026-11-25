@@ -63,7 +63,7 @@ object DownloadAudioResolver {
                 Triple(audio.url, suffix, audio.qualityLabel())
             } else if (track.source == "qqmusic") {
                 if (entry.accountId != null) check(QqMusicApi.accounts.any { it.credential.musicId == entry.accountId }) { "下载账号已移除，请重新下载" }
-                val audio = QqMusicApi.getSongAudio(track.id, track.qqMediaMid, entry.qualityIndex, entry.accountId).getOrThrow()
+                val audio = QqMusicApi.getSongAudio(track.id, track.platform.qqMediaMid, entry.qualityIndex, entry.accountId).getOrThrow()
                 Triple(audio.url, audio.extension, audio.quality)
             } else if (track.source == "netease") {
                 val cookie = entry.accountId?.let { NeteaseApi.getAccountCookie(it) ?: error("下载账号已移除，请重新下载") }

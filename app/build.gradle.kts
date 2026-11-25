@@ -11,8 +11,8 @@ android {
         applicationId = "com.hypermusic.miuix"
         minSdk = 33
         targetSdk = 36
-        versionCode = 71
-        versionName = "2.1.1"
+        versionCode = 72
+        versionName = "2.2.0-dev1"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -96,6 +96,9 @@ dependencies {
     implementation("com.mocharealm.gaze:capsule:2.1.1-patch2")
     implementation("androidx.compose.ui:ui:1.12.0")
     implementation(libs.accompanist.lyrics.core)
+    // 端侧人声分离：ONNX Runtime + 任意长度 FFT。
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
+    implementation("com.github.wendykierp:JTransforms:3.1")
     val media3Version = "1.3.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-datasource-okhttp:$media3Version")

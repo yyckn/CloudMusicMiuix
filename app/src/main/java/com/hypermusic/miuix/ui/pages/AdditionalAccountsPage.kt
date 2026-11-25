@@ -24,6 +24,7 @@ internal fun AdditionalAccountsPage(platform: MusicPlatform, onBack: () -> Unit,
     fun action(block: () -> Unit) { runCatching(block).onSuccess { onChanged() }.onFailure { error = it.message ?: "账号操作失败" } }
     ManageAccountsPage(accounts = accounts.map { AccountInfo(it.id, it.nickname.ifBlank { it.id }, it.avatar) },
         onBackClick = onBack, onAccountClick = onProfile, onLoginNewAccount = onLogin,
+        onAccountSettingsChanged = onChanged,
         activeAccountId = store.dataId,
         playbackAccountIndex = playbackOptions?.indexOfFirst { it.selection == playbackSelection }?.coerceAtLeast(0)
             ?: accounts.indexOfFirst { it.id == store.playbackId }.coerceAtLeast(0),

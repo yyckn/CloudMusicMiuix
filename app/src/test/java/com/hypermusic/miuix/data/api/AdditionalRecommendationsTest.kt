@@ -27,7 +27,7 @@ class AdditionalRecommendationsTest {
         assertEquals("พี่ชอบหนูที่สุดเลย", track.album)
         assertEquals(listOf("8448663", "998017"), track.artistIds)
         assertTrue(track.imgUrl.startsWith("https://"))
-        assertEquals(32, track.kugouHash.length)
+        assertEquals(32, track.platform.kugouHash.length)
     }
 
     @Test fun personalFmSongsKeepTheirOwnTimingAndIdentity() {
